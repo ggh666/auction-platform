@@ -1,0 +1,30 @@
+{
+  "name": "auction-platform",
+  "private": true,
+  "type": "module",
+  "workspaces": [
+    "shared",
+    "api",
+    "admin",
+    "miniapp"
+  ],
+  "scripts": {
+    "typecheck": "npm run typecheck --workspace @auction/shared && npm run typecheck --workspace @auction/api && npm run typecheck --workspace @auction/admin && npm run typecheck --workspace @auction/miniapp",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "verify:content-safety": "node scripts/verify-content-safety.mjs",
+    "dev:api": "npm run dev --workspace @auction/api",
+    "dev:admin": "npm run dev --workspace @auction/admin",
+    "dev:miniapp": "npm run dev:mp-weixin --workspace @auction/miniapp",
+    "e2e": "playwright test"
+  },
+  "devDependencies": {
+    "@playwright/test": "1.60.0",
+    "typescript": "6.0.3",
+    "vitest": "2.1.9"
+  },
+  "optionalDependencies": {
+    "@rollup/rollup-darwin-arm64": "4.60.4",
+    "@rollup/rollup-darwin-x64": "4.60.4"
+  }
+}

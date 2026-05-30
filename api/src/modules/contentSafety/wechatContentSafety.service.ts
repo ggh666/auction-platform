@@ -1,0 +1,268 @@
+import { HttpError, badRequest } from "../../http/errors";
+import type { AssetsRepository } from "../assets/assets.repository";
+import type {
+  ContentSafetyService,
+  ImageSafetyInput,
+  ImageSafetyStatus,
+  ImageUploadSafetyInput,
+  TextSafetyInput
+} from "./contentSafety.service";
+import type { ImageSafetyRepository } from "./imageSafety.repository";
+import type { WechatAccessTokenProvider } from "./wechatAccessToken.service";
+
+type FetchLike = typeof fetch;
+type WechatSuggest = "pass" | "review" | "risky";
+
+type WechatCheckResponse = {
+  errcode?: unknown;
+  errmsg?: unknown;
+  trace_id?: unknown;
+  result?: {
+    suggest?: unknown;
+    label?: unknown;
+  };
+  detail?: unknown;
+};
+
+type WechatContentSafetyOptions = {
+  enabled: boolean;
+  strict: boolean;
+  tokenProvider: WechatAccessTokenProvider;
+  imageSafetyRepository: ImageSafetyRepository;
+  assetsRepository: AssetsRepository;
+  fetchImpl?: FetchLike;
+};
+
+const prohibitedMarketplaceTerms = ["赌博", "博彩", "卖淫", "嫖娼", "招嫖", "援交", "偷盗", "盗号", "洗钱", "诈骗"];
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+function normalizeSuggest(value: unknown): WechatSuggest | null {
+  return value === "pass" || value === "review" || value === "risky" ? value : null;
+}
+
+function statusFromSuggest(suggest: WechatSuggest | null): ImageSafetyStatus {
+  if (suggest === "pass" || suggest === "review" || suggest === "risky") {
+    return suggest;
+  }
+  return "failed";
+}
+
+function labelFrom(value: unknown): number | null {
+  return typeof value === "number" && Number.isInteger(value) ? value : null;
+}
+
+function assertOpenid(openid: string | null | undefined): string {
+  if (!openid?.trim()) {
+    throw badRequest("content_safety_openid_missing", "WeChat openid is required for content safety check");
+  }
+  return openid.trim();
+}
+
+function assertLocalTextPolicyAllowed(content: string): void {
+  const normalizedContent = content.replace(/\s+/g, "");
+  const matchedTerm = prohibitedMarketplaceTerms.find((term) => normalizedContent.includes(term));
+  if (!matchedTerm) {
+    return;
+  }
+
+  throw badRequest("content_safety_risky", "Content safety check failed", {
+    source: "local_text_policy",
+    keyword: matchedTerm
+  });
+}
+
+function normalizeImageUploadCandidates(images: ImageUploadSafetyInput["images"]): Array<{ objectKey: string; publicUrl: string }> {
+  if (!images || images.length === 0) {
+    return [];
+  }
+
+  return images.map((image) => {
+    const objectKey = typeof image.objectKey === "string" ? image.objectKey.trim() : "";
+    const publicUrl = typeof image.publicUrl === "string" ? image.publicUrl.trim() : "";
+    if (!objectKey || !publicUrl) {
+      throw badRequest("invalid_asset_images", "Asset images are invalid");
+    }
+    return { objectKey, publicUrl };
+  });
+}
+
+function assertWechatAllowed(response: WechatCheckResponse): void {
+  const suggest = normalizeSuggest(response.result?.suggest);
+  if (suggest === "pass") {
+    return;
+  }
+  if (suggest === "review") {
+    throw badRequest("content_safety_review", "Content requires manual review", {
+      label: response.result ? labelFrom(response.result.label) : null,
+      traceId: typeof response.trace_id === "string" ? response.trace_id : undefined
+    });
+  }
+  throw badRequest("content_safety_risky", "Content safety check failed", {
+    label: response.result ? labelFrom(response.result.label) : null,
+    traceId: typeof response.trace_id === "string" ? response.trace_id : undefined
+  });
+}
+
+async function readWechatResponse(response: Response, strict: boolean): Promise<WechatCheckResponse> {
+  if (!response.ok) {
+    if (strict) {
+      throw new HttpError(502, "wechat_content_safety_failed", "WeChat content safety request failed");
+    }
+    return {};
+  }
+
+  const body = (await response.json()) as WechatCheckResponse;
+  if (typeof body.errcode === "number" && body.errcode !== 0) {
+    if (strict) {
+      const message = typeof body.errmsg === "string" && body.errmsg ? body.errmsg : "WeChat content safety request failed";
+      throw new HttpError(502, "wechat_content_safety_failed", message);
+    }
+    return {};
+  }
+  return body;
+}
+
+function callbackTraceId(input: unknown): string | null {
+  if (!isRecord(input)) {
+    return null;
+  }
+  const traceId = input.trace_id ?? input.traceId;
+  return typeof traceId === "string" && traceId.trim() ? traceId.trim() : null;
+}
+
+function callbackResult(input: unknown): { status: ImageSafetyStatus; label: number | null; detailJson: unknown | null } {
+  if (!isRecord(input)) {
+    return { status: "failed", label: null, detailJson: null };
+  }
+  const result = isRecord(input.result) ? input.result : {};
+  const suggest = normalizeSuggest(result.suggest);
+  return {
+    status: statusFromSuggest(suggest),
+    label: labelFrom(result.label),
+    detailJson: input
+  };
+}
+
+export function createWechatContentSafetyService(options: WechatContentSafetyOptions): ContentSafetyService {
+  const fetchImpl = options.fetchImpl ?? fetch;
+
+  return {
+    async assertTextAllowed(input: TextSafetyInput) {
+      if (!options.enabled || !input.content.trim()) {
+        return;
+      }
+      assertLocalTextPolicyAllowed(input.content);
+      const accessToken = await options.tokenProvider.getAccessToken();
+      const openid = assertOpenid(input.openid);
+      const response = await fetchImpl(`https://api.weixin.qq.com/wxa/msg_sec_check?access_token=${accessToken}`, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          content: input.content,
+          version: 2,
+          scene: input.scene ?? 3,
+          openid
+        })
+      });
+      assertWechatAllowed(await readWechatResponse(response, options.strict));
+    },
+
+    async requestImageCheck(input: ImageSafetyInput) {
+      if (!options.enabled) {
+        await options.imageSafetyRepository.record({
+          userId: input.userId ?? "0",
+          objectKey: input.objectKey,
+          publicUrl: input.mediaUrl,
+          status: "pass"
+        });
+        return { status: "pass" };
+      }
+
+      const accessToken = await options.tokenProvider.getAccessToken();
+      const openid = assertOpenid(input.openid);
+      const response = await fetchImpl(`https://api.weixin.qq.com/wxa/media_check_async?access_token=${accessToken}`, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          media_url: input.mediaUrl,
+          media_type: 2,
+          version: 2,
+          scene: input.scene ?? 3,
+          openid
+        })
+      });
+      const body = await readWechatResponse(response, options.strict);
+      const traceId = typeof body.trace_id === "string" && body.trace_id.trim() ? body.trace_id.trim() : undefined;
+      await options.imageSafetyRepository.record({
+        userId: input.userId ?? "0",
+        objectKey: input.objectKey,
+        publicUrl: input.mediaUrl,
+        status: traceId ? "pending" : "failed",
+        traceId,
+        detailJson: body
+      });
+      return { status: traceId ? "pending" : "failed", traceId };
+    },
+
+    async assertImageUploadsAllowed(input: ImageUploadSafetyInput) {
+      if (!options.enabled) {
+        return;
+      }
+      const images = normalizeImageUploadCandidates(input.images);
+      if (images.length === 0) {
+        return;
+      }
+
+      const records = await options.imageSafetyRepository.findByPublicUrls(images.map((image) => image.publicUrl));
+      const recordsByUrl = new Map(records.map((record) => [record.publicUrl, record]));
+      for (const image of images) {
+        const record = recordsByUrl.get(image.publicUrl);
+        if (!record || record.userId !== input.userId || record.objectKey !== image.objectKey) {
+          throw badRequest("invalid_asset_images", "Asset images must be uploaded by current user");
+        }
+      }
+    },
+
+    async assertAssetImagesAllowed(assetId: string) {
+      if (!options.enabled) {
+        return;
+      }
+      const asset = await options.assetsRepository.findById(assetId);
+      if (!asset || asset.imageUrls.length === 0) {
+        return;
+      }
+      const records = await options.imageSafetyRepository.findByPublicUrls(asset.imageUrls);
+      const recordsByUrl = new Map(records.map((record) => [record.publicUrl, record]));
+
+      for (const publicUrl of asset.imageUrls) {
+        const record = recordsByUrl.get(publicUrl);
+        if (!record) {
+          throw badRequest("image_safety_missing", "图片未经过上传安全检测，请重新上传后再审核");
+        }
+        if (record.status === "risky") {
+          throw badRequest("image_safety_risky", "图片命中微信内容安全高风险，请更换图片后再审核通过");
+        }
+        if (record.status !== "pass" && record.status !== "review") {
+          throw badRequest("image_safety_pending", "图片安全检测尚未完成，请稍后刷新后再审核");
+        }
+      }
+    },
+
+    async handleImageCheckCallback(input: unknown) {
+      const traceId = callbackTraceId(input);
+      if (!traceId) {
+        return;
+      }
+      const result = callbackResult(input);
+      await options.imageSafetyRepository.updateByTraceId({
+        traceId,
+        status: result.status,
+        label: result.label,
+        detailJson: result.detailJson
+      });
+    }
+  };
+}

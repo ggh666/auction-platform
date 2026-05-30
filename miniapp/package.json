@@ -1,0 +1,25 @@
+{
+  "name": "@auction/miniapp",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev:mp-weixin": "ESBUILD_BINARY_PATH=$PWD/node_modules/@esbuild/darwin-x64/bin/esbuild UNI_INPUT_DIR=$PWD uni -p mp-weixin",
+    "build:mp-weixin": "ESBUILD_BINARY_PATH=$PWD/node_modules/@esbuild/darwin-x64/bin/esbuild UNI_INPUT_DIR=$PWD uni build -p mp-weixin",
+    "check:hbuilderx-layout": "node scripts/check-hbuilderx-layout.mjs",
+    "postinstall": "node scripts/patch-local-esbuild.mjs",
+    "typecheck": "vue-tsc --noEmit"
+  },
+  "dependencies": {
+    "@auction/shared": "file:../shared",
+    "@dcloudio/uni-app": "3.0.0-alpha-5010120260522001",
+    "vue": "3.4.21"
+  },
+  "devDependencies": {
+    "@dcloudio/types": "3.4.31",
+    "@dcloudio/uni-mp-weixin": "3.0.0-alpha-5010120260522001",
+    "@dcloudio/vite-plugin-uni": "3.0.0-alpha-5010120260522001",
+    "typescript": "^6.0.3",
+    "vite": "5.2.8",
+    "vue-tsc": "^3.3.1"
+  }
+}

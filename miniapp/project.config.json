@@ -1,0 +1,36 @@
+{
+  "description": "微信开发者工具配置。HBuilderX 会在编译产物目录中读取同名配置。",
+  "miniprogramRoot": "",
+  "compileType": "miniprogram",
+  "appid": "wx6ef44aa749f07e94",
+  "projectname": "游戏资产交换",
+  "setting": {
+    "urlCheck": true,
+    "es6": true,
+    "postcss": false,
+    "minified": false,
+    "newFeature": true,
+    "bigPackageSizeSupport": true
+  },
+  "packOptions": {
+    "ignore": []
+  },
+  "condition": {
+    "search": {
+      "current": -1,
+      "list": []
+    },
+    "conversation": {
+      "current": -1,
+      "list": []
+    },
+    "game": {
+      "current": -1,
+      "list": []
+    },
+    "miniprogram": {
+      "current": -1,
+      "list": []
+    }
+  }
+}

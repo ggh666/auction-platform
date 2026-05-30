@@ -1,0 +1,40 @@
+<template>
+  <slot />
+</template>
+
+<script setup lang="ts">
+</script>
+
+<style>
+page {
+  color: #f5f0dc;
+  background:
+    linear-gradient(135deg, rgba(34, 197, 94, 0.10), transparent 28%),
+    linear-gradient(315deg, rgba(245, 158, 11, 0.12), transparent 32%),
+    repeating-linear-gradient(0deg, rgba(255, 255, 255, 0.035) 0, rgba(255, 255, 255, 0.035) 1px, transparent 1px, transparent 42rpx),
+    #071112;
+}
+
+button {
+  border-radius: 10rpx;
+}
+
+button[disabled] {
+  opacity: 0.56;
+}
+
+.primary-action {
+  min-height: 88rpx;
+  font-weight: 800;
+  color: #1b1305;
+  text-shadow: 0 1rpx 0 rgba(255, 255, 255, 0.32);
+  background:
+    linear-gradient(180deg, #ffd66b 0%, #f6a821 100%);
+  border-radius: 12rpx;
+  box-shadow: 0 14rpx 30rpx rgba(0, 0, 0, 0.34), inset 0 2rpx 0 rgba(255, 255, 255, 0.38);
+}
+
+.primary-action::after {
+  border: 0;
+}
+</style>

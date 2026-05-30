@@ -1,0 +1,28 @@
+{
+  "name": "@auction/api",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "tsx watch src/server.ts",
+    "start": "tsx src/server.ts",
+    "admin:create": "tsx src/scripts/createAdmin.ts",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run ../tests/api"
+  },
+  "dependencies": {
+    "@auction/shared": "file:../shared",
+    "@aws-sdk/client-s3": "3.1052.0",
+    "@fastify/cors": "11.2.0",
+    "@fastify/jwt": "10.1.0",
+    "fastify": "5.8.5",
+    "mysql2": "3.22.3",
+    "ws": "8.20.1"
+  },
+  "devDependencies": {
+    "@types/node": "25.9.1",
+    "@types/ws": "8.18.1",
+    "tsx": "4.22.3",
+    "typescript": "6.0.3",
+    "vitest": "2.1.9"
+  }
+}

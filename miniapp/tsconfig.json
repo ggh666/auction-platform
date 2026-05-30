@@ -1,0 +1,14 @@
+{
+  "extends": "../tsconfig.base.json",
+  "compilerOptions": {
+    "types": ["@dcloudio/types"]
+  },
+  "include": [
+    "shims-vue.d.ts",
+    "App.vue",
+    "main.ts",
+    "api/**/*.ts",
+    "auth/**/*.ts",
+    "pages/**/*.vue"
+  ]
+}
