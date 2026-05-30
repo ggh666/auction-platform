@@ -59,7 +59,7 @@ npm run dev:miniapp
 - 管理后台: `VITE_API_BASE=https://api.example.com`
 - 小程序: `UNI_APP_API_BASE=https://api.example.com`
 
-API 生产环境通过 `CORS_ALLOWED_ORIGINS` 控制跨域白名单，例如 `https://admin-auction.toolmatrix.top,https://servicewechat.com`；未配置时使用当前线上后台域名和微信服务域名作为默认值。
+API 生产环境通过 `CORS_ALLOWED_ORIGINS` 控制跨域白名单，例如 `https://api.example.com,https://servicewechat.com`；未配置时使用当前线上后台域名和微信服务域名作为默认值。
 
 ## 验证命令
 
@@ -69,10 +69,10 @@ npm test
 npm run verify:content-safety -- local
 npm run e2e
 
-VITE_API_BASE=https://api-auction.toolmatrix.top \
+VITE_API_BASE=https://api.example.com \
   npm run build --workspace @auction/admin
 
-UNI_APP_API_BASE=https://api-auction.toolmatrix.top \
+UNI_APP_API_BASE=https://api.example.com \
 UNI_APP_PRICE_CHANGE_SUBSCRIBE_TEMPLATE_ID=微信订阅消息模板ID \
   npm run build:mp-weixin --workspace @auction/miniapp
 ```
