@@ -14,6 +14,10 @@ test-results/
 coverage/
 playwright-report/
 
+# Local documentation and deployment notes
+docs/
+deploy/
+
 # Runtime and logs
 *.log
 npm-debug.log*
