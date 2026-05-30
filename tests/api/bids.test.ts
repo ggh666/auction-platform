@@ -113,6 +113,35 @@ describe("bidding", () => {
     }
   });
 
+  it("rejects bids from the current highest bidder", async () => {
+    const app = buildApp({ enableMockAuth: true });
+
+    try {
+      const sellerToken = await login(app, "卖家");
+      const bidderToken = await login(app, "买家");
+      const assetId = await createActiveAsset(app, sellerToken);
+
+      const firstBid = await app.inject({
+        method: "POST",
+        url: "/api/bids",
+        headers: { authorization: `Bearer ${bidderToken}` },
+        payload: { assetId, amountCents: 10000 }
+      });
+      const repeatedBid = await app.inject({
+        method: "POST",
+        url: "/api/bids",
+        headers: { authorization: `Bearer ${bidderToken}` },
+        payload: { assetId, amountCents: 10100 }
+      });
+
+      expect(firstBid.statusCode).toBe(200);
+      expect(repeatedBid.statusCode).toBe(400);
+      expect(repeatedBid.json().error.code).toBe("bidder_already_highest");
+    } finally {
+      await app.close();
+    }
+  });
+
   it("rejects bids from banned users even with an existing token", async () => {
     const users = createInMemoryUsersRepository();
     const app = buildApp({ enableMockAuth: true, usersRepository: users });

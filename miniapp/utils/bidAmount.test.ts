@@ -1,5 +1,11 @@
 import { describe, expect, it } from "vitest";
-import { auctionUnavailableMessage, bidFailureMessage, requiredBidCents, validateBidAmountYuan } from "./bidAmount";
+import {
+  auctionUnavailableMessage,
+  bidFailureMessage,
+  bidderAlreadyHighestMessage,
+  requiredBidCents,
+  validateBidAmountYuan
+} from "./bidAmount";
 
 const asset = {
   startingPriceCents: 10000,
@@ -34,9 +40,18 @@ describe("miniapp bid amount helpers", () => {
 
   it("maps backend bid failures to miniapp friendly messages", () => {
     expect(bidFailureMessage(new Error("Seller cannot bid on own asset"), 10100)).toBe("不能给自己的资产出价");
+    expect(bidFailureMessage(new Error("Current highest bidder cannot bid again"), 10100)).toBe(
+      "当前最高出价已经是你，无需重复提交"
+    );
     expect(bidFailureMessage(new Error("Bid does not satisfy current price and increment"), 10100)).toBe(
       "出价不能低于 101.00 元"
     );
+  });
+
+  it("blocks the current highest bidder before submitting", () => {
+    expect(bidderAlreadyHighestMessage({ highestBidderId: "2" }, "2")).toBe("当前最高出价已经是你，无需重复提交");
+    expect(bidderAlreadyHighestMessage({ highestBidderId: "2" }, "3")).toBeNull();
+    expect(bidderAlreadyHighestMessage({ highestBidderId: null }, "2")).toBeNull();
   });
 
   it("marks removed assets as unavailable for bidding", () => {

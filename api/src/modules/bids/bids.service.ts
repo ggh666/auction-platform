@@ -21,6 +21,9 @@ export function createBidsService(input: {
       if (asset.sellerId === userId) {
         throw forbidden("seller_cannot_bid", "Seller cannot bid on own asset");
       }
+      if (asset.highestBidderId === userId) {
+        throw badRequest("bidder_already_highest", "Current highest bidder cannot bid again");
+      }
 
       const now = new Date();
       const end = new Date(asset.effectiveEndAt);

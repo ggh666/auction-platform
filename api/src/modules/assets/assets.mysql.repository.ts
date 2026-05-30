@@ -113,10 +113,16 @@ export function createMysqlAssetsRepository(db: MysqlExecutor): AssetsRepository
   function buildAdminAssetWhere(input: AdminAssetListInput) {
     const where: string[] = [];
     const params: unknown[] = [];
-    const keyword = input.keyword?.trim().toLowerCase() ?? "";
+    const keyword = input.keyword?.trim() ?? "";
     if (keyword) {
-      where.push("(CAST(id AS CHAR) = ? OR CAST(seller_id AS CHAR) = ? OR LOWER(title) LIKE ?)");
-      params.push(keyword, keyword, `%${keyword}%`);
+      const keywordId = /^\d+$/.test(keyword) ? Number(keyword) : null;
+      if (keywordId !== null && Number.isSafeInteger(keywordId)) {
+        where.push("(id = ? OR seller_id = ? OR title LIKE ?)");
+        params.push(keywordId, keywordId, `%${keyword}%`);
+      } else {
+        where.push("title LIKE ?");
+        params.push(`%${keyword}%`);
+      }
     }
     if (input.status) {
       where.push("status = ?");
@@ -169,9 +175,9 @@ export function createMysqlAssetsRepository(db: MysqlExecutor): AssetsRepository
       where.push("asset_type = ?");
       params.push(assetType);
     }
-    const keyword = input.keyword?.trim().toLowerCase();
+    const keyword = input.keyword?.trim();
     if (keyword) {
-      where.push("(LOWER(title) LIKE ? OR LOWER(server_name) LIKE ? OR LOWER(description) LIKE ?)");
+      where.push("(title LIKE ? OR server_name LIKE ? OR description LIKE ?)");
       params.push(`%${keyword}%`, `%${keyword}%`, `%${keyword}%`);
     }
     return { clause: `WHERE ${where.join(" AND ")}`, params };

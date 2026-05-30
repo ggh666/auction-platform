@@ -7,6 +7,10 @@ type BidAsset = {
   minIncrementCents: number;
 };
 
+type CurrentHighestBidderAsset = {
+  highestBidderId: string | null;
+};
+
 type AuctionAvailabilityAsset = {
   status: AssetStatus;
   effectiveEndAt: string;
@@ -34,6 +38,17 @@ export function validateBidAmountYuan(input: string, asset: BidAsset): BidAmount
   }
 
   return { ok: true, amountCents };
+}
+
+export function bidderAlreadyHighestMessage(
+  asset: CurrentHighestBidderAsset,
+  currentUserId: string | null | undefined
+): string | null {
+  if (currentUserId && asset.highestBidderId === currentUserId) {
+    return "当前最高出价已经是你，无需重复提交";
+  }
+
+  return null;
 }
 
 export function auctionUnavailableMessage(asset: AuctionAvailabilityAsset, now = new Date()): string | null {
@@ -69,6 +84,9 @@ export function bidFailureMessage(error: unknown, requiredCents: number): string
   }
   if (message === "Seller cannot bid on own asset") {
     return "不能给自己的资产出价";
+  }
+  if (message === "Current highest bidder cannot bid again") {
+    return "当前最高出价已经是你，无需重复提交";
   }
   if (message === "Auction already ended") {
     return "交换已结束，无法出价";

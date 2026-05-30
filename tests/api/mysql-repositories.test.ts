@@ -189,16 +189,19 @@ class FakeMysqlPool {
   private filterAdminAssets(sql: string, params: unknown[]) {
     let cursor = 0;
     let filtered = [...this.assets];
-    if (sql.includes("CAST(id AS CHAR) = ?")) {
-      const idKeyword = String(params[cursor++]);
-      const sellerKeyword = String(params[cursor++]);
-      const titleKeyword = String(params[cursor++]).replaceAll("%", "").toLowerCase();
+    if (sql.includes("id = ? OR seller_id = ?")) {
+      const idKeyword = Number(params[cursor++]);
+      const sellerKeyword = Number(params[cursor++]);
+      const titleKeyword = String(params[cursor++]).replaceAll("%", "");
       filtered = filtered.filter(
         (asset) =>
-          String(asset.id) === idKeyword ||
-          String(asset.seller_id) === sellerKeyword ||
-          asset.title.toLowerCase().includes(titleKeyword)
+          asset.id === idKeyword ||
+          asset.seller_id === sellerKeyword ||
+          asset.title.includes(titleKeyword)
       );
+    } else if (sql.includes("title LIKE ?")) {
+      const titleKeyword = String(params[cursor++]).replaceAll("%", "");
+      filtered = filtered.filter((asset) => asset.title.includes(titleKeyword));
     }
     if (sql.includes("status = ?")) {
       const status = params[cursor++];
@@ -241,15 +244,15 @@ class FakeMysqlPool {
       const assetType = params[cursor++];
       filtered = filtered.filter((asset) => asset.asset_type === assetType);
     }
-    if (sql.includes("LOWER(title) LIKE")) {
-      const titleKeyword = String(params[cursor++]).replaceAll("%", "").toLowerCase();
-      const serverKeyword = String(params[cursor++]).replaceAll("%", "").toLowerCase();
-      const descriptionKeyword = String(params[cursor++]).replaceAll("%", "").toLowerCase();
+    if (sql.includes("title LIKE")) {
+      const titleKeyword = String(params[cursor++]).replaceAll("%", "");
+      const serverKeyword = String(params[cursor++]).replaceAll("%", "");
+      const descriptionKeyword = String(params[cursor++]).replaceAll("%", "");
       filtered = filtered.filter(
         (asset) =>
-          asset.title.toLowerCase().includes(titleKeyword) ||
-          asset.server_name.toLowerCase().includes(serverKeyword) ||
-          asset.description.toLowerCase().includes(descriptionKeyword)
+          asset.title.includes(titleKeyword) ||
+          asset.server_name.includes(serverKeyword) ||
+          asset.description.includes(descriptionKeyword)
       );
     }
     return filtered.sort(
@@ -350,22 +353,26 @@ class FakeMysqlPool {
       return [[{ total: this.users.filter((user) => user.created_at.getTime() >= sinceMs).length }] as T, []];
     }
 
-    if (sql.includes("COUNT(*) AS total") && sql.includes("FROM users")) {
-      return [[{ total: this.users.length }] as T, []];
-    }
-
     if (sql.includes("FROM users") && sql.includes("WHERE openid")) {
       return [[this.users.find((user) => user.openid === params[0])].filter(Boolean) as T, []];
     }
 
     if (sql.includes("FROM users") && sql.includes("display_name LIKE")) {
-      const query = String(params[0]).replace(/%/g, "");
+      const hasIdSearch = sql.includes("id = ? OR display_name LIKE");
+      const query = String(params[hasIdSearch ? 1 : 0]).replace(/%/g, "");
+      const idQuery = hasIdSearch ? Number(params[0]) : null;
+      const filtered = this.users.filter((user) => user.display_name.includes(query) || (idQuery !== null && user.id === idQuery));
+      if (sql.includes("COUNT(*) AS total")) {
+        return [[{ total: filtered.length }] as T, []];
+      }
       return [
-        this.users
-          .filter((user) => user.display_name.includes(query) || String(user.id) === params[1])
-          .sort((left, right) => right.created_at.getTime() - left.created_at.getTime() || right.id - left.id) as T,
+        filtered.sort((left, right) => right.created_at.getTime() - left.created_at.getTime() || right.id - left.id) as T,
         []
       ];
+    }
+
+    if (sql.includes("COUNT(*) AS total") && sql.includes("FROM users")) {
+      return [[{ total: this.users.length }] as T, []];
     }
 
     if (sql.includes("FROM users") && sql.includes("ORDER BY created_at")) {
@@ -1528,6 +1535,27 @@ describe("mysql repositories", () => {
         effectiveEndAt: "2026-05-26T00:05:00.000Z"
       })
     ).rejects.toMatchObject({ code: "bid_too_low" });
+
+    expect(pool.lastConnection?.beginCount).toBe(1);
+    expect(pool.lastConnection?.commitCount).toBe(0);
+    expect(pool.lastConnection?.rollbackCount).toBe(1);
+    expect(pool.lastConnection?.releaseCount).toBe(1);
+    expect(pool.bids).toHaveLength(0);
+  });
+
+  it("rejects a bid if the locked asset row already has the same highest bidder", async () => {
+    const pool = new FakeMysqlPool();
+    pool.assets.push({ ...activeAssetRow(), current_price_cents: 10000, highest_bidder_id: 2 });
+    const bids = createFixtureTimeMysqlBidsRepository(pool);
+
+    await expect(
+      bids.createBid({
+        asset: { ...activeAsset(), currentPriceCents: 10000, highestBidderId: "2" },
+        bidderId: "2",
+        amountCents: 10100,
+        effectiveEndAt: "2026-05-26T00:05:00.000Z"
+      })
+    ).rejects.toMatchObject({ code: "bidder_already_highest" });
 
     expect(pool.lastConnection?.beginCount).toBe(1);
     expect(pool.lastConnection?.commitCount).toBe(0);

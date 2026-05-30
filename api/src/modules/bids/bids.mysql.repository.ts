@@ -99,6 +99,9 @@ export function createMysqlBidsRepository(pool: MysqlPool, options: { now?: () =
         if (!Number.isFinite(lockedEnd.getTime()) || now().getTime() >= lockedEnd.getTime()) {
           throw badRequest("auction_ended", "Auction already ended");
         }
+        if (lockedAsset.highestBidderId === input.bidderId) {
+          throw badRequest("bidder_already_highest", "Current highest bidder cannot bid again");
+        }
         if (
           !canBidAmount({
             amountCents: input.amountCents,

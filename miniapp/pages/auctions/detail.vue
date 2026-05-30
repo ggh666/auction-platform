@@ -72,7 +72,13 @@ import { getAssetDetail, placeBid, readApiBase } from "../../api/client";
 import { readSessionUser } from "../../auth/session";
 import { mergeAuctionAssetUpdate } from "../../utils/assetMerge";
 import { assetStatusText } from "../../utils/assetStatusText";
-import { auctionUnavailableMessage, bidFailureMessage, requiredBidCents, validateBidAmountYuan } from "../../utils/bidAmount";
+import {
+  auctionUnavailableMessage,
+  bidFailureMessage,
+  bidderAlreadyHighestMessage,
+  requiredBidCents,
+  validateBidAmountYuan
+} from "../../utils/bidAmount";
 import { confirmTradingDisclaimer } from "../../utils/disclaimer";
 import { connectAuctionSocket, type AuctionSocketTask } from "../../utils/realtime";
 import { buildAssetDetailShare, toTimelineShare } from "../../utils/share";
@@ -242,6 +248,11 @@ async function submitBid() {
     const unavailable = auctionUnavailableMessage(asset);
     if (unavailable) {
       uni.showToast({ title: unavailable, icon: "none" });
+      return;
+    }
+    const highestBidderMessage = bidderAlreadyHighestMessage(asset, readSessionUser()?.id);
+    if (highestBidderMessage) {
+      uni.showToast({ title: highestBidderMessage, icon: "none" });
       return;
     }
 

@@ -114,12 +114,14 @@ export function createMysqlUsersRepository(db: MysqlExecutor): UsersRepository {
       const limit = Math.min(Math.max(input.limit ?? input.pageSize ?? 20, 1), 200);
       const offset = (page - 1) * limit;
       if (query) {
+        const queryId = /^\d+$/.test(query) ? Number(query) : null;
+        const searchableById = queryId !== null && Number.isSafeInteger(queryId);
         const [rows] = await db.execute<UserDbRow[]>(
           `${userSelect}
-           WHERE display_name LIKE ? OR CAST(id AS CHAR) = ?
+           WHERE ${searchableById ? "id = ? OR display_name LIKE ?" : "display_name LIKE ?"}
            ORDER BY created_at DESC, id DESC
            LIMIT ? OFFSET ?`,
-          [`%${query}%`, query, limit, offset]
+          searchableById ? [queryId, `%${query}%`, limit, offset] : [`%${query}%`, limit, offset]
         );
         return rows.map(toUserRow);
       }
@@ -143,11 +145,13 @@ export function createMysqlUsersRepository(db: MysqlExecutor): UsersRepository {
       );
       const query = input.query?.trim() ?? "";
       if (query) {
+        const queryId = /^\d+$/.test(query) ? Number(query) : null;
+        const searchableById = queryId !== null && Number.isSafeInteger(queryId);
         const [rows] = await db.execute<Array<{ total: number | string }>>(
           `SELECT COUNT(*) AS total
            FROM users
-           WHERE display_name LIKE ? OR CAST(id AS CHAR) = ?`,
-          [`%${query}%`, query]
+           WHERE ${searchableById ? "id = ? OR display_name LIKE ?" : "display_name LIKE ?"}`,
+          searchableById ? [queryId, `%${query}%`] : [`%${query}%`]
         );
         const row = firstRow<{ total: number | string }>(rows);
         return row ? Number(row.total) : 0;
