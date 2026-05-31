@@ -2,9 +2,11 @@ import { useEffect, useState } from "react";
 import {
   centsToYuanText,
   type AdminAssetDetailResponse,
+  type AdminImageSafetyCheck,
   type AssetStatus,
   type AuctionAsset,
   type BidDisplayRecord,
+  type ImageSafetyStatus,
   type PrincipalSummary,
   type UserSummary
 } from "@auction/shared";
@@ -24,6 +26,15 @@ const statusMeta: Record<AssetStatus, { label: string; tone: "success" | "warnin
   rejected: { label: "已拒绝", tone: "danger" },
   cancelled: { label: "已取消", tone: "neutral" },
   removed: { label: "已移除", tone: "danger" }
+};
+
+const imageSafetyMeta: Record<ImageSafetyStatus, { label: string; tone: "success" | "warning" | "danger" | "neutral" }> = {
+  missing: { label: "未检测", tone: "danger" },
+  pending: { label: "待回调", tone: "warning" },
+  pass: { label: "已通过", tone: "success" },
+  review: { label: "人工复核", tone: "warning" },
+  risky: { label: "违规", tone: "danger" },
+  failed: { label: "检测失败", tone: "danger" }
 };
 
 function formatMoney(cents: number | null): string {
@@ -57,6 +68,31 @@ function usableImageUrls(asset: AuctionAsset): string[] {
   return asset.imageUrls.map((imageUrl) => imageUrl.trim()).filter(Boolean);
 }
 
+function missingImageSafetyCheck(publicUrl: string): AdminImageSafetyCheck {
+  return {
+    publicUrl,
+    objectKey: null,
+    status: "missing",
+    traceId: null,
+    label: null,
+    updatedAt: null
+  };
+}
+
+function imageSafetyForUrl(checks: AdminImageSafetyCheck[], imageUrl: string): AdminImageSafetyCheck {
+  return checks.find((check) => check.publicUrl === imageUrl) ?? missingImageSafetyCheck(imageUrl);
+}
+
+function renderImageSafetyBadge(check: AdminImageSafetyCheck) {
+  const meta = imageSafetyMeta[check.status];
+  const label = check.label === null ? meta.label : `${meta.label}（${check.label}）`;
+  return (
+    <span className={`status ${meta.tone}`} title={check.traceId ? `trace_id: ${check.traceId}` : undefined}>
+      {label}
+    </span>
+  );
+}
+
 function dragonBallSummary(asset: AuctionAsset): string {
   const dragonBall = asset.dragonBall;
   if (!dragonBall) {
@@ -69,6 +105,7 @@ export function AssetDetailPage({ assetId, onBack }: AssetDetailPageProps) {
   const [asset, setAsset] = useState<AuctionAsset | null>(null);
   const [seller, setSeller] = useState<UserSummary | null>(null);
   const [principal, setPrincipal] = useState<PrincipalSummary | null>(null);
+  const [imageSafetyChecks, setImageSafetyChecks] = useState<AdminImageSafetyCheck[]>([]);
   const [recentBids, setRecentBids] = useState<BidDisplayRecord[]>([]);
   const [loading, setLoading] = useState(true);
   const [deductingCredit, setDeductingCredit] = useState(false);
@@ -84,11 +121,13 @@ export function AssetDetailPage({ assetId, onBack }: AssetDetailPageProps) {
       setAsset(response.asset);
       setSeller(response.seller);
       setPrincipal(response.principal);
+      setImageSafetyChecks(response.imageSafetyChecks);
       setRecentBids(response.recentBids);
     } catch (loadError) {
       setAsset(null);
       setSeller(null);
       setPrincipal(null);
+      setImageSafetyChecks([]);
       setRecentBids([]);
       setError(loadError instanceof Error ? loadError.message : "加载资产详情失败");
     } finally {
@@ -150,11 +189,17 @@ export function AssetDetailPage({ assetId, onBack }: AssetDetailPageProps) {
           <div className="asset-detail-body">
             {images.length > 0 ? (
               <div className="detail-image-grid">
-                {images.map((imageUrl, index) => (
-                  <a className="preview-link" href={imageUrl} key={`${imageUrl}-${index}`} rel="noreferrer" target="_blank">
-                    <img alt={`${asset.title} 图片 ${index + 1}`} className="detail-image" src={imageUrl} />
-                  </a>
-                ))}
+                {images.map((imageUrl, index) => {
+                  const check = imageSafetyForUrl(imageSafetyChecks, imageUrl);
+                  return (
+                    <div className="preview-image-card" key={`${imageUrl}-${index}`}>
+                      <a className="preview-link" href={imageUrl} rel="noreferrer" target="_blank">
+                        <img alt={`${asset.title} 图片 ${index + 1}`} className="detail-image" src={imageUrl} />
+                      </a>
+                      {renderImageSafetyBadge(check)}
+                    </div>
+                  );
+                })}
               </div>
             ) : (
               <div className="empty-state">

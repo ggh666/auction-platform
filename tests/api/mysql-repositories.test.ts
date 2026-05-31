@@ -769,7 +769,12 @@ class FakeMysqlPool {
       if (sql.includes("principal_id = ?")) {
         filtered = filtered.filter((followup) => followup.principal_id === Number(params[cursor++]));
       }
-      if (sql.includes("buyer_id = ?")) {
+      if (sql.includes("(seller_id = ? OR buyer_id = ?)")) {
+        const userId = Number(params[cursor++]);
+        cursor++;
+        filtered = filtered.filter((followup) => followup.seller_id === userId || followup.buyer_id === userId);
+      }
+      if (sql.includes("buyer_id = ?") && !sql.includes("(seller_id = ? OR buyer_id = ?)")) {
         filtered = filtered.filter((followup) => followup.buyer_id === Number(params[cursor++]));
       }
       if (sql.includes("status = ?")) {
@@ -792,7 +797,12 @@ class FakeMysqlPool {
       if (sql.includes("principal_id = ?")) {
         filtered = filtered.filter((followup) => followup.principal_id === Number(params[cursor++]));
       }
-      if (sql.includes("buyer_id = ?")) {
+      if (sql.includes("(seller_id = ? OR buyer_id = ?)")) {
+        const userId = Number(params[cursor++]);
+        cursor++;
+        filtered = filtered.filter((followup) => followup.seller_id === userId || followup.buyer_id === userId);
+      }
+      if (sql.includes("buyer_id = ?") && !sql.includes("(seller_id = ? OR buyer_id = ?)")) {
         filtered = filtered.filter((followup) => followup.buyer_id === Number(params[cursor++]));
       }
       if (sql.includes("status = ?")) {
@@ -837,7 +847,10 @@ class FakeMysqlPool {
         const bidderId = Number(params[cursor++]);
         filtered = filtered.filter((asset) => asset.seller_id === sellerId || asset.highest_bidder_id === bidderId);
       }
-      const limit = Number(params.at(-1));
+      if (sql.includes("AND highest_bidder_id = ?")) {
+        filtered = filtered.filter((asset) => asset.highest_bidder_id === Number(params[cursor++]));
+      }
+      const limit = sql.includes("LIMIT ?") ? Number(params.at(-1)) : filtered.length;
       return [
         filtered
           .sort((left, right) => right.updated_at.getTime() - left.updated_at.getTime() || right.id - left.id)
@@ -1659,14 +1672,16 @@ describe("mysql repositories", () => {
     pool.assets.push(
       pendingAssetRow(1),
       { ...activeAssetRow(), id: 2, seller_id: 2, title: "其他人的资产" },
-      { ...activeAssetRow(), id: 3, seller_id: 1, current_price_cents: 12000, highest_bidder_id: 2 }
+      { ...activeAssetRow(), id: 3, seller_id: 1, status: "ended", current_price_cents: 12000, highest_bidder_id: 2 },
+      { ...activeAssetRow(), id: 4, seller_id: 1, status: "ended", current_price_cents: 13000, highest_bidder_id: 3 },
+      { ...activeAssetRow(), id: 5, seller_id: 4, status: "active", current_price_cents: 14000, highest_bidder_id: 2 }
     );
     const assets = createMysqlAssetsRepository(pool);
 
     const published = await assets.listBySeller("1");
     const relatedResults = await assets.listRelatedResults("2");
 
-    expect(published.map((asset) => asset.id)).toEqual(["1", "3"]);
+    expect(published.map((asset) => asset.id)).toEqual(["1", "3", "4"]);
     expect(relatedResults).toEqual([expect.objectContaining({ id: "3", currentPriceCents: 12000 })]);
   });
 
@@ -1730,7 +1745,7 @@ describe("mysql repositories", () => {
     });
     const listed = await followups.listForAdmin({ principalId: "1" });
     const confirmed = await followups.updateBuyerStatus(ensured?.id ?? "", "2", "buyer_confirmed");
-    const unreachable = await followups.updateAdminStatus(ensured?.id ?? "", "buyer_unreachable", "买家未确认成交");
+    const unreachable = await followups.updateAdminStatus(ensured?.id ?? "", "buyer_unreachable", "主理人联系后买家失联");
 
     expect(ensured).toMatchObject({
       assetId: "1",
@@ -1744,7 +1759,7 @@ describe("mysql repositories", () => {
     expect(confirmed).toMatchObject({ status: "buyer_confirmed", buyerConfirmedAt: "2026-05-25T16:30:00.000Z" });
     expect(unreachable).toMatchObject({
       status: "buyer_unreachable",
-      note: "买家未确认成交",
+      note: "主理人联系后买家失联",
       buyerUnreachableAt: "2026-05-25T16:30:00.000Z"
     });
   });

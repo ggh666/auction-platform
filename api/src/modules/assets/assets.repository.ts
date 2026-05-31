@@ -300,9 +300,11 @@ export function createInMemoryAssetsRepository(): AssetsRepository {
       return [...assets.values()].filter((asset) => asset.sellerId === sellerId).map(cloneAsset);
     },
     async listRelatedResults(userId) {
+      const nowMs = Date.now();
       return [...assets.values()]
-        .filter((asset) => asset.sellerId === userId || asset.highestBidderId === userId)
-        .filter((asset) => asset.currentPriceCents !== null || asset.status === "ended")
+        .filter((asset) => asset.highestBidderId === userId)
+        .filter((asset) => asset.currentPriceCents !== null)
+        .filter((asset) => asset.status === "ended" || new Date(asset.effectiveEndAt).getTime() <= nowMs)
         .map(cloneAsset);
     },
     async listSoldFollowupCandidates(input = {}) {

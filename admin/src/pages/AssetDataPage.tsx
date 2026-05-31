@@ -219,7 +219,7 @@ export function AssetDataPage({ onOpenAsset }: AssetDataPageProps) {
   }
 
   async function confirmDealAsset(assetId: string) {
-    if (!window.confirm("确认该资产已成交？确认后前台会展示成交状态，买家无法继续出价。")) {
+    if (!window.confirm("确认完成该交易？完成后前台会展示成交状态，买家无法继续出价。")) {
       return;
     }
 
@@ -229,7 +229,7 @@ export function AssetDataPage({ onOpenAsset }: AssetDataPageProps) {
       await adminPost<AssetActionResponse>(`/admin/assets/${assetId}/confirm-deal`);
       await loadAssets();
     } catch (confirmError) {
-      setError(confirmError instanceof Error ? confirmError.message : "确认成交失败");
+      setError(confirmError instanceof Error ? confirmError.message : "完成交易失败");
     } finally {
       setActingId(null);
     }
@@ -502,7 +502,7 @@ export function AssetDataPage({ onOpenAsset }: AssetDataPageProps) {
                     onClick={() => void confirmDealAsset(row.id)}
                     type="button"
                   >
-                    确认成交
+                    完成交易
                   </button>
                   <button
                     disabled={actingId === row.id || batching || row.status !== "active"}

@@ -8,6 +8,11 @@ import {
 } from "../../api/src/modules/admin/admin.repository";
 import { canAdmin } from "../../api/src/modules/admin/adminPermissions";
 import { createInMemoryAssetsRepository } from "../../api/src/modules/assets/assets.repository";
+import { createInMemoryImageSafetyRepository } from "../../api/src/modules/contentSafety/imageSafety.repository";
+import {
+  createInMemoryDealFollowupsRepository,
+  type DealFollowupsRepository
+} from "../../api/src/modules/dealFollowups/dealFollowups.repository";
 import { createReportsService } from "../../api/src/modules/reports/reports.service";
 
 describe("admin permissions", () => {
@@ -220,6 +225,71 @@ describe("admin routes", () => {
 
       expect(response.statusCode).toBe(200);
       expect(response.json().asset).toMatchObject({ id: asset.id, title: "详情资产", status: "pending_review" });
+    } finally {
+      await app.close();
+    }
+  });
+
+  it("returns image safety records in admin review list and asset detail", async () => {
+    const assets = createInMemoryAssetsRepository();
+    const imageSafety = createInMemoryImageSafetyRepository();
+    const publicUrl = "https://img.example.com/uploads/accounts/1/safe.jpg";
+    const objectKey = "uploads/accounts/1/safe.jpg";
+    const asset = await assets.createPending({
+      ...pendingAssetInput(),
+      title: "带图审核资产",
+      images: [{ objectKey, publicUrl, mimeType: "image/jpeg", sizeBytes: 1234 }]
+    });
+    await imageSafety.record({
+      userId: "1",
+      objectKey,
+      publicUrl,
+      status: "pass",
+      traceId: "trace-safe-1",
+      label: 100
+    });
+    const app = buildApp({ enableMockAuth: true, assetsRepository: assets, imageSafetyRepository: imageSafety });
+
+    try {
+      const token = await adminLogin(app, "super", "super-pass");
+      const reviewList = await app.inject({
+        method: "GET",
+        url: "/admin/assets/review",
+        headers: { authorization: `Bearer ${token}` }
+      });
+      const detail = await app.inject({
+        method: "GET",
+        url: `/admin/assets/${asset.id}`,
+        headers: { authorization: `Bearer ${token}` }
+      });
+
+      expect(reviewList.statusCode).toBe(200);
+      expect(reviewList.json().items).toEqual([
+        expect.objectContaining({
+          id: asset.id,
+          imageSafetyChecks: [
+            expect.objectContaining({
+              publicUrl,
+              objectKey,
+              status: "pass",
+              traceId: "trace-safe-1",
+              label: 100
+            })
+          ]
+        })
+      ]);
+      expect(detail.statusCode).toBe(200);
+      expect(detail.json()).toMatchObject({
+        imageSafetyChecks: [
+          {
+            publicUrl,
+            objectKey,
+            status: "pass",
+            traceId: "trace-safe-1",
+            label: 100
+          }
+        ]
+      });
     } finally {
       await app.close();
     }
@@ -1076,7 +1146,7 @@ describe("admin routes", () => {
           assetId: own.id,
           status: "completed",
           completedAt: expect.any(String),
-          note: "主理人确认已成交"
+          note: "主理人完成交易"
         })
       ]);
       await expect(admins.listOperations()).resolves.toMatchObject([
@@ -1095,6 +1165,55 @@ describe("admin routes", () => {
       });
       expect(bid.statusCode).toBe(400);
       expect(bid.json().error.code).toBe("asset_not_active");
+    } finally {
+      await app.close();
+    }
+  });
+
+  it("keeps a completed asset ended when deal followup synchronization fails", async () => {
+    const admins = createInMemoryAdminRepository();
+    const assets = createInMemoryAssetsRepository();
+    const baseFollowups = createInMemoryDealFollowupsRepository();
+    const failingFollowups: DealFollowupsRepository = {
+      ...baseFollowups,
+      async ensureForSoldAsset() {
+        throw new Error("followup sync failed");
+      }
+    };
+    const created = await assets.createPending({ ...pendingAssetInput(), principalId: "1", title: "跟进同步失败资产" });
+    const active = await assets.updateStatus(created.id, "active");
+    await assets.save({ ...active, currentPriceCents: 10000, highestBidderId: "2" });
+    const app = buildApp({
+      enableMockAuth: true,
+      adminRepository: admins,
+      assetsRepository: assets,
+      dealFollowupsRepository: failingFollowups
+    });
+
+    try {
+      const reviewer = await adminLogin(app, "reviewer", "reviewer-pass");
+      const response = await app.inject({
+        method: "POST",
+        url: `/admin/assets/${created.id}/confirm-deal`,
+        headers: { authorization: `Bearer ${reviewer}` }
+      });
+
+      expect(response.statusCode).toBe(200);
+      expect(response.json().asset).toMatchObject({ id: created.id, status: "ended" });
+      await expect(assets.findById(created.id)).resolves.toMatchObject({ id: created.id, status: "ended" });
+      await expect(admins.listOperations()).resolves.toEqual([
+        expect.objectContaining({
+          adminId: 1,
+          action: "asset.confirm_deal",
+          targetType: "asset",
+          targetId: created.id,
+          detail: expect.objectContaining({
+            followupId: null,
+            status: "completed",
+            followupSyncError: "followup sync failed"
+          })
+        })
+      ]);
     } finally {
       await app.close();
     }

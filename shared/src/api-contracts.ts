@@ -1,5 +1,6 @@
 import type {
   AdminAccountSummary,
+  AdminImageSafetyCheck,
   AdminManagedUser,
   AdminPrincipal,
   AdminRole,
@@ -111,6 +112,7 @@ export type AdminAssetDetailResponse = {
   asset: AuctionAsset;
   seller: UserSummary;
   principal: PrincipalSummary | null;
+  imageSafetyChecks: AdminImageSafetyCheck[];
   recentBids: BidDisplayRecord[];
 };
 

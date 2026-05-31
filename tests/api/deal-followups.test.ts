@@ -103,7 +103,7 @@ async function createExpiredSoldActiveAsset(
 }
 
 describe("deal followups", () => {
-  it("lets the winning buyer confirm or abandon an ended sold asset without phone authorization", async () => {
+  it("keeps buyer deal followups read-only and rejects buyer status changes", async () => {
     const assets = createInMemoryAssetsRepository();
     const app = buildApp({ enableMockAuth: true, assetsRepository: assets });
 
@@ -145,17 +145,64 @@ describe("deal followups", () => {
         headers: { authorization: `Bearer ${buyer.token}` }
       });
 
-      expect(confirmed.statusCode).toBe(200);
-      expect(confirmed.json().followup).toMatchObject({
-        id: followupId,
-        status: "buyer_confirmed",
-        buyerConfirmedAt: expect.any(String)
+      expect(confirmed.statusCode).toBe(403);
+      expect(confirmed.json().error).toMatchObject({
+        code: "buyer_followup_readonly"
       });
-      expect(abandoned.statusCode).toBe(200);
-      expect(abandoned.json().followup).toMatchObject({
+      expect(abandoned.statusCode).toBe(403);
+      expect(abandoned.json().error).toMatchObject({
+        code: "buyer_followup_readonly"
+      });
+      await expect(assets.findById(assetId)).resolves.toMatchObject({ status: "ended" });
+      const afterList = await app.inject({
+        method: "GET",
+        url: "/api/profile/deal-followups",
+        headers: { authorization: `Bearer ${buyer.token}` }
+      });
+      expect(afterList.json().items[0]).toMatchObject({
         id: followupId,
-        status: "buyer_abandoned",
-        buyerAbandonedAt: expect.any(String)
+        status: "pending_buyer_confirm",
+        buyerConfirmedAt: null,
+        buyerAbandonedAt: null
+      });
+    } finally {
+      await app.close();
+    }
+  });
+
+  it("lists miniapp deal followups only for the winning buyer", async () => {
+    const assets = createInMemoryAssetsRepository();
+    const app = buildApp({ enableMockAuth: true, assetsRepository: assets });
+
+    try {
+      const seller = await login(app, "卖家");
+      const buyer = await login(app, "买家");
+      const assetId = await createEndedSoldAsset(app, assets, seller.token, buyer.token, { title: "卖家可见成交跟进" });
+
+      const sellerList = await app.inject({
+        method: "GET",
+        url: "/api/profile/deal-followups",
+        headers: { authorization: `Bearer ${seller.token}` }
+      });
+      const buyerList = await app.inject({
+        method: "GET",
+        url: "/api/profile/deal-followups",
+        headers: { authorization: `Bearer ${buyer.token}` }
+      });
+
+      expect(sellerList.statusCode).toBe(200);
+      expect(sellerList.json()).toMatchObject({ total: 0, items: [] });
+      expect(buyerList.statusCode).toBe(200);
+      expect(buyerList.json()).toMatchObject({
+        total: 1,
+        items: [
+          expect.objectContaining({
+            assetId,
+            sellerId: seller.user.id,
+            buyerId: buyer.user.id,
+            asset: expect.objectContaining({ title: "卖家可见成交跟进" })
+          })
+        ]
       });
     } finally {
       await app.close();
@@ -223,7 +270,7 @@ describe("deal followups", () => {
         method: "POST",
         url: `/admin/deal-followups/${followupId}/status`,
         headers: { authorization: `Bearer ${reviewer}` },
-        payload: { status: "completed", note: "主理人确认已成交" }
+        payload: { status: "completed", note: "主理人完成交易" }
       });
       const asset = await assets.findById(assetId);
       const publicDetail = await app.inject({ method: "GET", url: `/api/assets/${assetId}` });
@@ -234,7 +281,7 @@ describe("deal followups", () => {
         assetId,
         status: "completed",
         completedAt: expect.any(String),
-        note: "主理人确认已成交"
+        note: "主理人完成交易"
       });
       expect(asset).toMatchObject({ id: assetId, status: "ended", currentPriceCents: 10000, highestBidderId: buyer.user.id });
       expect(publicDetail.statusCode).toBe(200);
@@ -266,7 +313,7 @@ describe("deal followups", () => {
           method: "POST",
           url: `/admin/deal-followups/${item.id}/status`,
           headers: { authorization: `Bearer ${reviewer}` },
-          payload: { status: "buyer_unreachable", note: "买家未在小程序内确认成交" }
+          payload: { status: "buyer_unreachable", note: "主理人联系后买家失联" }
         });
         expect(marked.statusCode).toBe(200);
       }

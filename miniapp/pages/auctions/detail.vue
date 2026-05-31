@@ -55,7 +55,7 @@
             <checkbox value="accepted" :checked="bidCommitmentAccepted" :disabled="Boolean(unavailableMessage)" />
             <view class="commitment-copy">
               <text class="commitment-title">确认出价承诺</text>
-              <text class="commitment-text">成交后我会在小程序内及时确认意向，并配合主理人完成线下交割。</text>
+              <text class="commitment-text">成交后我会配合主理人完成线下交割，最终成交状态以主理人后台确认为准。</text>
             </view>
           </label>
         </checkbox-group>
@@ -287,6 +287,9 @@ async function submitBid() {
       return;
     }
 
+    // 微信订阅授权需要绑定在用户交互链路内，跨过网络请求后可能无法弹窗。
+    await requestPriceChangeSubscription();
+
     const response = await placeBid({ assetId: assetId.value, amountCents: validation.amountCents, commitmentAccepted: true });
     if (detail.value) {
       detail.value = {
@@ -296,7 +299,6 @@ async function submitBid() {
       prependRecentBid(response.bid);
       bidAmountYuan.value = formatPrice(requiredBidCentsForDetail());
     }
-    await requestPriceChangeSubscription();
     uni.showToast({ title: "出价已提交", icon: "none" });
   } catch (error) {
     uni.showToast({ title: bidFailureMessage(error, requiredBidCentsForDetail()), icon: "none" });

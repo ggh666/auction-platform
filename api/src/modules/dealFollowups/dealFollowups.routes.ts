@@ -8,7 +8,7 @@ import type {
 } from "@auction/shared";
 import type { FastifyInstance } from "fastify";
 import { requireAdmin, requireUser } from "../../http/auth";
-import { HttpError, badRequest } from "../../http/errors";
+import { HttpError, badRequest, forbidden } from "../../http/errors";
 import type { AdminRepository } from "../admin/admin.repository";
 import { readAdminDataScope } from "../admin/adminPrincipalScope";
 import { readPagination, type PageQuery } from "../admin/pagination";
@@ -23,11 +23,6 @@ type DealFollowupQuery = PageQuery & {
 };
 
 const adminStatuses: AdminDealFollowupStatus[] = ["principal_contacted", "buyer_unreachable", "completed", "cancelled"];
-const buyerStatuses: Array<Extract<DealFollowupStatus, "buyer_confirmed" | "buyer_abandoned">> = [
-  "buyer_confirmed",
-  "buyer_abandoned"
-];
-const buyerTerminalStatuses: DealFollowupStatus[] = ["buyer_unreachable", "completed", "cancelled"];
 
 function readStatusFilter(value: unknown): DealFollowupStatus | undefined {
   if (typeof value !== "string" || !value.trim()) {
@@ -170,42 +165,19 @@ export function registerDealFollowupRoutes(
     }
   );
 
-  async function updateBuyerFollowup(
-    followupIdParam: string,
-    userId: string,
-    status: Extract<DealFollowupStatus, "buyer_confirmed" | "buyer_abandoned">
-  ): Promise<DealFollowupActionResponse> {
-    if (!buyerStatuses.includes(status)) {
-      throw badRequest("invalid_followup_status", "Deal followup status is invalid");
-    }
-    const followupId = readFollowupId(followupIdParam);
-    const existing = await deps.followups.findById(followupId);
-    if (!existing || existing.buyerId !== userId) {
-      throw new HttpError(404, "not_found", "Deal followup not found");
-    }
-    if (buyerTerminalStatuses.includes(existing.status)) {
-      throw badRequest("invalid_followup_state", "Deal followup can no longer be updated by buyer");
-    }
-    const followup = await deps.followups.updateBuyerStatus(followupId, userId, status);
-    if (!followup) {
-      throw new HttpError(404, "not_found", "Deal followup not found");
-    }
-    return { followup: await toDealFollowupItem(followup, deps) };
-  }
-
   app.post<{ Params: { followupId: string }; Reply: DealFollowupActionResponse }>(
     "/api/profile/deal-followups/:followupId/confirm",
     { preHandler: requireUser },
-    async (request) => {
-      return updateBuyerFollowup(request.params.followupId, request.user.id, "buyer_confirmed");
+    async () => {
+      throw forbidden("buyer_followup_readonly", "Deal completion can only be updated by a principal");
     }
   );
 
   app.post<{ Params: { followupId: string }; Reply: DealFollowupActionResponse }>(
     "/api/profile/deal-followups/:followupId/abandon",
     { preHandler: requireUser },
-    async (request) => {
-      return updateBuyerFollowup(request.params.followupId, request.user.id, "buyer_abandoned");
+    async () => {
+      throw forbidden("buyer_followup_readonly", "Deal completion can only be updated by a principal");
     }
   );
 

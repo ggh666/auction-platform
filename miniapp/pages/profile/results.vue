@@ -3,11 +3,11 @@
     <text class="title">成交记录</text>
     <view class="followup-section">
       <view class="section-heading">
-        <text class="section-title">待确认成交</text>
+        <text class="section-title">成交跟进</text>
         <text class="section-count">{{ followups.length }} 条</text>
       </view>
       <view v-if="followupLoading && followups.length === 0" class="empty compact-empty">正在加载成交跟进</view>
-      <view v-else-if="followups.length === 0" class="empty compact-empty">暂无待处理的成交跟进</view>
+      <view v-else-if="followups.length === 0" class="empty compact-empty">暂无成交跟进</view>
       <view v-for="followup in followups" :key="followup.id" class="followup-row" @tap="openDetail(followup.assetId)">
         <view class="followup-main">
           <text class="result-title">{{ followup.asset.title }}</text>
@@ -18,23 +18,6 @@
             {{ followupStatusText(followup.status) }} / 成交价 {{ formatPrice(followup.finalPriceCents) }} 元宝
           </text>
           <text v-if="followup.principal" class="result-meta">主理人：{{ followup.principal.displayName }}</text>
-        </view>
-        <view v-if="canBuyerUpdate(followup.status)" class="followup-actions">
-          <button
-            class="followup-button primary"
-            :loading="actingFollowupId === followup.id"
-            :disabled="actingFollowupId === followup.id"
-            @tap.stop="confirmFollowup(followup.id)"
-          >
-            确认成交
-          </button>
-          <button
-            class="followup-button"
-            :disabled="actingFollowupId === followup.id"
-            @tap.stop="abandonFollowup(followup.id)"
-          >
-            放弃成交
-          </button>
         </view>
       </view>
     </view>
@@ -59,8 +42,6 @@ import { centsToYuanText } from "@auction/shared";
 import { onPullDownRefresh, onReachBottom, onShow } from "@dcloudio/uni-app";
 import { ref } from "vue";
 import {
-  abandonDealFollowup,
-  confirmDealFollowup,
   listMyDealFollowups,
   listMyResults,
   type DealFollowupItem,
@@ -70,7 +51,6 @@ import {
 const loading = ref(false);
 const loadingMore = ref(false);
 const followupLoading = ref(false);
-const actingFollowupId = ref<string | null>(null);
 const hasMore = ref(false);
 const nextPage = ref(1);
 const total = ref(0);
@@ -147,42 +127,6 @@ async function loadResults(options: { reset?: boolean } = {}) {
   }
 }
 
-function replaceFollowup(followup: DealFollowupItem) {
-  followups.value = followups.value.map((item) => (item.id === followup.id ? followup : item));
-}
-
-async function confirmFollowup(followupId: string) {
-  if (actingFollowupId.value !== null) {
-    return;
-  }
-  actingFollowupId.value = followupId;
-  try {
-    const response = await confirmDealFollowup(followupId);
-    replaceFollowup(response.followup);
-    uni.showToast({ title: "已确认成交意向", icon: "none" });
-  } catch {
-    uni.showToast({ title: "确认失败，请稍后重试", icon: "none" });
-  } finally {
-    actingFollowupId.value = null;
-  }
-}
-
-async function abandonFollowup(followupId: string) {
-  if (actingFollowupId.value !== null) {
-    return;
-  }
-  actingFollowupId.value = followupId;
-  try {
-    const response = await abandonDealFollowup(followupId);
-    replaceFollowup(response.followup);
-    uni.showToast({ title: "已标记放弃成交", icon: "none" });
-  } catch {
-    uni.showToast({ title: "操作失败，请稍后重试", icon: "none" });
-  } finally {
-    actingFollowupId.value = null;
-  }
-}
-
 function statusText(status: ProfileResultItem["status"]) {
   const map: Record<ProfileResultItem["status"], string> = {
     sold: "已成交",
@@ -195,19 +139,15 @@ function statusText(status: ProfileResultItem["status"]) {
 
 function followupStatusText(status: DealFollowupItem["status"]) {
   const map: Record<DealFollowupItem["status"], string> = {
-    pending_buyer_confirm: "待确认",
-    buyer_confirmed: "已确认",
-    buyer_abandoned: "已放弃",
+    pending_buyer_confirm: "待主理人处理",
+    buyer_confirmed: "买家曾确认",
+    buyer_abandoned: "买家曾放弃",
     principal_contacted: "主理人已联系",
     buyer_unreachable: "已标记失联",
     completed: "已成交",
     cancelled: "已取消"
   };
   return map[status];
-}
-
-function canBuyerUpdate(status: DealFollowupItem["status"]) {
-  return status !== "buyer_unreachable" && status !== "completed" && status !== "cancelled";
 }
 
 function displayAssetType(assetType: string) {
@@ -294,33 +234,6 @@ function formatDate(value: string) {
   min-width: 0;
 }
 
-.followup-actions {
-  display: flex;
-  gap: 12rpx;
-  margin-top: 18rpx;
-}
-
-.followup-button {
-  flex: 1;
-  height: 64rpx;
-  margin: 0;
-  padding: 0 16rpx;
-  font-size: 26rpx;
-  line-height: 64rpx;
-  color: #175cd3;
-  background: #eff8ff;
-  border-radius: 8rpx;
-}
-
-.followup-button.primary {
-  color: #ffffff;
-  background: #175cd3;
-}
-
-.followup-button::after {
-  border: 0;
-}
-
 .result-title {
   font-weight: 700;
 }
@@ -393,14 +306,4 @@ function formatDate(value: string) {
   color: #9ab4a8;
 }
 
-.followup-button {
-  color: #f7e8b6;
-  background: rgba(11, 32, 30, 0.9);
-  border: 1px solid rgba(246, 196, 83, 0.28);
-}
-
-.followup-button.primary {
-  color: #071112;
-  background: #f6c453;
-}
 </style>

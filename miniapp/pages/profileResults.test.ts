@@ -5,7 +5,7 @@ import { describe, expect, it } from "vitest";
 const resultsPagePath = resolve(import.meta.dirname, "profile/results.vue");
 
 describe("profile results page", () => {
-  it("paginates result records, shows asset names, and does not show a disclaimer modal", () => {
+  it("paginates result records, shows asset names, and keeps deal completion read-only for users", () => {
     const page = readFileSync(resultsPagePath, "utf8");
 
     expect(page).toContain("onReachBottom");
@@ -13,8 +13,10 @@ describe("profile results page", () => {
     expect(page).toContain("pageSize");
     expect(page).toContain("result.asset.title");
     expect(page).toContain("listMyDealFollowups");
-    expect(page).toContain("confirmDealFollowup");
-    expect(page).toContain("abandonDealFollowup");
+    expect(page).not.toContain("confirmDealFollowup");
+    expect(page).not.toContain("abandonDealFollowup");
+    expect(page).not.toContain("确认成交");
+    expect(page).not.toContain("放弃成交");
     expect(page).not.toContain("confirmTradingDisclaimer");
     expect(page).not.toContain("readSessionUser");
   });

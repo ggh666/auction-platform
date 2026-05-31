@@ -18,9 +18,9 @@ type DealFollowupPageProps = {
 
 const statusOptions: Array<{ value: "" | DealFollowupItem["status"]; label: string }> = [
   { value: "", label: "全部状态" },
-  { value: "pending_buyer_confirm", label: "待买家确认" },
-  { value: "buyer_confirmed", label: "买家已确认" },
-  { value: "buyer_abandoned", label: "买家已放弃" },
+  { value: "pending_buyer_confirm", label: "待主理人跟进" },
+  { value: "buyer_confirmed", label: "买家曾确认" },
+  { value: "buyer_abandoned", label: "买家曾放弃" },
   { value: "principal_contacted", label: "主理人已联系" },
   { value: "buyer_unreachable", label: "买家失联" },
   { value: "completed", label: "已成交" },
@@ -28,9 +28,9 @@ const statusOptions: Array<{ value: "" | DealFollowupItem["status"]; label: stri
 ];
 
 const statusMeta: Record<DealFollowupItem["status"], { label: string; tone: "success" | "warning" | "danger" | "neutral" }> = {
-  pending_buyer_confirm: { label: "待买家确认", tone: "warning" },
-  buyer_confirmed: { label: "买家已确认", tone: "success" },
-  buyer_abandoned: { label: "买家已放弃", tone: "danger" },
+  pending_buyer_confirm: { label: "待主理人跟进", tone: "warning" },
+  buyer_confirmed: { label: "买家曾确认", tone: "success" },
+  buyer_abandoned: { label: "买家曾放弃", tone: "danger" },
   principal_contacted: { label: "主理人已联系", tone: "neutral" },
   buyer_unreachable: { label: "买家失联", tone: "danger" },
   completed: { label: "已成交", tone: "success" },
@@ -103,9 +103,9 @@ export function DealFollowupPage({ onOpenAsset }: DealFollowupPageProps) {
     const meta = statusMeta[nextStatus];
     const defaultNote =
       nextStatus === "buyer_unreachable"
-        ? "买家未在小程序内确认成交"
+        ? "主理人联系后买家失联"
         : nextStatus === "completed"
-          ? "主理人确认已成交"
+          ? "主理人完成交易"
           : followup.note ?? "";
     const note = window.prompt(`备注：${meta.label}`, defaultNote);
     if (note === null) {
@@ -234,7 +234,7 @@ export function DealFollowupPage({ onOpenAsset }: DealFollowupPageProps) {
                     失联
                   </button>
                   <button disabled={disabled} onClick={() => void updateStatus(row, "completed")} type="button">
-                    确认成交
+                    完成交易
                   </button>
                   <button disabled={disabled} onClick={() => void updateStatus(row, "cancelled")} type="button">
                     取消

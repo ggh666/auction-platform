@@ -552,6 +552,19 @@ button:disabled {
   background: #eef3fb;
 }
 
+.image-preview-meta {
+  display: grid;
+  gap: 4px;
+  justify-items: start;
+  text-align: left;
+}
+
+.image-preview-meta .status {
+  min-height: 22px;
+  padding: 2px 7px;
+  font-size: 11px;
+}
+
 .modal-backdrop {
   position: fixed;
   inset: 0;
@@ -610,6 +623,17 @@ button:disabled {
 .preview-link {
   display: block;
   min-width: 0;
+}
+
+.preview-image-card {
+  display: grid;
+  gap: 6px;
+  min-width: 0;
+  align-content: start;
+}
+
+.preview-image-card .status {
+  justify-self: start;
 }
 
 .preview-image {

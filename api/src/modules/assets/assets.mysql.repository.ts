@@ -426,14 +426,13 @@ export function createMysqlAssetsRepository(db: MysqlExecutor): AssetsRepository
     async listRelatedResults(userId) {
       const [rows] = await db.execute<AssetDbRow[]>(
         `${assetSelect}
-         WHERE seller_id = ? OR highest_bidder_id = ?
+         WHERE current_price_cents IS NOT NULL
+           AND (status = 'ended' OR effective_end_at <= ?)
+           AND highest_bidder_id = ?
          ORDER BY updated_at DESC`,
-        [Number(userId), Number(userId)]
+        [toMysqlDate(new Date().toISOString()), Number(userId)]
       );
-      const assets = await Promise.all(
-        allRows<AssetDbRow>(rows).map(async (row) => toAuctionAsset(row, await readImageUrls(String(row.id))))
-      );
-      return assets.filter((asset) => asset.currentPriceCents !== null || asset.status === "ended");
+      return Promise.all(allRows<AssetDbRow>(rows).map(async (row) => toAuctionAsset(row, await readImageUrls(String(row.id)))));
     },
 
     async listSoldFollowupCandidates(input = {}) {

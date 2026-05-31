@@ -1,5 +1,12 @@
 import { useEffect, useMemo, useState } from "react";
-import { centsToYuanText, firstAssetImageUrl, type AuctionAsset, type UserSummary } from "@auction/shared";
+import {
+  centsToYuanText,
+  firstAssetImageUrl,
+  type AdminImageSafetyCheck,
+  type AuctionAsset,
+  type ImageSafetyStatus,
+  type UserSummary
+} from "@auction/shared";
 import { adminGet, adminPost } from "../api/client";
 import { DataTable } from "../components/DataTable";
 import { PaginationBar } from "../components/PaginationBar";
@@ -15,6 +22,7 @@ type AssetReviewResponse = {
 
 type ReviewAsset = AuctionAsset & {
   seller?: UserSummary;
+  imageSafetyChecks?: AdminImageSafetyCheck[];
 };
 
 type AssetActionResponse = {
@@ -58,6 +66,58 @@ function formatTime(value: string): string {
 
 function usableImageUrls(asset: AuctionAsset): string[] {
   return asset.imageUrls.map((imageUrl) => imageUrl.trim()).filter(Boolean);
+}
+
+const imageSafetyMeta: Record<ImageSafetyStatus, { label: string; tone: "success" | "warning" | "danger" | "neutral" }> = {
+  missing: { label: "未检测", tone: "danger" },
+  pending: { label: "待回调", tone: "warning" },
+  pass: { label: "已通过", tone: "success" },
+  review: { label: "人工复核", tone: "warning" },
+  risky: { label: "违规", tone: "danger" },
+  failed: { label: "检测失败", tone: "danger" }
+};
+
+function missingImageSafetyCheck(publicUrl: string): AdminImageSafetyCheck {
+  return {
+    publicUrl,
+    objectKey: null,
+    status: "missing",
+    traceId: null,
+    label: null,
+    updatedAt: null
+  };
+}
+
+function imageSafetyForUrl(asset: ReviewAsset, imageUrl: string): AdminImageSafetyCheck {
+  return asset.imageSafetyChecks?.find((check) => check.publicUrl === imageUrl) ?? missingImageSafetyCheck(imageUrl);
+}
+
+function imageSafetySummary(asset: ReviewAsset): { label: string; tone: "success" | "warning" | "danger" | "neutral" } {
+  const checks = usableImageUrls(asset).map((imageUrl) => imageSafetyForUrl(asset, imageUrl));
+  if (checks.length === 0) {
+    return { label: "无图片", tone: "neutral" };
+  }
+  const priority: ImageSafetyStatus[] = ["risky", "missing", "failed", "pending", "review", "pass"];
+  const status = priority.find((candidate) => checks.some((check) => check.status === candidate)) ?? "missing";
+  const meta = imageSafetyMeta[status];
+  const count = checks.filter((check) => check.status === status).length;
+  return {
+    label: count === checks.length ? meta.label : `${meta.label} ${count}/${checks.length}`,
+    tone: meta.tone
+  };
+}
+
+function renderImageSafetyBadge(check: AdminImageSafetyCheck | { label: string; tone: "success" | "warning" | "danger" | "neutral" }) {
+  if ("status" in check) {
+    const meta = imageSafetyMeta[check.status];
+    const label = check.label === null ? meta.label : `${meta.label}（${check.label}）`;
+    return (
+      <span className={`status ${meta.tone}`} title={check.traceId ? `trace_id: ${check.traceId}` : undefined}>
+        {label}
+      </span>
+    );
+  }
+  return <span className={`status ${check.tone}`}>{check.label}</span>;
 }
 
 function dragonBallSummary(asset: AuctionAsset): string {
@@ -308,7 +368,10 @@ export function AssetReviewPage({ onOpenAsset }: AssetReviewPageProps) {
               return (
                 <button className="image-preview-button" onClick={() => setPreviewAsset(row)} type="button">
                   <img alt={`${row.title} 首图`} className="asset-thumb" src={coverUrl} />
-                  <span>{imageCount} 张</span>
+                  <span className="image-preview-meta">
+                    <span>{imageCount} 张</span>
+                    {renderImageSafetyBadge(imageSafetySummary(row))}
+                  </span>
                 </button>
               );
             }
@@ -393,11 +456,17 @@ export function AssetReviewPage({ onOpenAsset }: AssetReviewPageProps) {
               </button>
             </div>
             <div className="preview-grid">
-              {usableImageUrls(previewAsset).map((imageUrl, index) => (
-                <a className="preview-link" href={imageUrl} key={`${imageUrl}-${index}`} rel="noreferrer" target="_blank">
-                  <img alt={`${previewAsset.title} 图片 ${index + 1}`} className="preview-image" src={imageUrl} />
-                </a>
-              ))}
+              {usableImageUrls(previewAsset).map((imageUrl, index) => {
+                const check = imageSafetyForUrl(previewAsset, imageUrl);
+                return (
+                  <div className="preview-image-card" key={`${imageUrl}-${index}`}>
+                    <a className="preview-link" href={imageUrl} rel="noreferrer" target="_blank">
+                      <img alt={`${previewAsset.title} 图片 ${index + 1}`} className="preview-image" src={imageUrl} />
+                    </a>
+                    {renderImageSafetyBadge(check)}
+                  </div>
+                );
+              })}
             </div>
           </div>
         </div>

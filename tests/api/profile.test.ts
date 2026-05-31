@@ -326,12 +326,14 @@ describe("profile routes", () => {
     }
   });
 
-  it("lists sold and unsold ended assets related to the current user with pagination and asset names", async () => {
-    const app = buildApp({ enableMockAuth: true });
+  it("lists only finished assets won by the current highest bidder with pagination and asset names", async () => {
+    const assets = createInMemoryAssetsRepository();
+    const app = buildApp({ enableMockAuth: true, assetsRepository: assets });
 
     try {
       const seller = await login(app, "卖家");
-      const bidder = await login(app, "买家");
+      const loser = await login(app, "被超过的出价者");
+      const bidder = await login(app, "最终最高出价者");
       const soldAsset = await createAsset(app, seller, { title: "已成交资产" });
       await approveAsset(app, soldAsset.id);
       await app.inject({
@@ -340,19 +342,45 @@ describe("profile routes", () => {
         headers: { authorization: `Bearer ${bidder}` },
         payload: { assetId: soldAsset.id, amountCents: 10000, commitmentAccepted: true }
       });
+      await assets.updateStatus(soldAsset.id, "ended");
       const newerSoldAsset = await createAsset(app, seller, { title: "第二个成交资产" });
       await approveAsset(app, newerSoldAsset.id);
       await app.inject({
         method: "POST",
         url: "/api/bids",
+        headers: { authorization: `Bearer ${loser}` },
+        payload: { assetId: newerSoldAsset.id, amountCents: 10000, commitmentAccepted: true }
+      });
+      await app.inject({
+        method: "POST",
+        url: "/api/bids",
         headers: { authorization: `Bearer ${bidder}` },
-        payload: { assetId: newerSoldAsset.id, amountCents: 11000, commitmentAccepted: true }
+        payload: { assetId: newerSoldAsset.id, amountCents: 10100, commitmentAccepted: true }
+      });
+      await assets.updateStatus(newerSoldAsset.id, "ended");
+      const activeAsset = await createAsset(app, seller, { title: "仍在进行的当前最高价" });
+      await approveAsset(app, activeAsset.id);
+      await app.inject({
+        method: "POST",
+        url: "/api/bids",
+        headers: { authorization: `Bearer ${bidder}` },
+        payload: { assetId: activeAsset.id, amountCents: 10000, commitmentAccepted: true }
       });
 
       const sellerResults = await app.inject({
         method: "GET",
         url: "/api/profile/results?page=1&pageSize=1",
         headers: { authorization: `Bearer ${seller}` }
+      });
+      const loserResults = await app.inject({
+        method: "GET",
+        url: "/api/profile/results",
+        headers: { authorization: `Bearer ${loser}` }
+      });
+      const firstBidderPage = await app.inject({
+        method: "GET",
+        url: "/api/profile/results?page=1&pageSize=1",
+        headers: { authorization: `Bearer ${bidder}` }
       });
       const bidderResults = await app.inject({
         method: "GET",
@@ -361,12 +389,16 @@ describe("profile routes", () => {
       });
 
       expect(sellerResults.statusCode).toBe(200);
-      expect(sellerResults.json()).toMatchObject({ total: 2, page: 1, pageSize: 1, hasMore: true });
-      expect(sellerResults.json().items).toEqual([
+      expect(sellerResults.json()).toMatchObject({ total: 0, page: 1, pageSize: 1, hasMore: false });
+      expect(loserResults.statusCode).toBe(200);
+      expect(loserResults.json()).toMatchObject({ total: 0, items: [] });
+      expect(firstBidderPage.statusCode).toBe(200);
+      expect(firstBidderPage.json()).toMatchObject({ total: 2, page: 1, pageSize: 1, hasMore: true });
+      expect(firstBidderPage.json().items).toEqual([
         expect.objectContaining({
           assetId: newerSoldAsset.id,
           status: "sold",
-          finalPriceCents: 11000,
+          finalPriceCents: 10100,
           asset: expect.objectContaining({ id: newerSoldAsset.id, title: "第二个成交资产" })
         })
       ]);

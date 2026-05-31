@@ -1,6 +1,7 @@
 import type {
   AdminAccountActionResponse,
   AdminAccountSummary,
+  AdminImageSafetyCheck,
   AdminAssetDetailResponse,
   AdminAssetListResponse,
   AdminUserActionResponse,
@@ -17,6 +18,7 @@ import { HttpError, badRequest } from "../../http/errors";
 import { defaultAdminAssetStatuses, type AdminAssetListInput, type AssetsRepository } from "../assets/assets.repository";
 import type { BidsRepository } from "../bids/bids.repository";
 import type { ContentSafetyService } from "../contentSafety/contentSafety.service";
+import type { ImageSafetyRecord, ImageSafetyRepository } from "../contentSafety/imageSafety.repository";
 import type { DealFollowupsRepository } from "../dealFollowups/dealFollowups.repository";
 import type { PrincipalRecord, PrincipalsRepository } from "../principals/principals.repository";
 import { readUserSummary, toBidDisplayRecord } from "../users/userSummary";
@@ -75,6 +77,7 @@ type AdminBatchAssetReviewFailure = {
 
 type AdminReviewAsset = AuctionAsset & {
   seller: UserSummary;
+  imageSafetyChecks: AdminImageSafetyCheck[];
 };
 
 function stringQuery(value: unknown): string | undefined {
@@ -145,13 +148,64 @@ function readAdminAssetFilters(query: AdminAssetQuery): Pick<
   };
 }
 
-async function attachSellerSummaries(assets: AuctionAsset[], users: UsersRepository): Promise<AdminReviewAsset[]> {
-  return Promise.all(
+function missingImageSafetyCheck(publicUrl: string): AdminImageSafetyCheck {
+  return {
+    publicUrl,
+    objectKey: null,
+    status: "missing",
+    traceId: null,
+    label: null,
+    updatedAt: null
+  };
+}
+
+function toAdminImageSafetyCheck(record: ImageSafetyRecord): AdminImageSafetyCheck {
+  return {
+    publicUrl: record.publicUrl,
+    objectKey: record.objectKey,
+    status: record.status,
+    traceId: record.traceId,
+    label: record.label,
+    updatedAt: record.updatedAt
+  };
+}
+
+async function attachImageSafetyChecks<T extends AuctionAsset>(
+  assets: T[],
+  imageSafety: ImageSafetyRepository
+): Promise<Array<T & { imageSafetyChecks: AdminImageSafetyCheck[] }>> {
+  const publicUrls = [...new Set(assets.flatMap((asset) => asset.imageUrls.map((imageUrl) => imageUrl.trim()).filter(Boolean)))];
+  const records = await imageSafety.findByPublicUrls(publicUrls);
+  const recordsByUrl = new Map(records.map((record) => [record.publicUrl, record]));
+
+  return assets.map((asset) => ({
+    ...asset,
+    imageSafetyChecks: asset.imageUrls
+      .map((imageUrl) => imageUrl.trim())
+      .filter(Boolean)
+      .map((publicUrl) => {
+        const record = recordsByUrl.get(publicUrl);
+        return record ? toAdminImageSafetyCheck(record) : missingImageSafetyCheck(publicUrl);
+      })
+  }));
+}
+
+async function attachSellerSummaries(
+  assets: AuctionAsset[],
+  users: UsersRepository,
+  imageSafety: ImageSafetyRepository
+): Promise<AdminReviewAsset[]> {
+  const withSellers = await Promise.all(
     assets.map(async (asset) => ({
       ...asset,
       seller: await readUserSummary(users, asset.sellerId)
     }))
   );
+  return attachImageSafetyChecks(withSellers, imageSafety);
+}
+
+async function readAssetImageSafetyChecks(asset: AuctionAsset, imageSafety: ImageSafetyRepository): Promise<AdminImageSafetyCheck[]> {
+  return (await attachImageSafetyChecks([asset], imageSafety))[0]?.imageSafetyChecks ?? [];
 }
 
 function readPrincipalBody(value: AdminPrincipalBody | undefined) {
@@ -359,7 +413,8 @@ export function registerAdminRoutes(
   users: UsersRepository,
   contentSafety: ContentSafetyService,
   principals: PrincipalsRepository,
-  followups: DealFollowupsRepository
+  followups: DealFollowupsRepository,
+  imageSafety: ImageSafetyRepository
 ): void {
   const auth = createAdminAuthService(app, admins);
 
@@ -521,7 +576,7 @@ export function registerAdminRoutes(
     const result = await assets.listPendingReview({ ...scope, page, pageSize });
     return {
       ...result,
-      items: await attachSellerSummaries(result.items, users)
+      items: await attachSellerSummaries(result.items, users, imageSafety)
     };
   });
 
@@ -597,6 +652,7 @@ export function registerAdminRoutes(
         asset,
         seller: await readUserSummary(users, asset.sellerId),
         principal: principal ? { id: principal.id, displayName: principal.displayName } : null,
+        imageSafetyChecks: await readAssetImageSafetyChecks(asset, imageSafety),
         recentBids: await Promise.all(recentBids.slice(-20).reverse().map((bid) => toBidDisplayRecord(users, bid)))
       };
     }
@@ -740,22 +796,24 @@ export function registerAdminRoutes(
     try {
       asset = await assets.confirmActiveDeal(assetId, scope);
     } catch (error) {
-      translateAssetActionError(error, "Only active assets with bids can be confirmed as sold");
+      translateAssetActionError(error, "Only active assets with bids can be completed");
     }
 
-    let followup;
+    let followup: Awaited<ReturnType<DealFollowupsRepository["updateAdminStatus"]>> = null;
+    let followupSyncError: string | null = null;
     try {
       const ensured = await followups.ensureForSoldAsset(asset);
       if (!ensured) {
-        throw new Error("Deal followup could not be created");
-      }
-      followup = await followups.updateAdminStatus(ensured.id, "completed", "主理人确认已成交");
-      if (!followup) {
-        throw new Error("Deal followup could not be completed");
+        followupSyncError = "Deal followup could not be created";
+      } else {
+        followup = await followups.updateAdminStatus(ensured.id, "completed", "主理人完成交易");
+        if (!followup) {
+          followupSyncError = "Deal followup could not be completed";
+        }
       }
     } catch (error) {
-      await assets.save(original);
-      throw error;
+      followupSyncError = error instanceof Error ? error.message : "Deal followup sync failed";
+      app.log.warn({ err: error, assetId: asset.id }, "Deal followup sync failed after asset completion");
     }
 
     await admins.logOperation({
@@ -763,7 +821,11 @@ export function registerAdminRoutes(
       action: "asset.confirm_deal",
       targetType: "asset",
       targetId: asset.id,
-      detail: { followupId: followup.id, status: "completed" }
+      detail: {
+        followupId: followup?.id ?? null,
+        status: "completed",
+        ...(followupSyncError ? { followupSyncError } : {})
+      }
     });
     return asset;
   }

@@ -32,7 +32,7 @@ function defaultSubscribeRequester(): SubscribeMessageRequester | null {
     uni?: SubscribeMessageRuntime;
     wx?: SubscribeMessageRuntime;
   };
-  return runtime.uni?.requestSubscribeMessage ?? runtime.wx?.requestSubscribeMessage ?? null;
+  return runtime.wx?.requestSubscribeMessage ?? runtime.uni?.requestSubscribeMessage ?? null;
 }
 
 export function requestPriceChangeSubscription(input: {

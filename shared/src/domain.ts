@@ -3,6 +3,7 @@ import type { DragonBallInfo } from "./dragonBall";
 export type AssetStatus = "draft" | "pending_review" | "active" | "ended" | "rejected" | "cancelled" | "removed";
 export type ReportStatus = "pending" | "rejected" | "confirmed";
 export type AuctionResultStatus = "sold" | "unsold" | "cancelled" | "removed";
+export type ImageSafetyStatus = "missing" | "pending" | "pass" | "review" | "risky" | "failed";
 export type DealFollowupStatus =
   | "pending_buyer_confirm"
   | "buyer_confirmed"
@@ -92,6 +93,15 @@ export type AuctionAsset = {
   sellerViolationCount?: number;
   hasPublishedViolation?: boolean;
   followedByMe?: boolean;
+};
+
+export type AdminImageSafetyCheck = {
+  publicUrl: string;
+  objectKey: string | null;
+  status: ImageSafetyStatus;
+  traceId: string | null;
+  label: number | null;
+  updatedAt: string | null;
 };
 
 export type BidRecord = {
