@@ -44,7 +44,7 @@ const columns: ExportColumn[] = [
 ];
 
 function centsToYuan(cents: number): number {
-  return cents / 100;
+  return Math.floor(cents / 100);
 }
 
 function formatDateTime(value: string): string {

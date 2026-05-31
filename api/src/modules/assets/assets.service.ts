@@ -1,4 +1,4 @@
-import { isDragonBallProfession, isDragonBallQuality, dragonBallElementForProfession } from "@auction/shared";
+import { isDragonBallProfession, isDragonBallQuality, dragonBallElementForProfession, isWholeYuanCents } from "@auction/shared";
 import { badRequest, notFound } from "../../http/errors";
 import { DEFAULT_ASSET_END_AT, type AssetsRepository, type CreateAssetInput, type PublicAssetListInput, type UploadedAssetImageInput } from "./assets.repository";
 
@@ -14,6 +14,10 @@ function isNonEmptyString(value: unknown): value is string {
 
 function isPositiveSafeInteger(value: unknown): value is number {
   return typeof value === "number" && Number.isSafeInteger(value) && value > 0;
+}
+
+function isPositiveWholeYuanCents(value: unknown): value is number {
+  return isWholeYuanCents(value) && value > 0;
 }
 
 function sanitizeImages(value: CreateAssetInput["images"]): UploadedAssetImageInput[] {
@@ -113,11 +117,11 @@ export function createAssetsService(repository: AssetsRepository) {
         throw badRequest("invalid_end_time", "Auction end time must be in the future");
       }
 
-      if (!isPositiveSafeInteger(input.startingPriceCents)) {
-        throw badRequest("invalid_price", "Starting price must be positive cents");
+      if (!isPositiveWholeYuanCents(input.startingPriceCents)) {
+        throw badRequest("invalid_price", "Starting price must be a positive whole amount");
       }
-      if (!isPositiveSafeInteger(input.minIncrementCents)) {
-        throw badRequest("invalid_increment", "Minimum increment must be positive cents");
+      if (!isPositiveWholeYuanCents(input.minIncrementCents)) {
+        throw badRequest("invalid_increment", "Minimum increment must be a positive whole amount");
       }
       const assetType = input.assetType.trim();
       const dragonBallMetadata = normalizeDragonBallInput(assetType, input.itemCategory, input.dragonBall);

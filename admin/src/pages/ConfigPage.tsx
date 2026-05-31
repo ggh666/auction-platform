@@ -7,7 +7,7 @@ import { PaginationBar } from "../components/PaginationBar";
 const pageSize = 20;
 
 const configLabels: Record<string, { label: string; hint: string }> = {
-  default_min_increment_cents: { label: "默认最低加价", hint: "单位：分，例如 100 表示 1 元" },
+  default_min_increment_cents: { label: "默认最低加价", hint: "单位：分，需为 100 的整数倍，例如 100 表示 1 元宝" },
   extension_window_seconds: { label: "延时保护窗口", hint: "单位：秒，交换结束前进入保护窗口" },
   extension_duration_seconds: { label: "延时增加时长", hint: "单位：秒，保护窗口内出价后自动延长" },
   max_images_per_asset: { label: "单资产图片数", hint: "发布资产时允许上传的最大图片数量" },

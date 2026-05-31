@@ -113,6 +113,28 @@ describe("bidding", () => {
     }
   });
 
+  it("rejects bid amounts with fractional yuan cents", async () => {
+    const app = buildApp({ enableMockAuth: true });
+
+    try {
+      const sellerToken = await login(app, "卖家");
+      const bidderToken = await login(app, "买家");
+      const assetId = await createActiveAsset(app, sellerToken);
+
+      const bid = await app.inject({
+        method: "POST",
+        url: "/api/bids",
+        headers: { authorization: `Bearer ${bidderToken}` },
+        payload: { assetId, amountCents: 10050, commitmentAccepted: true }
+      });
+
+      expect(bid.statusCode).toBe(400);
+      expect(bid.json().error.code).toBe("invalid_bid_amount");
+    } finally {
+      await app.close();
+    }
+  });
+
   it("rejects bids until the buyer accepts the bid commitment", async () => {
     const app = buildApp({ enableMockAuth: true });
 
@@ -260,7 +282,7 @@ describe("bidding", () => {
         method: "POST",
         url: "/api/bids",
         headers: { authorization: `Bearer ${secondBidderToken}` },
-        payload: { assetId, amountCents: 10099, commitmentAccepted: true }
+        payload: { assetId, amountCents: 10000, commitmentAccepted: true }
       });
 
       expect(bid.statusCode).toBe(400);

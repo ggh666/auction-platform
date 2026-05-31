@@ -1,5 +1,7 @@
+import { isWholeYuanCents } from "./money";
+
 function isPositiveSafeInteger(value: number): boolean {
-  return Number.isSafeInteger(value) && value > 0;
+  return isWholeYuanCents(value) && value > 0;
 }
 
 export function canBidAmount(input: {

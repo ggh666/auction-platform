@@ -41,8 +41,8 @@ describe("WeChat subscribe messages", () => {
           miniprogram_state: "formal",
           lang: "zh_CN",
           data: {
-            amount3: { value: "500.00" },
-            amount4: { value: "450.00" },
+            amount3: { value: "500" },
+            amount4: { value: "450" },
             thing15: { value: "紫色工程龙珠" },
             time11: { value: "2026-05-30 12:34" }
           }

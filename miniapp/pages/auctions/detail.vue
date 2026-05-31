@@ -47,7 +47,7 @@
           v-model="bidAmountYuan"
           class="input"
           :disabled="Boolean(unavailableMessage)"
-          type="digit"
+          type="number"
           placeholder="输入出价金额，单位元宝"
         />
         <checkbox-group class="commitment-group" @change="onCommitmentChange">

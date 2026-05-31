@@ -1,4 +1,4 @@
-import type { PlaceBidRequest, PlaceBidResponse } from "@auction/shared";
+import { isWholeYuanCents, type PlaceBidRequest, type PlaceBidResponse } from "@auction/shared";
 import type { FastifyInstance } from "fastify";
 import { requireActiveUser } from "../../http/auth";
 import { HttpError, badRequest } from "../../http/errors";
@@ -16,7 +16,7 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 }
 
 function isPositiveSafeInteger(value: unknown): value is number {
-  return typeof value === "number" && Number.isSafeInteger(value) && value > 0;
+  return isWholeYuanCents(value) && value > 0;
 }
 
 function parsePlaceBidRequest(body: unknown): PlaceBidRequest {
@@ -30,7 +30,7 @@ function parsePlaceBidRequest(body: unknown): PlaceBidRequest {
     throw badRequest("invalid_asset_id", "assetId is required");
   }
   if (!isPositiveSafeInteger(amountCents)) {
-    throw badRequest("invalid_bid_amount", "amountCents must be positive cents");
+    throw badRequest("invalid_bid_amount", "amountCents must be a positive whole amount");
   }
   if (body.commitmentAccepted !== true) {
     throw badRequest("bid_commitment_required", "Bid commitment must be accepted");

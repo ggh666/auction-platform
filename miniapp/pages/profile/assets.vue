@@ -29,7 +29,7 @@
 </template>
 
 <script setup lang="ts">
-import { firstAssetImageUrl, type AuctionAsset } from "@auction/shared";
+import { centsToYuanText, firstAssetImageUrl, type AuctionAsset } from "@auction/shared";
 import { onShow } from "@dcloudio/uni-app";
 import { ref } from "vue";
 import { listMyAssets } from "../../api/client";
@@ -52,7 +52,7 @@ onShow(async () => {
 });
 
 function formatPrice(cents: number) {
-  return (cents / 100).toFixed(2);
+  return centsToYuanText(cents);
 }
 
 function formatTime(value: string) {

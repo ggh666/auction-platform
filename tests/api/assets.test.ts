@@ -983,6 +983,26 @@ describe("asset workflow", () => {
     }
   });
 
+  it("rejects starting prices with fractional yuan amounts", async () => {
+    const app = buildApp({ enableMockAuth: true });
+
+    try {
+      const token = await login(app);
+
+      const response = await app.inject({
+        method: "POST",
+        url: "/api/assets",
+        headers: { authorization: `Bearer ${token}` },
+        payload: validAssetPayload({ startingPriceCents: 1050 })
+      });
+
+      expect(response.statusCode).toBe(400);
+      expect(response.json().error.code).toBe("invalid_price");
+    } finally {
+      await app.close();
+    }
+  });
+
   it("rejects unsafe minimum increments", async () => {
     const app = buildApp({ enableMockAuth: true });
 
@@ -994,6 +1014,26 @@ describe("asset workflow", () => {
         url: "/api/assets",
         headers: { authorization: `Bearer ${token}` },
         payload: validAssetPayload({ minIncrementCents: Number.MAX_SAFE_INTEGER + 1 })
+      });
+
+      expect(response.statusCode).toBe(400);
+      expect(response.json().error.code).toBe("invalid_increment");
+    } finally {
+      await app.close();
+    }
+  });
+
+  it("rejects minimum increments with fractional yuan amounts", async () => {
+    const app = buildApp({ enableMockAuth: true });
+
+    try {
+      const token = await login(app);
+
+      const response = await app.inject({
+        method: "POST",
+        url: "/api/assets",
+        headers: { authorization: `Bearer ${token}` },
+        payload: validAssetPayload({ minIncrementCents: 150 })
       });
 
       expect(response.statusCode).toBe(400);

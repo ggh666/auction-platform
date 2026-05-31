@@ -75,7 +75,7 @@
 </template>
 
 <script setup lang="ts">
-import type { AuctionAsset } from "@auction/shared";
+import { centsToYuanText, type AuctionAsset } from "@auction/shared";
 import { onLoad, onPullDownRefresh, onReachBottom, onShareAppMessage, onShareTimeline, onShow } from "@dcloudio/uni-app";
 import { ref } from "vue";
 import { followAsset, listAssets, listNotifications, unfollowAsset } from "../../api/client";
@@ -281,7 +281,7 @@ async function refreshUnreadNotifications() {
 }
 
 function formatPrice(cents: number) {
-  return (cents / 100).toFixed(2);
+  return centsToYuanText(cents);
 }
 
 function formatTime(value: string) {

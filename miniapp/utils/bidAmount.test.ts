@@ -25,9 +25,16 @@ describe("miniapp bid amount helpers", () => {
   });
 
   it("rejects bid amounts below the required price before submitting", () => {
+    expect(validateBidAmountYuan("100", { ...asset, currentPriceCents: 10000 })).toEqual({
+      ok: false,
+      message: "出价不能低于 101 元"
+    });
+  });
+
+  it("rejects decimal bid amounts before submitting", () => {
     expect(validateBidAmountYuan("100.99", { ...asset, currentPriceCents: 10000 })).toEqual({
       ok: false,
-      message: "出价不能低于 101.00 元"
+      message: "请输入有效出价"
     });
   });
 
@@ -44,7 +51,7 @@ describe("miniapp bid amount helpers", () => {
       "当前最高出价已经是你，无需重复提交"
     );
     expect(bidFailureMessage(new Error("Bid does not satisfy current price and increment"), 10100)).toBe(
-      "出价不能低于 101.00 元"
+      "出价不能低于 101 元"
     );
   });
 

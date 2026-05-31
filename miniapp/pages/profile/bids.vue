@@ -15,6 +15,7 @@
 </template>
 
 <script setup lang="ts">
+import { centsToYuanText } from "@auction/shared";
 import { onShow } from "@dcloudio/uni-app";
 import { ref } from "vue";
 import { listMyBids, type ProfileBidItem } from "../../api/client";
@@ -37,7 +38,7 @@ onShow(async () => {
 });
 
 function formatPrice(cents: number) {
-  return (cents / 100).toFixed(2);
+  return centsToYuanText(cents);
 }
 
 function openDetail(assetId: string) {

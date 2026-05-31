@@ -49,8 +49,8 @@
         <input v-model="dragonBallForm.attributes" class="input" placeholder="附加伤害+10%，无视冰甲+5%" />
       </view>
     </view>
-    <input v-model="form.startingPriceYuan" class="input" type="digit" placeholder="起拍价，单位元宝" />
-    <input v-model="form.minIncrementYuan" class="input" type="digit" placeholder="最低加价，单位元宝" />
+    <input v-model="form.startingPriceYuan" class="input" type="number" placeholder="起拍价，单位元宝" />
+    <input v-model="form.minIncrementYuan" class="input" type="number" placeholder="最低加价，单位元宝" />
     <view class="image-panel">
       <view class="image-heading">
         <text class="image-title">宝贝图片 {{ imagePaths.length }}/{{ maxAssetImages }}</text>
@@ -254,12 +254,17 @@ function removeSelectedImage(index: number) {
 }
 
 function yuanToCents(value: string) {
-  const amount = Number(value);
-  if (!Number.isFinite(amount) || amount <= 0) {
+  const trimmed = value.trim();
+  if (!/^[1-9]\d*$/.test(trimmed)) {
     return null;
   }
 
-  return Math.round(amount * 100);
+  const amount = Number(trimmed);
+  if (!Number.isSafeInteger(amount) || amount > Math.floor(Number.MAX_SAFE_INTEGER / 100)) {
+    return null;
+  }
+
+  return amount * 100;
 }
 
 function clearForm() {

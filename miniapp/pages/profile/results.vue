@@ -55,6 +55,7 @@
 </template>
 
 <script setup lang="ts">
+import { centsToYuanText } from "@auction/shared";
 import { onPullDownRefresh, onReachBottom, onShow } from "@dcloudio/uni-app";
 import { ref } from "vue";
 import {
@@ -214,7 +215,7 @@ function displayAssetType(assetType: string) {
 }
 
 function formatPrice(cents: number) {
-  return (cents / 100).toFixed(2);
+  return centsToYuanText(cents);
 }
 
 function openDetail(assetId: string) {
