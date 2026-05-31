@@ -1,5 +1,6 @@
 export type Env = {
   nodeEnv: string;
+  logLevel: LogLevel;
   host: string;
   port: number;
   jwtSecret: string;
@@ -19,9 +20,12 @@ export type Env = {
   contentSafetyStrict: boolean;
 };
 
+export type LogLevel = "trace" | "debug" | "info" | "warn" | "error" | "fatal";
+
 const defaultJwtSecret = "dev-secret-change-me";
 const defaultMysqlUri = "mysql://root:password@127.0.0.1:3306/auction_platform";
 const defaultProductionCorsAllowedOrigins = ["https://admin-auction.toolmatrix.top", "https://servicewechat.com"];
+const supportedLogLevels = new Set<LogLevel>(["trace", "debug", "info", "warn", "error", "fatal"]);
 
 function readMiniprogramState(value: string | undefined, nodeEnv: string): "developer" | "trial" | "formal" {
   if (value === undefined || !value.trim()) {
@@ -42,6 +46,17 @@ function readCorsAllowedOrigins(value: string | undefined, nodeEnv: string): tru
     return configured;
   }
   return nodeEnv === "production" ? defaultProductionCorsAllowedOrigins : true;
+}
+
+function readLogLevel(value: string | undefined): LogLevel {
+  if (value === undefined || !value.trim()) {
+    return "warn";
+  }
+  const normalized = value.trim().toLowerCase();
+  if (supportedLogLevels.has(normalized as LogLevel)) {
+    return normalized as LogLevel;
+  }
+  throw new Error("Invalid LOG_LEVEL");
 }
 
 export function readEnv(source: NodeJS.ProcessEnv = process.env): Env {
@@ -92,6 +107,7 @@ export function readEnv(source: NodeJS.ProcessEnv = process.env): Env {
 
   return {
     nodeEnv,
+    logLevel: readLogLevel(source.LOG_LEVEL),
     host: source.HOST ?? "0.0.0.0",
     port,
     jwtSecret: source.JWT_SECRET ?? defaultJwtSecret,

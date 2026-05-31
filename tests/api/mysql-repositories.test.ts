@@ -639,6 +639,10 @@ class FakeMysqlPool {
       return [[this.imageSafety.find((record) => record.public_url === params[0])].filter(Boolean) as T, []];
     }
 
+    if (sql.includes("FROM content_safety_image_checks") && sql.includes("WHERE trace_id =")) {
+      return [[this.imageSafety.find((record) => record.trace_id === params[0])].filter(Boolean) as T, []];
+    }
+
     if (sql.includes("FROM content_safety_image_checks") && sql.includes("WHERE public_url IN")) {
       const publicUrls = new Set(params as string[]);
       return [this.imageSafety.filter((record) => publicUrls.has(record.public_url)) as T, []];
@@ -1648,6 +1652,7 @@ describe("mysql repositories", () => {
       detailJson: [{ strategy: "content_model", suggest: "pass" }]
     });
     const listed = await imageSafety.findByPublicUrls(["https://img.example.com/uploads/1/a.png"]);
+    const byTrace = await imageSafety.findByTraceId("trace-1");
 
     expect(created).toMatchObject({
       userId: "1",
@@ -1665,6 +1670,11 @@ describe("mysql repositories", () => {
         updatedAt: "2026-05-25T15:15:00.000Z"
       })
     ]);
+    expect(byTrace).toMatchObject({
+      publicUrl: "https://img.example.com/uploads/1/a.png",
+      status: "pass",
+      traceId: "trace-1"
+    });
   });
 
   it("lists profile asset and result rows from MySQL assets", async () => {

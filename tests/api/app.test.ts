@@ -63,6 +63,24 @@ describe("api app", () => {
     }
   });
 
+  it("uses warn-level request logging by default to avoid noisy access logs", async () => {
+    const app = buildApp({ env: { NODE_ENV: "development" } });
+    try {
+      expect(app.log.level).toBe("warn");
+    } finally {
+      await app.close();
+    }
+  });
+
+  it("allows request logging to be raised when troubleshooting", async () => {
+    const app = buildApp({ env: { NODE_ENV: "development", LOG_LEVEL: "info" } });
+    try {
+      expect(app.log.level).toBe("info");
+    } finally {
+      await app.close();
+    }
+  });
+
   it("returns request errors with the original status code", async () => {
     const app = buildApp();
     app.get("/test/request-error", async () => {

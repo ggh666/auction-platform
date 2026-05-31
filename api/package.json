@@ -6,6 +6,7 @@
     "dev": "tsx watch src/server.ts",
     "start": "tsx src/server.ts",
     "admin:create": "tsx src/scripts/createAdmin.ts",
+    "content-safety:retry-failed-images": "tsx src/scripts/retryFailedImageChecks.ts",
     "typecheck": "tsc --noEmit",
     "test": "vitest run ../tests/api"
   },

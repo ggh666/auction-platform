@@ -1,5 +1,6 @@
 import { HttpError, badRequest } from "../../http/errors";
 import type { AssetsRepository } from "../assets/assets.repository";
+import type { UsersRepository } from "../users/users.repository";
 import type {
   ContentSafetyService,
   ImageSafetyInput,
@@ -12,6 +13,8 @@ import type { WechatAccessTokenProvider } from "./wechatAccessToken.service";
 
 type FetchLike = typeof fetch;
 type WechatSuggest = "pass" | "review" | "risky";
+type ImageDownloadRetryScheduler = (task: () => Promise<void>, delayMs: number) => void;
+type ImageDownloadRetry = { attempt: number; previousTraceId: string; reason: string };
 
 type WechatCheckResponse = {
   errcode?: unknown;
@@ -30,10 +33,17 @@ type WechatContentSafetyOptions = {
   tokenProvider: WechatAccessTokenProvider;
   imageSafetyRepository: ImageSafetyRepository;
   assetsRepository: AssetsRepository;
+  usersRepository?: Pick<UsersRepository, "findById">;
+  imageDownloadRetryDelayMs?: number;
+  imageDownloadRetryMaxAttempts?: number;
+  imageDownloadRetryScheduler?: ImageDownloadRetryScheduler;
   fetchImpl?: FetchLike;
 };
 
 const prohibitedMarketplaceTerms = ["赌博", "博彩", "卖淫", "嫖娼", "招嫖", "援交", "偷盗", "盗号", "洗钱", "诈骗"];
+const wechatMediaDownloadErrorCode = -1008;
+const defaultImageDownloadRetryDelayMs = 30_000;
+const defaultImageDownloadRetryMaxAttempts = 3;
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
@@ -52,6 +62,10 @@ function statusFromSuggest(suggest: WechatSuggest | null): ImageSafetyStatus {
 
 function labelFrom(value: unknown): number | null {
   return typeof value === "number" && Number.isInteger(value) ? value : null;
+}
+
+function numberFrom(value: unknown): number | null {
+  return typeof value === "number" && Number.isFinite(value) ? value : null;
 }
 
 function assertOpenid(openid: string | null | undefined): string {
@@ -133,6 +147,47 @@ function callbackTraceId(input: unknown): string | null {
   return typeof traceId === "string" && traceId.trim() ? traceId.trim() : null;
 }
 
+function isRetryableImageDownloadCallback(input: unknown): boolean {
+  return isRecord(input) && numberFrom(input.errcode) === wechatMediaDownloadErrorCode;
+}
+
+function retryAttemptFromDetailJson(detailJson: unknown): number {
+  if (!isRecord(detailJson) || !isRecord(detailJson.retry)) {
+    return 0;
+  }
+  const attempt = detailJson.retry.attempt;
+  return typeof attempt === "number" && Number.isInteger(attempt) && attempt > 0 ? attempt : 0;
+}
+
+function callbackOpenidFromDetailJson(detailJson: unknown): string | null {
+  if (!isRecord(detailJson)) {
+    return null;
+  }
+  const openid = detailJson.FromUserName ?? detailJson.fromUserName ?? detailJson.from_user_name;
+  return typeof openid === "string" && openid.trim() ? openid.trim() : null;
+}
+
+function errorMessage(error: unknown): string {
+  return error instanceof Error && error.message ? error.message : String(error);
+}
+
+function detailJsonWithRetryFailure(
+  detailJson: unknown,
+  retry: ImageDownloadRetry,
+  failure: { reason: string; message: string }
+): unknown {
+  const base = isRecord(detailJson) ? detailJson : { callback: detailJson };
+  return {
+    ...base,
+    retryFailure: {
+      attempt: retry.attempt,
+      previousTraceId: retry.previousTraceId,
+      reason: failure.reason,
+      message: failure.message
+    }
+  };
+}
+
 function callbackResult(input: unknown): { status: ImageSafetyStatus; label: number | null; detailJson: unknown | null } {
   if (!isRecord(input)) {
     return { status: "failed", label: null, detailJson: null };
@@ -148,6 +203,103 @@ function callbackResult(input: unknown): { status: ImageSafetyStatus; label: num
 
 export function createWechatContentSafetyService(options: WechatContentSafetyOptions): ContentSafetyService {
   const fetchImpl = options.fetchImpl ?? fetch;
+  const imageDownloadRetryDelayMs = options.imageDownloadRetryDelayMs ?? defaultImageDownloadRetryDelayMs;
+  const imageDownloadRetryMaxAttempts = options.imageDownloadRetryMaxAttempts ?? defaultImageDownloadRetryMaxAttempts;
+  const imageDownloadRetryScheduler: ImageDownloadRetryScheduler =
+    options.imageDownloadRetryScheduler ??
+    ((task, delayMs) => {
+      const timer = setTimeout(() => {
+        void task().catch(() => undefined);
+      }, delayMs);
+      if (typeof timer === "object" && "unref" in timer && typeof timer.unref === "function") {
+        timer.unref();
+      }
+    });
+
+  async function submitImageCheck(input: ImageSafetyInput, retry?: ImageDownloadRetry) {
+    const accessToken = await options.tokenProvider.getAccessToken();
+    const openid = assertOpenid(input.openid);
+    const response = await fetchImpl(`https://api.weixin.qq.com/wxa/media_check_async?access_token=${accessToken}`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        media_url: input.mediaUrl,
+        media_type: 2,
+        version: 2,
+        scene: input.scene ?? 3,
+        openid
+      })
+    });
+    const body = await readWechatResponse(response, options.strict);
+    const traceId = typeof body.trace_id === "string" && body.trace_id.trim() ? body.trace_id.trim() : undefined;
+    await options.imageSafetyRepository.record({
+      userId: input.userId ?? "0",
+      objectKey: input.objectKey,
+      publicUrl: input.mediaUrl,
+      status: traceId ? "pending" : "failed",
+      traceId,
+      detailJson: retry ? { ...body, retry } : body
+    });
+    return { status: traceId ? "pending" : "failed", traceId } satisfies { status: ImageSafetyStatus; traceId?: string };
+  }
+
+  async function scheduleRetryableImageDownloadFailure(traceId: string, recordDetailJson: unknown, callbackDetailJson: unknown) {
+    if (!options.usersRepository || imageDownloadRetryMaxAttempts <= 0) {
+      return;
+    }
+    const record = await options.imageSafetyRepository.findByTraceId(traceId);
+    if (!record) {
+      return;
+    }
+    const nextAttempt = retryAttemptFromDetailJson(recordDetailJson) + 1;
+    if (nextAttempt > imageDownloadRetryMaxAttempts) {
+      return;
+    }
+    const retry: ImageDownloadRetry = {
+      attempt: nextAttempt,
+      previousTraceId: traceId,
+      reason: "wechat_media_download_error"
+    };
+
+    imageDownloadRetryScheduler(async () => {
+      const user = await options.usersRepository?.findById(Number(record.userId));
+      const openid = user?.openid?.trim() || callbackOpenidFromDetailJson(callbackDetailJson);
+      if (!openid) {
+        await options.imageSafetyRepository.updateByTraceId({
+          traceId,
+          status: "failed",
+          label: null,
+          detailJson: detailJsonWithRetryFailure(callbackDetailJson, retry, {
+            reason: "wechat_media_download_retry_openid_missing",
+            message: "WeChat openid is missing for retry"
+          })
+        });
+        return;
+      }
+      try {
+        await submitImageCheck(
+          {
+            userId: record.userId,
+            objectKey: record.objectKey,
+            mediaUrl: record.publicUrl,
+            openid,
+            scene: 3
+          },
+          retry
+        );
+      } catch (error) {
+        await options.imageSafetyRepository.updateByTraceId({
+          traceId,
+          status: "failed",
+          label: null,
+          detailJson: detailJsonWithRetryFailure(callbackDetailJson, retry, {
+            reason: "wechat_media_download_retry_failed",
+            message: errorMessage(error)
+          })
+        });
+      }
+    }, imageDownloadRetryDelayMs);
+  }
 
   return {
     async assertTextAllowed(input: TextSafetyInput) {
@@ -181,30 +333,7 @@ export function createWechatContentSafetyService(options: WechatContentSafetyOpt
         return { status: "pass" };
       }
 
-      const accessToken = await options.tokenProvider.getAccessToken();
-      const openid = assertOpenid(input.openid);
-      const response = await fetchImpl(`https://api.weixin.qq.com/wxa/media_check_async?access_token=${accessToken}`, {
-        method: "POST",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify({
-          media_url: input.mediaUrl,
-          media_type: 2,
-          version: 2,
-          scene: input.scene ?? 3,
-          openid
-        })
-      });
-      const body = await readWechatResponse(response, options.strict);
-      const traceId = typeof body.trace_id === "string" && body.trace_id.trim() ? body.trace_id.trim() : undefined;
-      await options.imageSafetyRepository.record({
-        userId: input.userId ?? "0",
-        objectKey: input.objectKey,
-        publicUrl: input.mediaUrl,
-        status: traceId ? "pending" : "failed",
-        traceId,
-        detailJson: body
-      });
-      return { status: traceId ? "pending" : "failed", traceId };
+      return submitImageCheck(input);
     },
 
     async assertImageUploadsAllowed(input: ImageUploadSafetyInput) {
@@ -256,6 +385,8 @@ export function createWechatContentSafetyService(options: WechatContentSafetyOpt
       if (!traceId) {
         return;
       }
+      const retryableDownloadFailure = isRetryableImageDownloadCallback(input);
+      const existingRecord = retryableDownloadFailure ? await options.imageSafetyRepository.findByTraceId(traceId) : null;
       const result = callbackResult(input);
       await options.imageSafetyRepository.updateByTraceId({
         traceId,
@@ -263,6 +394,9 @@ export function createWechatContentSafetyService(options: WechatContentSafetyOpt
         label: result.label,
         detailJson: result.detailJson
       });
+      if (retryableDownloadFailure && existingRecord) {
+        await scheduleRetryableImageDownloadFailure(traceId, existingRecord.detailJson, result.detailJson);
+      }
     }
   };
 }

@@ -31,6 +31,7 @@ export type UpdateImageSafetyInput = {
 
 export type ImageSafetyRepository = {
   record(input: RecordImageSafetyInput): Promise<ImageSafetyRecord>;
+  findByTraceId(traceId: string): Promise<ImageSafetyRecord | null>;
   findByPublicUrls(publicUrls: string[]): Promise<ImageSafetyRecord[]>;
   updateByTraceId(input: UpdateImageSafetyInput): Promise<void>;
 };
@@ -59,6 +60,14 @@ export function createInMemoryImageSafetyRepository(): ImageSafetyRepository {
       };
       records.set(input.publicUrl, record);
       return cloneRecord(record);
+    },
+    async findByTraceId(traceId) {
+      for (const record of records.values()) {
+        if (record.traceId === traceId) {
+          return cloneRecord(record);
+        }
+      }
+      return null;
     },
     async findByPublicUrls(publicUrls) {
       return publicUrls.map((publicUrl) => records.get(publicUrl)).filter((record): record is ImageSafetyRecord => Boolean(record)).map(cloneRecord);

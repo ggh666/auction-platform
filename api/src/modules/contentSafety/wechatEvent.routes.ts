@@ -56,13 +56,25 @@ function parseWechatXmlEvent(xml: string): unknown {
   const suggest = xmlValue(xml, "suggest") ?? xmlValue(xml, "Suggest");
   const labelValue = xmlValue(xml, "label") ?? xmlValue(xml, "Label");
   const label = labelValue === undefined || Number.isNaN(Number(labelValue)) ? undefined : Number(labelValue);
-  return {
-    trace_id: traceId,
-    result: {
+  const errcodeValue = xmlValue(xml, "errcode") ?? xmlValue(xml, "ErrCode");
+  const errcode = errcodeValue === undefined || Number.isNaN(Number(errcodeValue)) ? undefined : Number(errcodeValue);
+  const errmsg = xmlValue(xml, "errmsg") ?? xmlValue(xml, "ErrMsg");
+  const event: Record<string, unknown> = {
+    trace_id: traceId
+  };
+  if (suggest !== undefined || label !== undefined) {
+    event.result = {
       suggest,
       label
-    }
-  };
+    };
+  }
+  if (errcode !== undefined) {
+    event.errcode = errcode;
+  }
+  if (errmsg !== undefined) {
+    event.errmsg = errmsg;
+  }
+  return event;
 }
 
 export function registerWechatEventRoutes(

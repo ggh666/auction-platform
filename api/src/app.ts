@@ -116,7 +116,7 @@ export function buildApp(options: AppOptions = {}) {
     throw new Error("Production repositories must be explicitly configured; in-memory repositories are development only");
   }
 
-  const app = Fastify({ logger: env.nodeEnv !== "test", bodyLimit: jsonBodyLimitBytes });
+  const app = Fastify({ logger: env.nodeEnv === "test" ? false : { level: env.logLevel }, bodyLimit: jsonBodyLimitBytes });
   registerJsonContentParser(app);
   const users = options.usersRepository ?? createInMemoryUsersRepository();
   const assets = options.assetsRepository ?? createInMemoryAssetsRepository();
@@ -138,7 +138,8 @@ export function buildApp(options: AppOptions = {}) {
       strict: env.contentSafetyStrict,
       tokenProvider: wechatTokenProvider,
       imageSafetyRepository: imageSafety,
-      assetsRepository: assets
+      assetsRepository: assets,
+      usersRepository: users
     });
   const subscribeMessages =
     options.subscribeMessageService ??

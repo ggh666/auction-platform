@@ -91,6 +91,18 @@ export function createMysqlImageSafetyRepository(db: MysqlExecutor): ImageSafety
       return toRecord(record);
     },
 
+    async findByTraceId(traceId) {
+      const [rows] = await db.execute<ImageSafetyDbRow[]>(
+        `SELECT uploader_id, object_key, public_url, status, trace_id, label, detail_json, created_at, updated_at
+         FROM content_safety_image_checks
+         WHERE trace_id = ?
+         LIMIT 1`,
+        [traceId]
+      );
+      const record = allRows<ImageSafetyDbRow>(rows)[0];
+      return record ? toRecord(record) : null;
+    },
+
     async findByPublicUrls(publicUrls) {
       if (publicUrls.length === 0) {
         return [];
