@@ -3,6 +3,14 @@ import type { DragonBallInfo } from "./dragonBall";
 export type AssetStatus = "draft" | "pending_review" | "active" | "ended" | "rejected" | "cancelled" | "removed";
 export type ReportStatus = "pending" | "rejected" | "confirmed";
 export type AuctionResultStatus = "sold" | "unsold" | "cancelled" | "removed";
+export type DealFollowupStatus =
+  | "pending_buyer_confirm"
+  | "buyer_confirmed"
+  | "buyer_abandoned"
+  | "principal_contacted"
+  | "buyer_unreachable"
+  | "completed"
+  | "cancelled";
 export type AdminRole = "super_admin" | "reviewer" | "operator";
 
 export type UserSummary = {
@@ -13,12 +21,16 @@ export type UserSummary = {
   violationCount: number;
   creditScore: number;
   creditResetAt?: string | null;
+  buyerUnreachableCount?: number;
+  bidRestrictedUntil?: string | null;
 };
 
 export type AdminManagedUser = UserSummary & {
   banReason: string | null;
   dailyPublishLimit: number | null;
   creditResetAt: string | null;
+  buyerUnreachableCount: number;
+  bidRestrictedUntil: string | null;
   createdAt: string;
   updatedAt: string;
 };

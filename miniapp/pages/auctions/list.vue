@@ -43,7 +43,8 @@
     <view v-if="loading && assets.length === 0" class="empty">正在加载交换宝贝</view>
     <view v-else-if="assets.length === 0" class="empty">暂无匹配的进行中交换</view>
 
-    <view v-for="asset in assets" :key="asset.id" class="asset" @tap="openDetail(asset.id)">
+    <view v-for="asset in assets" :key="asset.id" class="asset" :class="{ sold: isSoldAsset(asset) }" @tap="openDetail(asset.id)">
+      <view v-if="isSoldAsset(asset)" class="sold-stamp">成交</view>
       <view class="asset-heading">
         <text class="asset-title">{{ asset.title }}</text>
         <button
@@ -57,6 +58,7 @@
       </view>
       <text class="asset-meta">{{ asset.serverName }} / {{ displayAssetType(asset.assetType) }}</text>
       <text v-if="dragonBallLine(asset)" class="dragon-ball-line">{{ dragonBallLine(asset) }}</text>
+      <text v-if="isSoldAsset(asset)" class="sold-line">状态：已成交</text>
       <text v-if="asset.principal" class="principal-line">主理人：{{ asset.principal.displayName }}，线下请联系主理人</text>
       <text class="asset-price">当前价：{{ formatPrice(asset.currentPriceCents ?? asset.startingPriceCents) }} 元宝</text>
       <text class="asset-end-time">截止时间：{{ formatTime(asset.effectiveEndAt) }}</text>
@@ -79,6 +81,7 @@ import { ref } from "vue";
 import { followAsset, listAssets, listNotifications, unfollowAsset } from "../../api/client";
 import { readToken } from "../../auth/session";
 import { assetTypes, normalizeAssetType, type AssetType } from "../../utils/assetType";
+import { isSoldAsset } from "../../utils/assetStatusText";
 import { restrictedActionFailureMessage } from "../../utils/userActionErrors";
 import { buildAssetListShare, toTimelineShare } from "../../utils/share";
 
@@ -516,9 +519,14 @@ function openPublish() {
   gap: 16rpx;
 }
 
+.asset.sold .asset-heading {
+  padding-right: 128rpx;
+}
+
 .asset-title,
 .asset-meta,
   .dragon-ball-line,
+  .sold-line,
   .principal-line,
   .asset-price,
   .asset-end-time,
@@ -563,6 +571,12 @@ function openPublish() {
 .dragon-ball-line {
   margin-top: 8rpx;
   color: #344054;
+}
+
+.sold-line {
+  margin-top: 8rpx;
+  font-weight: 800;
+  color: #b42318;
 }
 
 .asset-price {
@@ -696,6 +710,25 @@ function openPublish() {
   box-shadow: 0 16rpx 38rpx rgba(0, 0, 0, 0.30), inset 0 1rpx 0 rgba(255, 255, 255, 0.10);
 }
 
+.sold-stamp {
+  position: absolute;
+  top: 18rpx;
+  right: 18rpx;
+  z-index: 2;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 112rpx;
+  height: 112rpx;
+  font-size: 32rpx;
+  font-weight: 900;
+  color: rgba(248, 113, 113, 0.88);
+  border: 7rpx double rgba(248, 113, 113, 0.86);
+  border-radius: 999rpx;
+  transform: rotate(-14deg);
+  pointer-events: none;
+}
+
 .asset::before {
   position: absolute;
   top: 0;
@@ -716,6 +749,10 @@ function openPublish() {
 .empty,
 .load-more {
   color: #9ab4a8;
+}
+
+.sold-line {
+  color: #ffb4a7;
 }
 
 .principal-line {

@@ -13,6 +13,7 @@ const navItems = [
   { key: "dashboard", label: "仪表盘", roles: ["super_admin", "reviewer", "operator"] },
   { key: "reviews", label: "审核管理", roles: ["super_admin", "reviewer"] },
   { key: "assetData", label: "资产数据", roles: ["super_admin", "reviewer", "operator"] },
+  { key: "dealFollowups", label: "成交跟进", roles: ["super_admin", "reviewer", "operator"] },
   { key: "adminUsers", label: "后台用户", roles: ["super_admin"] },
   { key: "principals", label: "主理人管理", roles: ["super_admin"] },
   { key: "users", label: "前台用户", roles: ["super_admin"] },

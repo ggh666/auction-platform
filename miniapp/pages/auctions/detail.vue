@@ -2,7 +2,8 @@
   <view class="page">
     <view v-if="loading" class="empty">正在加载交换详情</view>
     <view v-else-if="!detail" class="empty">未找到交换宝贝</view>
-    <view v-else>
+    <view v-else class="detail-content" :class="{ sold: isSoldAsset(detail.asset) }">
+      <view v-if="isSoldAsset(detail.asset)" class="sold-stamp">成交</view>
       <view class="detail-heading">
         <text class="title">{{ detail.asset.title }}</text>
         <button class="share-detail-button" open-type="share">分享宝贝</button>
@@ -34,7 +35,7 @@
         <view v-if="detail.asset.hasPublishedViolation" class="violation-tags">
           <text v-if="detail.asset.hasPublishedViolation" class="violation-tag">该宝贝关联违规公示</text>
         </view>
-        <text class="content">状态：{{ assetStatusText(detail.asset.status) }}</text>
+        <text class="content">状态：{{ assetStatusText(detail.asset) }}</text>
       </view>
       <view class="panel">
         <text class="label">竞价区</text>
@@ -49,6 +50,15 @@
           type="digit"
           placeholder="输入出价金额，单位元宝"
         />
+        <checkbox-group class="commitment-group" @change="onCommitmentChange">
+          <label class="commitment-row">
+            <checkbox value="accepted" :checked="bidCommitmentAccepted" :disabled="Boolean(unavailableMessage)" />
+            <view class="commitment-copy">
+              <text class="commitment-title">确认出价承诺</text>
+              <text class="commitment-text">成交后我会在小程序内及时确认意向，并配合主理人完成线下交割。</text>
+            </view>
+          </label>
+        </checkbox-group>
       </view>
       <view class="panel">
         <text class="label">最近出价</text>
@@ -71,7 +81,7 @@ import { computed, ref } from "vue";
 import { getAssetDetail, placeBid, readApiBase } from "../../api/client";
 import { readSessionUser } from "../../auth/session";
 import { mergeAuctionAssetUpdate } from "../../utils/assetMerge";
-import { assetStatusText } from "../../utils/assetStatusText";
+import { assetStatusText, isSoldAsset } from "../../utils/assetStatusText";
 import {
   auctionUnavailableMessage,
   bidFailureMessage,
@@ -89,6 +99,7 @@ const loading = ref(false);
 const assetId = ref("");
 const detail = ref<AssetDetailResponse | null>(null);
 const bidAmountYuan = ref("");
+const bidCommitmentAccepted = ref(false);
 const now = ref(new Date());
 let nowTimer: ReturnType<typeof setInterval> | null = null;
 let auctionSocket: AuctionSocketTask | null = null;
@@ -165,6 +176,11 @@ function previewImage(index: number) {
     urls: imageUrls.value,
     current: imageUrls.value[index] ?? imageUrls.value[0]
   });
+}
+
+function onCommitmentChange(event: { detail?: { value?: unknown } }) {
+  const value = event.detail?.value;
+  bidCommitmentAccepted.value = Array.isArray(value) && value.includes("accepted");
 }
 
 function closeAuctionRealtime() {
@@ -261,13 +277,17 @@ async function submitBid() {
       uni.showToast({ title: validation.message, icon: "none" });
       return;
     }
+    if (!bidCommitmentAccepted.value) {
+      uni.showToast({ title: "请先确认出价承诺", icon: "none" });
+      return;
+    }
 
     const acceptedDisclaimer = await confirmTradingDisclaimer();
     if (!acceptedDisclaimer) {
       return;
     }
 
-    const response = await placeBid({ assetId: assetId.value, amountCents: validation.amountCents });
+    const response = await placeBid({ assetId: assetId.value, amountCents: validation.amountCents, commitmentAccepted: true });
     if (detail.value) {
       detail.value = {
         ...detail.value,
@@ -329,6 +349,29 @@ function formatTime(value: string) {
   justify-content: space-between;
   gap: 20rpx;
   margin-bottom: 24rpx;
+}
+
+.detail-content {
+  position: relative;
+}
+
+.sold-stamp {
+  position: absolute;
+  top: 92rpx;
+  right: 8rpx;
+  z-index: 3;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 132rpx;
+  height: 132rpx;
+  font-size: 38rpx;
+  font-weight: 900;
+  color: rgba(248, 113, 113, 0.88);
+  border: 8rpx double rgba(248, 113, 113, 0.86);
+  border-radius: 999rpx;
+  transform: rotate(-14deg);
+  pointer-events: none;
 }
 
 .share-detail-button {
@@ -461,6 +504,42 @@ function formatTime(value: string) {
   border-radius: 8rpx;
 }
 
+.commitment-group {
+  display: block;
+  margin-top: 18rpx;
+}
+
+.commitment-row {
+  display: flex;
+  align-items: flex-start;
+  gap: 14rpx;
+  padding: 18rpx;
+  background: #f8fafc;
+  border: 1px solid #d0d5dd;
+  border-radius: 8rpx;
+}
+
+.commitment-copy {
+  flex: 1;
+  min-width: 0;
+}
+
+.commitment-title,
+.commitment-text {
+  display: block;
+}
+
+.commitment-title {
+  font-weight: 700;
+  color: #101828;
+}
+
+.commitment-text {
+  margin-top: 4rpx;
+  line-height: 1.5;
+  color: #667085;
+}
+
 .empty {
   padding: 48rpx 0;
   text-align: center;
@@ -545,6 +624,19 @@ function formatTime(value: string) {
   color: #f5f0dc;
   background: rgba(8, 24, 23, 0.94);
   border-color: rgba(134, 239, 172, 0.24);
+}
+
+.commitment-row {
+  background: rgba(11, 32, 30, 0.92);
+  border-color: rgba(246, 196, 83, 0.24);
+}
+
+.commitment-title {
+  color: #f7e8b6;
+}
+
+.commitment-text {
+  color: #9ab4a8;
 }
 
 .primary-action {

@@ -809,7 +809,7 @@ describe("asset workflow", () => {
         method: "POST",
         url: "/api/bids",
         headers: { authorization: `Bearer ${bidderToken}` },
-        payload: { assetId, amountCents: 12300 }
+        payload: { assetId, amountCents: 12300, commitmentAccepted: true }
       });
 
       const response = await app.inject({
@@ -1143,7 +1143,7 @@ describe("asset workflow", () => {
         method: "POST",
         url: "/api/bids",
         headers: { authorization: `Bearer ${bidderToken}` },
-        payload: { assetId, amountCents: 10000 }
+        payload: { assetId, amountCents: 10000, commitmentAccepted: true }
       });
 
       const response = await app.inject({ method: "GET", url: `/api/assets/${assetId}` });
@@ -1155,6 +1155,53 @@ describe("asset workflow", () => {
           bidder: expect.objectContaining({ displayName: "出价人张宁" })
         })
       ]);
+    } finally {
+      await app.close();
+    }
+  });
+
+  it("keeps confirmed sold asset details visible with ended status", async () => {
+    const app = buildApp({ enableMockAuth: true });
+
+    try {
+      const sellerToken = await login(app, "卖家");
+      const bidderToken = await login(app, "成交买家");
+      const createResponse = await app.inject({
+        method: "POST",
+        url: "/api/assets",
+        headers: { authorization: `Bearer ${sellerToken}` },
+        payload: validAssetPayload({ title: "已确认成交资产" })
+      });
+      const assetId = createResponse.json().asset.id;
+      const adminToken = await reviewerToken(app);
+      await app.inject({
+        method: "POST",
+        url: `/admin/assets/${assetId}/approve`,
+        headers: { authorization: `Bearer ${adminToken}` }
+      });
+      await app.inject({
+        method: "POST",
+        url: "/api/bids",
+        headers: { authorization: `Bearer ${bidderToken}` },
+        payload: { assetId, amountCents: 10000, commitmentAccepted: true }
+      });
+      const confirmed = await app.inject({
+        method: "POST",
+        url: `/admin/assets/${assetId}/confirm-deal`,
+        headers: { authorization: `Bearer ${adminToken}` }
+      });
+
+      const response = await app.inject({ method: "GET", url: `/api/assets/${assetId}` });
+
+      expect(confirmed.statusCode).toBe(200);
+      expect(response.statusCode).toBe(200);
+      expect(response.json().asset).toMatchObject({
+        id: assetId,
+        title: "已确认成交资产",
+        status: "ended",
+        currentPriceCents: 10000,
+        highestBidderId: "2"
+      });
     } finally {
       await app.close();
     }

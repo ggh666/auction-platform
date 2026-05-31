@@ -5,7 +5,7 @@ export type AdminPermission =
   | "asset:view"
   | "asset:review"
   | "asset:remove"
-  | "auction:cancel"
+  | "auction:confirm_deal"
   | "user:view"
   | "user:ban"
   | "report:review"
@@ -18,15 +18,15 @@ const permissions: Record<AdminRole, AdminPermission[]> = {
     "asset:view",
     "asset:review",
     "asset:remove",
-    "auction:cancel",
+    "auction:confirm_deal",
     "user:view",
     "user:ban",
     "report:review",
     "violation:publish",
     "config:manage"
   ],
-  reviewer: ["asset:view", "asset:review", "report:review", "violation:publish"],
-  operator: ["asset:view", "asset:remove", "auction:cancel"]
+  reviewer: ["asset:view", "asset:review", "auction:confirm_deal", "report:review", "violation:publish"],
+  operator: ["asset:view", "asset:remove", "auction:confirm_deal"]
 };
 
 export function canAdmin(role: AdminRole, permission: AdminPermission): boolean {

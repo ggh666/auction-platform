@@ -8,6 +8,7 @@ DROP TABLE IF EXISTS system_configs;
 DROP TABLE IF EXISTS violation_records;
 DROP TABLE IF EXISTS reports;
 DROP TABLE IF EXISTS auction_results;
+DROP TABLE IF EXISTS deal_followups;
 DROP TABLE IF EXISTS station_notifications;
 DROP TABLE IF EXISTS asset_follows;
 DROP TABLE IF EXISTS bids;
@@ -31,6 +32,8 @@ CREATE TABLE users (
   credit_score INT UNSIGNED NOT NULL DEFAULT 100,
   credit_reset_at DATETIME NULL,
   daily_publish_limit INT UNSIGNED NULL,
+  buyer_unreachable_count INT UNSIGNED NOT NULL DEFAULT 0,
+  bid_restricted_until DATETIME NULL,
   created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
   updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
 );
@@ -180,6 +183,32 @@ CREATE TABLE auction_results (
   CONSTRAINT fk_results_asset FOREIGN KEY (asset_id) REFERENCES auction_assets(id),
   CONSTRAINT fk_results_seller FOREIGN KEY (seller_id) REFERENCES users(id),
   CONSTRAINT fk_results_winner FOREIGN KEY (winner_id) REFERENCES users(id)
+);
+
+CREATE TABLE deal_followups (
+  id BIGINT UNSIGNED PRIMARY KEY AUTO_INCREMENT,
+  asset_id BIGINT UNSIGNED NOT NULL UNIQUE,
+  principal_id BIGINT UNSIGNED NULL,
+  seller_id BIGINT UNSIGNED NOT NULL,
+  buyer_id BIGINT UNSIGNED NOT NULL,
+  final_price_cents BIGINT UNSIGNED NOT NULL,
+  status ENUM('pending_buyer_confirm','buyer_confirmed','buyer_abandoned','principal_contacted','buyer_unreachable','completed','cancelled') NOT NULL DEFAULT 'pending_buyer_confirm',
+  note VARCHAR(500) NULL,
+  buyer_confirmed_at DATETIME NULL,
+  buyer_abandoned_at DATETIME NULL,
+  principal_contacted_at DATETIME NULL,
+  buyer_unreachable_at DATETIME NULL,
+  completed_at DATETIME NULL,
+  cancelled_at DATETIME NULL,
+  created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  INDEX idx_deal_followups_principal (principal_id, status, updated_at, id),
+  INDEX idx_deal_followups_buyer (buyer_id, status, updated_at, id),
+  INDEX idx_deal_followups_seller (seller_id, updated_at, id),
+  CONSTRAINT fk_deal_followups_asset FOREIGN KEY (asset_id) REFERENCES auction_assets(id),
+  CONSTRAINT fk_deal_followups_principal FOREIGN KEY (principal_id) REFERENCES principals(id),
+  CONSTRAINT fk_deal_followups_seller FOREIGN KEY (seller_id) REFERENCES users(id),
+  CONSTRAINT fk_deal_followups_buyer FOREIGN KEY (buyer_id) REFERENCES users(id)
 );
 
 CREATE TABLE reports (

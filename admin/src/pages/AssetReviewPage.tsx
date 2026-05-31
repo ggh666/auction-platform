@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { centsToYuanText, firstAssetImageUrl, type AuctionAsset } from "@auction/shared";
+import { centsToYuanText, firstAssetImageUrl, type AuctionAsset, type UserSummary } from "@auction/shared";
 import { adminGet, adminPost } from "../api/client";
 import { DataTable } from "../components/DataTable";
 import { PaginationBar } from "../components/PaginationBar";
@@ -7,10 +7,14 @@ import { PaginationBar } from "../components/PaginationBar";
 const pageSize = 20;
 
 type AssetReviewResponse = {
-  items: AuctionAsset[];
+  items: ReviewAsset[];
   total: number;
   page: number;
   pageSize: number;
+};
+
+type ReviewAsset = AuctionAsset & {
+  seller?: UserSummary;
 };
 
 type AssetActionResponse = {
@@ -64,8 +68,12 @@ function dragonBallSummary(asset: AuctionAsset): string {
   return `${dragonBall.element}系 / ${dragonBall.profession} / ${dragonBall.quality}品质 / ${dragonBall.attributes}`;
 }
 
+function sellerText(asset: ReviewAsset): string {
+  return asset.seller?.displayName ? `${asset.seller.displayName}（ID：${asset.sellerId}）` : `ID：${asset.sellerId}`;
+}
+
 export function AssetReviewPage({ onOpenAsset }: AssetReviewPageProps) {
-  const [assets, setAssets] = useState<AuctionAsset[]>([]);
+  const [assets, setAssets] = useState<ReviewAsset[]>([]);
   const [total, setTotal] = useState(0);
   const [page, setPage] = useState(1);
   const [loading, setLoading] = useState(true);
@@ -74,7 +82,7 @@ export function AssetReviewPage({ onOpenAsset }: AssetReviewPageProps) {
   const [selectedAssetIds, setSelectedAssetIds] = useState<string[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
-  const [previewAsset, setPreviewAsset] = useState<AuctionAsset | null>(null);
+  const [previewAsset, setPreviewAsset] = useState<ReviewAsset | null>(null);
   const selectedIdSet = useMemo(() => new Set(selectedAssetIds), [selectedAssetIds]);
 
   async function loadAssets(nextPage = page) {
@@ -153,7 +161,7 @@ export function AssetReviewPage({ onOpenAsset }: AssetReviewPageProps) {
     }
   }
 
-  async function deductCredit(asset: AuctionAsset) {
+  async function deductCredit(asset: ReviewAsset) {
     const reason = window.prompt("请输入扣减信誉分原因", "审核发现违规信息")?.trim();
     if (reason === undefined) {
       return;
@@ -164,7 +172,7 @@ export function AssetReviewPage({ onOpenAsset }: AssetReviewPageProps) {
     setNotice(null);
     try {
       const response = await adminPost<CreditDeductionResponse>(`/admin/assets/${asset.id}/deduct-credit`, { reason });
-      setNotice(`已扣减卖家 ${asset.sellerId} 信誉分 5 分，当前信誉分 ${response.user.creditScore}`);
+      setNotice(`已扣减卖家 ${sellerText(asset)} 信誉分 5 分，当前信誉分 ${response.user.creditScore}`);
     } catch (deductError) {
       setError(deductError instanceof Error ? deductError.message : "扣减信誉分失败");
     } finally {
@@ -268,7 +276,7 @@ export function AssetReviewPage({ onOpenAsset }: AssetReviewPageProps) {
             { key: "images", label: "图片" },
             { key: "title", label: "资产标题" },
             { key: "game", label: "游戏与区服" },
-            { key: "sellerId", label: "卖家ID" },
+            { key: "seller", label: "卖家" },
             { key: "price", label: "起拍价", align: "right" },
             { key: "submittedAt", label: "提交时间" },
             { key: "status", label: "状态" },
@@ -343,6 +351,10 @@ export function AssetReviewPage({ onOpenAsset }: AssetReviewPageProps) {
 
             if (column.key === "game") {
               return `${row.gameName} / ${row.serverName} / ${row.assetType}`;
+            }
+
+            if (column.key === "seller") {
+              return sellerText(row);
             }
 
             if (column.key === "price") {

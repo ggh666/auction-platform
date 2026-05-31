@@ -9,6 +9,8 @@ export type UserRow = {
   credit_score: number;
   credit_reset_at: Date | string | null;
   daily_publish_limit: number | null;
+  buyer_unreachable_count: number;
+  bid_restricted_until: Date | string | null;
   created_at: Date | string;
   updated_at: Date | string;
 };
@@ -30,6 +32,7 @@ export type UsersRepository = {
   unbanUser(id: number): Promise<UserRow>;
   setDailyPublishLimit(id: number, limit: number | null): Promise<UserRow>;
   deductCreditScore(id: number, points: number): Promise<UserRow>;
+  recordBuyerUnreachable(id: number): Promise<UserRow>;
 };
 
 export function createInMemoryUsersRepository(options: { now?: () => Date } = {}): InMemoryUsersRepository {
@@ -48,6 +51,7 @@ export function createInMemoryUsersRepository(options: { now?: () => Date } = {}
       ...user,
       banned_at: user.banned_at ? new Date(user.banned_at) : null,
       credit_reset_at: user.credit_reset_at ? new Date(user.credit_reset_at) : null,
+      bid_restricted_until: user.bid_restricted_until ? new Date(user.bid_restricted_until) : null,
       created_at: new Date(user.created_at),
       updated_at: new Date(user.updated_at)
     };
@@ -66,6 +70,8 @@ export function createInMemoryUsersRepository(options: { now?: () => Date } = {}
       credit_score: 100,
       credit_reset_at: null,
       daily_publish_limit: null,
+      buyer_unreachable_count: 0,
+      bid_restricted_until: null,
       created_at: createdAt,
       updated_at: createdAt
     };
@@ -219,6 +225,33 @@ export function createInMemoryUsersRepository(options: { now?: () => Date } = {}
         violation_count: user.violation_count + 1,
         credit_score: deducted,
         credit_reset_at: resetAtFrom(currentTime),
+        updated_at: currentTime
+      };
+      users.set(id, updated);
+      return cloneUser(updated);
+    },
+    async recordBuyerUnreachable(id) {
+      const existing = users.get(id);
+      if (!existing) {
+        throw new Error("User not found");
+      }
+      const currentTime = now();
+      const nextCount = existing.buyer_unreachable_count + 1;
+      const restrictedUntil = new Date(currentTime);
+      if (nextCount >= 3) {
+        restrictedUntil.setDate(restrictedUntil.getDate() + 30);
+      } else if (nextCount >= 2) {
+        restrictedUntil.setDate(restrictedUntil.getDate() + 7);
+      }
+      const currentRestrictionMs = existing.bid_restricted_until ? timeValue(existing.bid_restricted_until) : 0;
+      const nextRestriction =
+        nextCount >= 2 && restrictedUntil.getTime() > currentRestrictionMs
+          ? restrictedUntil
+          : existing.bid_restricted_until;
+      const updated: UserRow = {
+        ...existing,
+        buyer_unreachable_count: nextCount,
+        bid_restricted_until: nextRestriction,
         updated_at: currentTime
       };
       users.set(id, updated);

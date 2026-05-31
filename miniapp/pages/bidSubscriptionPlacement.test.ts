@@ -12,5 +12,7 @@ describe("bid subscription prompt placement", () => {
 
     expect(bidRequestIndex).toBeGreaterThanOrEqual(0);
     expect(subscribeIndex).toBeGreaterThan(bidRequestIndex);
+    expect(detailPage).toContain("确认出价承诺");
+    expect(detailPage).toContain("commitmentAccepted: true");
   });
 });

@@ -6,6 +6,7 @@ import type {
   AuctionAsset,
   AuctionResultStatus,
   BidDisplayRecord,
+  DealFollowupStatus,
   NotificationItem,
   PrincipalSummary,
   SystemConfig,
@@ -57,6 +58,46 @@ export type ProfileResultsResponse = {
   page: number;
   pageSize: number;
   hasMore: boolean;
+};
+
+export type DealFollowupItem = {
+  id: string;
+  assetId: string;
+  principalId: string | null;
+  sellerId: string;
+  buyerId: string;
+  finalPriceCents: number;
+  status: DealFollowupStatus;
+  note: string | null;
+  buyerConfirmedAt: string | null;
+  buyerAbandonedAt: string | null;
+  principalContactedAt: string | null;
+  buyerUnreachableAt: string | null;
+  completedAt: string | null;
+  cancelledAt: string | null;
+  createdAt: string;
+  updatedAt: string;
+  asset: Pick<AuctionAsset, "id" | "title" | "gameName" | "serverName" | "assetType">;
+  seller: UserSummary;
+  buyer: UserSummary;
+  principal: PrincipalSummary | null;
+};
+
+export type DealFollowupListResponse = {
+  items: DealFollowupItem[];
+  total: number;
+  page: number;
+  pageSize: number;
+  hasMore: boolean;
+};
+
+export type DealFollowupActionResponse = {
+  followup: DealFollowupItem;
+};
+
+export type AdminDealFollowupStatusRequest = {
+  status: Extract<DealFollowupStatus, "principal_contacted" | "buyer_unreachable" | "completed" | "cancelled">;
+  note?: string;
 };
 
 export type AdminAssetListResponse = {
@@ -158,6 +199,7 @@ export type AssetDetailResponse = {
 export type PlaceBidRequest = {
   assetId: string;
   amountCents: number;
+  commitmentAccepted: boolean;
 };
 
 export type PlaceBidResponse = {

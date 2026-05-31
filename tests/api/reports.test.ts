@@ -45,7 +45,7 @@ async function createReportableAuction(app: ReturnType<typeof buildApp>) {
     method: "POST",
     url: "/api/bids",
     headers: { authorization: `Bearer ${bidderToken}` },
-    payload: { assetId, amountCents: 10000 }
+    payload: { assetId, amountCents: 10000, commitmentAccepted: true }
   });
 
   return {

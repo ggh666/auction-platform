@@ -3,7 +3,8 @@
     <text class="title">我的出价</text>
     <view v-if="loading" class="empty">正在加载出价记录</view>
     <view v-else-if="bids.length === 0" class="empty">暂无出价记录</view>
-    <view v-for="bid in bids" :key="bid.id" class="bid-row" @tap="openDetail(bid.assetId)">
+    <view v-for="bid in bids" :key="bid.id" class="bid-row" :class="{ sold: isSoldAsset(bid.asset) }" @tap="openDetail(bid.assetId)">
+      <view v-if="isSoldAsset(bid.asset)" class="sold-stamp">成交</view>
       <text class="bid-title">参与竞价：{{ bid.asset.title }}</text>
       <text class="bid-meta">
         我的出价 {{ formatPrice(bid.amountCents) }} 元宝 / 当前价
@@ -17,6 +18,7 @@
 import { onShow } from "@dcloudio/uni-app";
 import { ref } from "vue";
 import { listMyBids, type ProfileBidItem } from "../../api/client";
+import { isSoldAsset } from "../../utils/assetStatusText";
 
 const loading = ref(false);
 const bids = ref<ProfileBidItem[]>([]);
@@ -62,10 +64,34 @@ function openDetail(assetId: string) {
 }
 
 .bid-row {
+  position: relative;
   padding: 24rpx;
   margin-bottom: 16rpx;
   border: 1px solid #eaecf0;
   border-radius: 8rpx;
+}
+
+.bid-row.sold {
+  padding-right: 148rpx;
+}
+
+.sold-stamp {
+  position: absolute;
+  top: 18rpx;
+  right: 18rpx;
+  z-index: 2;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 104rpx;
+  height: 104rpx;
+  font-size: 30rpx;
+  font-weight: 900;
+  color: rgba(248, 113, 113, 0.88);
+  border: 7rpx double rgba(248, 113, 113, 0.86);
+  border-radius: 999rpx;
+  transform: rotate(-14deg);
+  pointer-events: none;
 }
 
 .bid-title {

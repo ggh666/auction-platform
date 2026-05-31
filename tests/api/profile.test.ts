@@ -305,7 +305,7 @@ describe("profile routes", () => {
         method: "POST",
         url: "/api/bids",
         headers: { authorization: `Bearer ${bidder}` },
-        payload: { assetId: asset.id, amountCents: 10000 }
+        payload: { assetId: asset.id, amountCents: 10000, commitmentAccepted: true }
       });
 
       const response = await app.inject({
@@ -338,7 +338,7 @@ describe("profile routes", () => {
         method: "POST",
         url: "/api/bids",
         headers: { authorization: `Bearer ${bidder}` },
-        payload: { assetId: soldAsset.id, amountCents: 10000 }
+        payload: { assetId: soldAsset.id, amountCents: 10000, commitmentAccepted: true }
       });
       const newerSoldAsset = await createAsset(app, seller, { title: "第二个成交资产" });
       await approveAsset(app, newerSoldAsset.id);
@@ -346,7 +346,7 @@ describe("profile routes", () => {
         method: "POST",
         url: "/api/bids",
         headers: { authorization: `Bearer ${bidder}` },
-        payload: { assetId: newerSoldAsset.id, amountCents: 11000 }
+        payload: { assetId: newerSoldAsset.id, amountCents: 11000, commitmentAccepted: true }
       });
 
       const sellerResults = await app.inject({

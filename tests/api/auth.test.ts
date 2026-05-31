@@ -6,6 +6,7 @@ import { createInMemoryAssetsRepository } from "../../api/src/modules/assets/ass
 import { createInMemoryBidsRepository } from "../../api/src/modules/bids/bids.repository";
 import { createInMemoryImageSafetyRepository } from "../../api/src/modules/contentSafety/imageSafety.repository";
 import { createInMemorySystemConfigsRepository } from "../../api/src/modules/configs/configs.repository";
+import { createInMemoryDealFollowupsRepository } from "../../api/src/modules/dealFollowups/dealFollowups.repository";
 import { createInMemoryNotificationsRepository } from "../../api/src/modules/notifications/notifications.repository";
 import { createInMemoryPrincipalsRepository } from "../../api/src/modules/principals/principals.repository";
 import { createReportsService } from "../../api/src/modules/reports/reports.service";
@@ -42,6 +43,7 @@ function buildProductionTestApp() {
     principalsRepository: createInMemoryPrincipalsRepository(),
     configsRepository: createInMemorySystemConfigsRepository(),
     notificationsRepository: createInMemoryNotificationsRepository(),
+    dealFollowupsRepository: createInMemoryDealFollowupsRepository(),
     imageSafetyRepository: createInMemoryImageSafetyRepository()
   });
 }
@@ -113,7 +115,9 @@ describe("auth routes", () => {
           banned: false,
           violationCount: 0,
           creditScore: 100,
-          creditResetAt: null
+          creditResetAt: null,
+          buyerUnreachableCount: 0,
+          bidRestrictedUntil: null
         }
       });
     } finally {

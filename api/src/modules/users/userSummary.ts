@@ -9,7 +9,9 @@ export function toUserSummary(user: UserRow): UserSummary {
     banned: user.banned_at !== null,
     violationCount: user.violation_count,
     creditScore: user.credit_score,
-    creditResetAt: user.credit_reset_at === null ? null : new Date(user.credit_reset_at).toISOString()
+    creditResetAt: user.credit_reset_at === null ? null : new Date(user.credit_reset_at).toISOString(),
+    buyerUnreachableCount: user.buyer_unreachable_count,
+    bidRestrictedUntil: user.bid_restricted_until === null ? null : new Date(user.bid_restricted_until).toISOString()
   };
 }
 
@@ -28,7 +30,9 @@ export async function readUserSummary(users: UsersRepository, userId: string): P
     banned: false,
     violationCount: 0,
     creditScore: 100,
-    creditResetAt: null
+    creditResetAt: null,
+    buyerUnreachableCount: 0,
+    bidRestrictedUntil: null
   };
 }
 

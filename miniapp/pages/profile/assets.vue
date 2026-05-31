@@ -3,7 +3,8 @@
     <text class="title">我的发布</text>
     <view v-if="loading" class="empty">正在加载发布记录</view>
     <view v-else-if="assets.length === 0" class="empty">暂无发布记录</view>
-    <view v-for="asset in assets" :key="asset.id" class="asset-row" @tap="openDetail(asset.id)">
+    <view v-for="asset in assets" :key="asset.id" class="asset-row" :class="{ sold: isSoldAsset(asset) }" @tap="openDetail(asset.id)">
+      <view v-if="isSoldAsset(asset)" class="sold-stamp">成交</view>
       <image
         v-if="firstAssetImageUrl(asset.imageUrls)"
         class="asset-cover"
@@ -17,7 +18,7 @@
       <view class="asset-content">
         <text class="asset-title">{{ asset.title }}</text>
         <text class="asset-meta">
-          {{ assetStatusText(asset.status) }} / {{ asset.gameName }} / {{ asset.serverName }} / 当前价
+          {{ assetStatusText(asset) }} / {{ asset.gameName }} / {{ asset.serverName }} / 当前价
           {{ formatPrice(asset.currentPriceCents ?? asset.startingPriceCents) }} 元宝
         </text>
         <text v-if="asset.status === 'active'" class="asset-meta">截止时间：{{ formatTime(asset.effectiveEndAt) }}</text>
@@ -32,7 +33,7 @@ import { firstAssetImageUrl, type AuctionAsset } from "@auction/shared";
 import { onShow } from "@dcloudio/uni-app";
 import { ref } from "vue";
 import { listMyAssets } from "../../api/client";
-import { assetStatusText } from "../../utils/assetStatusText";
+import { assetStatusText, isSoldAsset } from "../../utils/assetStatusText";
 
 const loading = ref(false);
 const assets = ref<AuctionAsset[]>([]);
@@ -103,6 +104,7 @@ function previewImages(imageUrls: string[]) {
 }
 
 .asset-row {
+  position: relative;
   display: flex;
   align-items: stretch;
   gap: 18rpx;
@@ -111,6 +113,25 @@ function previewImages(imageUrls: string[]) {
   border: 1px solid #eaecf0;
   border-radius: 8rpx;
   background: #fff;
+}
+
+.sold-stamp {
+  position: absolute;
+  top: 18rpx;
+  right: 18rpx;
+  z-index: 2;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 104rpx;
+  height: 104rpx;
+  font-size: 30rpx;
+  font-weight: 900;
+  color: rgba(248, 113, 113, 0.88);
+  border: 7rpx double rgba(248, 113, 113, 0.86);
+  border-radius: 999rpx;
+  transform: rotate(-14deg);
+  pointer-events: none;
 }
 
 .asset-cover {
@@ -132,6 +153,10 @@ function previewImages(imageUrls: string[]) {
 .asset-content {
   flex: 1;
   min-width: 0;
+}
+
+.asset-row.sold .asset-content {
+  padding-right: 112rpx;
 }
 
 .asset-title {

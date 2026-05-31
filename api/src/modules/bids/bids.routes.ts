@@ -32,8 +32,25 @@ function parsePlaceBidRequest(body: unknown): PlaceBidRequest {
   if (!isPositiveSafeInteger(amountCents)) {
     throw badRequest("invalid_bid_amount", "amountCents must be positive cents");
   }
+  if (body.commitmentAccepted !== true) {
+    throw badRequest("bid_commitment_required", "Bid commitment must be accepted");
+  }
 
-  return { assetId: assetId.trim(), amountCents };
+  return { assetId: assetId.trim(), amountCents, commitmentAccepted: true };
+}
+
+function bidRestrictionDetails(user: Awaited<ReturnType<UsersRepository["findById"]>>) {
+  if (!user?.bid_restricted_until) {
+    return null;
+  }
+  const restrictedUntil = new Date(user.bid_restricted_until);
+  if (Number.isNaN(restrictedUntil.getTime()) || restrictedUntil.getTime() <= Date.now()) {
+    return null;
+  }
+  return {
+    buyerUnreachableCount: user.buyer_unreachable_count,
+    bidRestrictedUntil: restrictedUntil.toISOString()
+  };
 }
 
 export function registerBidRoutes(
@@ -60,6 +77,11 @@ export function registerBidRoutes(
     }
 
     const body = parsePlaceBidRequest(request.body);
+    const user = await deps.users.findById(Number(request.user.id));
+    const restriction = bidRestrictionDetails(user);
+    if (restriction) {
+      throw new HttpError(403, "bid_restricted", "User is temporarily restricted from bidding", restriction);
+    }
     const result = await service.placeBid(request.user.id, body.assetId, body.amountCents);
     const bid = await toBidDisplayRecord(deps.users, result.bid);
     const serverTime = new Date().toISOString();

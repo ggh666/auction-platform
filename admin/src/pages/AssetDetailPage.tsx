@@ -40,7 +40,15 @@ function formatTime(value: string): string {
   }).format(new Date(value));
 }
 
-function renderStatus(status: AssetStatus) {
+function isConfirmedDeal(asset: AuctionAsset): boolean {
+  return asset.status === "ended" && asset.currentPriceCents !== null && asset.highestBidderId !== null;
+}
+
+function renderStatus(asset: AuctionAsset) {
+  if (isConfirmedDeal(asset)) {
+    return <span className="status success">已成交</span>;
+  }
+  const status = asset.status;
   const meta = statusMeta[status];
   return <span className={`status ${meta.tone}`}>{meta.label}</span>;
 }
@@ -160,7 +168,7 @@ export function AssetDetailPage({ assetId, onBack }: AssetDetailPageProps) {
               </div>
               <div>
                 <span>状态</span>
-                <strong>{renderStatus(asset.status)}</strong>
+                <strong>{renderStatus(asset)}</strong>
               </div>
               <div>
                 <span>卖家</span>

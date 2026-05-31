@@ -13,6 +13,8 @@ type UserDbRow = {
   credit_score: number;
   credit_reset_at: Date | string | null;
   daily_publish_limit: number | null;
+  buyer_unreachable_count: number;
+  bid_restricted_until: Date | string | null;
   created_at: Date | string;
   updated_at: Date | string;
 };
@@ -29,6 +31,8 @@ function toUserRow(row: UserDbRow): UserRow {
     credit_score: Number(row.credit_score),
     credit_reset_at: row.credit_reset_at,
     daily_publish_limit: row.daily_publish_limit === null ? null : Number(row.daily_publish_limit),
+    buyer_unreachable_count: Number(row.buyer_unreachable_count),
+    bid_restricted_until: row.bid_restricted_until,
     created_at: row.created_at,
     updated_at: row.updated_at
   };
@@ -46,6 +50,8 @@ const userSelect = `
     credit_score,
     credit_reset_at,
     daily_publish_limit,
+    buyer_unreachable_count,
+    bid_restricted_until,
     created_at,
     updated_at
   FROM users
@@ -265,6 +271,30 @@ export function createMysqlUsersRepository(db: MysqlExecutor): UsersRepository {
            updated_at = CURRENT_TIMESTAMP
          WHERE id = ?`,
         [points, id]
+      );
+      if (result.affectedRows === 0) {
+        throw new Error("User not found");
+      }
+      const user = await findById(id);
+      if (!user) {
+        throw new Error("User not found");
+      }
+      return user;
+    },
+
+    async recordBuyerUnreachable(id) {
+      const [result] = await db.execute<MysqlResultHeader>(
+        `UPDATE users
+         SET
+           buyer_unreachable_count = buyer_unreachable_count + 1,
+           bid_restricted_until = CASE
+             WHEN buyer_unreachable_count + 1 >= 3 THEN GREATEST(COALESCE(bid_restricted_until, '1970-01-01 00:00:00'), DATE_ADD(CURRENT_TIMESTAMP, INTERVAL 30 DAY))
+             WHEN buyer_unreachable_count + 1 >= 2 THEN GREATEST(COALESCE(bid_restricted_until, '1970-01-01 00:00:00'), DATE_ADD(CURRENT_TIMESTAMP, INTERVAL 7 DAY))
+             ELSE bid_restricted_until
+           END,
+           updated_at = CURRENT_TIMESTAMP
+         WHERE id = ?`,
+        [id]
       );
       if (result.affectedRows === 0) {
         throw new Error("User not found");

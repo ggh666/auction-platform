@@ -2,6 +2,8 @@ import type {
   AssetDetailResponse,
   AssetListResponse,
   AuctionAsset,
+  DealFollowupActionResponse,
+  DealFollowupListResponse,
   LoginResponse,
   NotificationActionResponse,
   NotificationListResponse,
@@ -127,9 +129,26 @@ export function listMyBids(): Promise<{ items: ProfileBidItem[] }> {
 }
 
 export type ProfileResultItem = ProfileResultsResponse["items"][number];
+export type DealFollowupItem = DealFollowupListResponse["items"][number];
 
 export function listMyResults(query: Pick<AssetListQuery, "page" | "pageSize"> = {}): Promise<ProfileResultsResponse> {
   return request<ProfileResultsResponse>(`/api/profile/results${queryString(query)}`);
+}
+
+export function listMyDealFollowups(query: Pick<AssetListQuery, "page" | "pageSize"> = {}): Promise<DealFollowupListResponse> {
+  return request<DealFollowupListResponse>(`/api/profile/deal-followups${queryString(query)}`);
+}
+
+export function confirmDealFollowup(followupId: string): Promise<DealFollowupActionResponse> {
+  return request<DealFollowupActionResponse>(`/api/profile/deal-followups/${followupId}/confirm`, {
+    method: "POST"
+  });
+}
+
+export function abandonDealFollowup(followupId: string): Promise<DealFollowupActionResponse> {
+  return request<DealFollowupActionResponse>(`/api/profile/deal-followups/${followupId}/abandon`, {
+    method: "POST"
+  });
 }
 
 export function listNotifications(): Promise<NotificationListResponse> {

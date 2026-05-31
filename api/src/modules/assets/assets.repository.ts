@@ -42,6 +42,13 @@ export type AdminAssetListInput = {
   pageSize?: number;
 };
 
+export type SoldFollowupCandidateInput = {
+  principalId?: string;
+  userId?: string;
+  nowIso?: string;
+  limit?: number;
+};
+
 export type PublicAssetListInput = {
   gameName?: string;
   assetType?: string;
@@ -76,10 +83,12 @@ export type AssetsRepository = {
   listPendingReview(input?: Pick<AdminAssetListInput, "principalId" | "page" | "pageSize">): Promise<AdminAssetListResult>;
   listBySeller(sellerId: string): Promise<AuctionAsset[]>;
   listRelatedResults(userId: string): Promise<AuctionAsset[]>;
+  listSoldFollowupCandidates(input?: SoldFollowupCandidateInput): Promise<AuctionAsset[]>;
   findById(id: string, input?: Pick<AdminAssetListInput, "principalId">): Promise<AuctionAsset | null>;
   approvePending(id: string, input?: Pick<AdminAssetListInput, "principalId">): Promise<AuctionAsset>;
   rejectPending(id: string, note?: string, input?: Pick<AdminAssetListInput, "principalId">): Promise<AuctionAsset>;
   removeActive(id: string, input?: Pick<AdminAssetListInput, "principalId">): Promise<AuctionAsset>;
+  confirmActiveDeal(id: string, input?: Pick<AdminAssetListInput, "principalId">): Promise<AuctionAsset>;
   updateStatus(id: string, status: AssetStatus): Promise<AuctionAsset>;
   save(asset: AuctionAsset): Promise<AuctionAsset>;
 };
@@ -296,6 +305,23 @@ export function createInMemoryAssetsRepository(): AssetsRepository {
         .filter((asset) => asset.currentPriceCents !== null || asset.status === "ended")
         .map(cloneAsset);
     },
+    async listSoldFollowupCandidates(input = {}) {
+      const nowMs = input.nowIso ? new Date(input.nowIso).getTime() : Date.now();
+      const limit = Number.isInteger(input.limit) && input.limit && input.limit > 0 ? Math.min(input.limit, 500) : 200;
+      return [...assets.values()]
+        .filter((asset) => asset.currentPriceCents !== null && asset.highestBidderId !== null)
+        .filter((asset) => asset.status === "ended" || new Date(asset.effectiveEndAt).getTime() <= nowMs)
+        .filter((asset) => !input.principalId || asset.principalId === input.principalId)
+        .filter((asset) => !input.userId || asset.sellerId === input.userId || asset.highestBidderId === input.userId)
+        .sort(
+          (left, right) =>
+            new Date(right.updatedAt).getTime() - new Date(left.updatedAt).getTime() ||
+            new Date(right.createdAt).getTime() - new Date(left.createdAt).getTime() ||
+            Number(right.id) - Number(left.id)
+        )
+        .slice(0, limit)
+        .map(cloneAsset);
+    },
     async findById(id, input = {}) {
       const asset = assets.get(id);
       if (asset && input.principalId && asset.principalId !== input.principalId) {
@@ -351,6 +377,25 @@ export function createInMemoryAssetsRepository(): AssetsRepository {
         throw new Error("Invalid asset state");
       }
       const updated = { ...asset, status: "removed" as const, updatedAt: new Date().toISOString() };
+      assets.set(id, cloneAsset(updated));
+      return cloneAsset(updated);
+    },
+    async confirmActiveDeal(id, input = {}) {
+      const asset = assets.get(id);
+      if (!asset) {
+        throw new Error("Asset not found");
+      }
+      if (input.principalId && asset.principalId !== input.principalId) {
+        throw new Error("Asset not found");
+      }
+      if (asset.status !== "active") {
+        throw new Error("Invalid asset state");
+      }
+      if (asset.currentPriceCents === null || asset.highestBidderId === null) {
+        throw new Error("Invalid asset state");
+      }
+      const now = new Date().toISOString();
+      const updated = { ...asset, status: "ended" as const, effectiveEndAt: now, updatedAt: now };
       assets.set(id, cloneAsset(updated));
       return cloneAsset(updated);
     },

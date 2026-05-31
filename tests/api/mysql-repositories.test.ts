@@ -6,6 +6,7 @@ import { createMysqlAssetsRepository } from "../../api/src/modules/assets/assets
 import { createMysqlBidsRepository } from "../../api/src/modules/bids/bids.mysql.repository";
 import { createMysqlSystemConfigsRepository } from "../../api/src/modules/configs/configs.mysql.repository";
 import { createMysqlImageSafetyRepository } from "../../api/src/modules/contentSafety/imageSafety.mysql.repository";
+import { createMysqlDealFollowupsRepository } from "../../api/src/modules/dealFollowups/dealFollowups.mysql.repository";
 import { createMysqlNotificationsRepository } from "../../api/src/modules/notifications/notifications.mysql.repository";
 import { createMysqlReportsService } from "../../api/src/modules/reports/reports.mysql.service";
 import { createMysqlUsersRepository } from "../../api/src/modules/users/users.mysql.repository";
@@ -21,6 +22,8 @@ type FakeUser = {
   credit_score: number;
   credit_reset_at: Date | null;
   daily_publish_limit: number | null;
+  buyer_unreachable_count: number;
+  bid_restricted_until: Date | null;
   created_at: Date;
   updated_at: Date;
 };
@@ -100,6 +103,32 @@ type FakeAssetFollow = {
   created_at: Date;
 };
 
+type FakeDealFollowup = {
+  id: number;
+  asset_id: number;
+  principal_id: number | null;
+  seller_id: number;
+  buyer_id: number;
+  final_price_cents: number;
+  status:
+    | "pending_buyer_confirm"
+    | "buyer_confirmed"
+    | "buyer_abandoned"
+    | "principal_contacted"
+    | "buyer_unreachable"
+    | "completed"
+    | "cancelled";
+  note: string | null;
+  buyer_confirmed_at: Date | null;
+  buyer_abandoned_at: Date | null;
+  principal_contacted_at: Date | null;
+  buyer_unreachable_at: Date | null;
+  completed_at: Date | null;
+  cancelled_at: Date | null;
+  created_at: Date;
+  updated_at: Date;
+};
+
 type FakeReport = {
   id: number;
   reporter_id: number;
@@ -163,6 +192,7 @@ class FakeMysqlPool {
   assets: FakeAsset[] = [];
   bids: FakeBid[] = [];
   follows: FakeAssetFollow[] = [];
+  dealFollowups: FakeDealFollowup[] = [];
   notifications: FakeNotification[] = [];
   reports: FakeReport[] = [];
   images: FakeImage[] = [];
@@ -291,6 +321,8 @@ class FakeMysqlPool {
         credit_score: 100,
         credit_reset_at: null,
         daily_publish_limit: null,
+        buyer_unreachable_count: 0,
+        bid_restricted_until: null,
         created_at: new Date("2026-05-25T00:00:00.000Z"),
         updated_at: new Date("2026-05-25T00:00:00.000Z")
       };
@@ -340,6 +372,20 @@ class FakeMysqlPool {
       if (user) {
         user.daily_publish_limit = params[0] === null ? null : Number(params[0]);
         user.updated_at = new Date("2026-05-25T14:20:00.000Z");
+      }
+      return [{ affectedRows: user ? 1 : 0, insertId: 0 } as T, []];
+    }
+
+    if (sql.includes("UPDATE users") && sql.includes("buyer_unreachable_count = buyer_unreachable_count + 1")) {
+      const user = this.users.find((candidate) => candidate.id === Number(params[0]));
+      if (user) {
+        user.buyer_unreachable_count += 1;
+        if (user.buyer_unreachable_count >= 3) {
+          user.bid_restricted_until = new Date("2026-06-24T14:30:00.000Z");
+        } else if (user.buyer_unreachable_count >= 2) {
+          user.bid_restricted_until = new Date("2026-06-01T14:30:00.000Z");
+        }
+        user.updated_at = new Date("2026-05-25T14:30:00.000Z");
       }
       return [{ affectedRows: user ? 1 : 0, insertId: 0 } as T, []];
     }
@@ -651,6 +697,117 @@ class FakeMysqlPool {
       ];
     }
 
+    if (sql.includes("INSERT INTO deal_followups")) {
+      const assetId = Number(params[0]);
+      const existing = this.dealFollowups.find((followup) => followup.asset_id === assetId);
+      if (existing) {
+        existing.principal_id = params[1] === null ? null : Number(params[1]);
+        existing.seller_id = Number(params[2]);
+        existing.buyer_id = Number(params[3]);
+        existing.final_price_cents = Number(params[4]);
+        existing.updated_at = new Date("2026-05-25T16:20:00.000Z");
+        return [{ insertId: existing.id, affectedRows: 2 } as T, []];
+      }
+      const followup: FakeDealFollowup = {
+        id: this.dealFollowups.length + 1,
+        asset_id: assetId,
+        principal_id: params[1] === null ? null : Number(params[1]),
+        seller_id: Number(params[2]),
+        buyer_id: Number(params[3]),
+        final_price_cents: Number(params[4]),
+        status: "pending_buyer_confirm",
+        note: null,
+        buyer_confirmed_at: null,
+        buyer_abandoned_at: null,
+        principal_contacted_at: null,
+        buyer_unreachable_at: null,
+        completed_at: null,
+        cancelled_at: null,
+        created_at: new Date("2026-05-25T16:10:00.000Z"),
+        updated_at: new Date("2026-05-25T16:10:00.000Z")
+      };
+      this.dealFollowups.push(followup);
+      return [{ insertId: followup.id, affectedRows: 1 } as T, []];
+    }
+
+    if (sql.includes("UPDATE deal_followups")) {
+      const hasBuyerClause = sql.includes("buyer_id = ?");
+      const followup = this.dealFollowups.find(
+        (candidate) =>
+          candidate.id === Number(params[2]) &&
+          (!hasBuyerClause || candidate.buyer_id === Number(params[3]))
+      );
+      if (followup) {
+        followup.status = params[0] as FakeDealFollowup["status"];
+        followup.note = (params[1] as string | null) ?? null;
+        followup.updated_at = new Date("2026-05-25T16:30:00.000Z");
+        if (sql.includes("buyer_confirmed_at")) {
+          followup.buyer_confirmed_at = followup.buyer_confirmed_at ?? new Date("2026-05-25T16:30:00.000Z");
+        }
+        if (sql.includes("buyer_abandoned_at")) {
+          followup.buyer_abandoned_at = followup.buyer_abandoned_at ?? new Date("2026-05-25T16:30:00.000Z");
+        }
+        if (sql.includes("principal_contacted_at")) {
+          followup.principal_contacted_at = followup.principal_contacted_at ?? new Date("2026-05-25T16:30:00.000Z");
+        }
+        if (sql.includes("buyer_unreachable_at")) {
+          followup.buyer_unreachable_at = followup.buyer_unreachable_at ?? new Date("2026-05-25T16:30:00.000Z");
+        }
+        if (sql.includes("completed_at")) {
+          followup.completed_at = followup.completed_at ?? new Date("2026-05-25T16:30:00.000Z");
+        }
+        if (sql.includes("cancelled_at")) {
+          followup.cancelled_at = followup.cancelled_at ?? new Date("2026-05-25T16:30:00.000Z");
+        }
+      }
+      return [{ insertId: 0, affectedRows: followup ? 1 : 0 } as T, []];
+    }
+
+    if (sql.includes("COUNT(*) AS total") && sql.includes("FROM deal_followups")) {
+      let cursor = 0;
+      let filtered = [...this.dealFollowups];
+      if (sql.includes("principal_id = ?")) {
+        filtered = filtered.filter((followup) => followup.principal_id === Number(params[cursor++]));
+      }
+      if (sql.includes("buyer_id = ?")) {
+        filtered = filtered.filter((followup) => followup.buyer_id === Number(params[cursor++]));
+      }
+      if (sql.includes("status = ?")) {
+        filtered = filtered.filter((followup) => followup.status === params[cursor++]);
+      }
+      return [[{ total: filtered.length }] as T, []];
+    }
+
+    if (sql.includes("FROM deal_followups") && sql.includes("WHERE asset_id =")) {
+      return [[this.dealFollowups.find((followup) => followup.asset_id === Number(params[0]))].filter(Boolean) as T, []];
+    }
+
+    if (sql.includes("FROM deal_followups") && sql.includes("WHERE id =")) {
+      return [[this.dealFollowups.find((followup) => followup.id === Number(params[0]))].filter(Boolean) as T, []];
+    }
+
+    if (sql.includes("FROM deal_followups")) {
+      let cursor = 0;
+      let filtered = [...this.dealFollowups];
+      if (sql.includes("principal_id = ?")) {
+        filtered = filtered.filter((followup) => followup.principal_id === Number(params[cursor++]));
+      }
+      if (sql.includes("buyer_id = ?")) {
+        filtered = filtered.filter((followup) => followup.buyer_id === Number(params[cursor++]));
+      }
+      if (sql.includes("status = ?")) {
+        filtered = filtered.filter((followup) => followup.status === params[cursor++]);
+      }
+      const limit = Number(params.at(-2));
+      const offset = Number(params.at(-1));
+      return [
+        filtered
+          .sort((left, right) => right.updated_at.getTime() - left.updated_at.getTime() || right.id - left.id)
+          .slice(offset, offset + limit) as T,
+        []
+      ];
+    }
+
     if (sql.includes("COUNT(*) AS total") && sql.includes("seller_id = ?") && sql.includes("created_at >= ?")) {
       const sellerId = Number(params[0]);
       const sinceMs = new Date(params[1] as Date | string).getTime();
@@ -662,6 +819,29 @@ class FakeMysqlPool {
             ).length
           }
         ] as T,
+        []
+      ];
+    }
+
+    if (sql.includes("FROM auction_assets") && sql.includes("current_price_cents IS NOT NULL")) {
+      let cursor = 0;
+      const nowMs = new Date(params[cursor++] as Date | string).getTime();
+      let filtered = this.assets
+        .filter((asset) => asset.current_price_cents !== null && asset.highest_bidder_id !== null)
+        .filter((asset) => asset.status === "ended" || asset.effective_end_at.getTime() <= nowMs);
+      if (sql.includes("principal_id = ?")) {
+        filtered = filtered.filter((asset) => asset.principal_id === Number(params[cursor++]));
+      }
+      if (sql.includes("seller_id = ? OR highest_bidder_id = ?")) {
+        const sellerId = Number(params[cursor++]);
+        const bidderId = Number(params[cursor++]);
+        filtered = filtered.filter((asset) => asset.seller_id === sellerId || asset.highest_bidder_id === bidderId);
+      }
+      const limit = Number(params.at(-1));
+      return [
+        filtered
+          .sort((left, right) => right.updated_at.getTime() - left.updated_at.getTime() || right.id - left.id)
+          .slice(0, limit) as T,
         []
       ];
     }
@@ -740,6 +920,18 @@ class FakeMysqlPool {
       return [{ affectedRows: asset ? 1 : 0, insertId: 0 } as T, []];
     }
 
+    if (sql.includes("UPDATE auction_assets") && sql.includes("status = 'ended'") && sql.includes("current_price_cents IS NOT NULL")) {
+      const asset = this.assets.find((candidate) => candidate.id === Number(params[0]));
+      const inScope = !sql.includes("principal_id = ?") || asset?.principal_id === Number(params[1]);
+      const canConfirm = asset && inScope && asset.status === "active" && asset.current_price_cents !== null && asset.highest_bidder_id !== null;
+      if (canConfirm) {
+        asset.status = "ended";
+        asset.effective_end_at = new Date("2026-05-25T13:05:00.000Z");
+        asset.updated_at = new Date("2026-05-25T13:05:00.000Z");
+      }
+      return [{ affectedRows: canConfirm ? 1 : 0, insertId: 0 } as T, []];
+    }
+
     if (sql.includes("FROM auction_assets") && sql.includes("status = 'pending_review'")) {
       return [this.assets.filter((asset) => asset.status === "pending_review") as T, []];
     }
@@ -758,7 +950,16 @@ class FakeMysqlPool {
     }
 
     if (sql.includes("FROM auction_assets")) {
-      return [[this.assets.find((asset) => asset.id === Number(params[0]))].filter(Boolean) as T, []];
+      return [
+        [
+          this.assets.find(
+            (asset) =>
+              asset.id === Number(params[0]) &&
+              (!sql.includes("principal_id = ?") || asset.principal_id === Number(params[1]))
+          )
+        ].filter(Boolean) as T,
+        []
+      ];
     }
 
     if (sql.includes("INSERT INTO bids")) {
@@ -970,6 +1171,19 @@ describe("mysql repositories", () => {
     expect(deducted.credit_reset_at).toBeInstanceOf(Date);
   });
 
+  it("records MySQL buyer unreachable counts and temporary bid restrictions", async () => {
+    const pool = new FakeMysqlPool();
+    const users = createMysqlUsersRepository(pool);
+    const user = await users.findOrCreateWechatUser({ openid: "openid-1", displayName: "失联买家" });
+
+    const first = await users.recordBuyerUnreachable(user.id);
+    const second = await users.recordBuyerUnreachable(user.id);
+
+    expect(first).toMatchObject({ id: user.id, buyer_unreachable_count: 1, bid_restricted_until: null });
+    expect(second).toMatchObject({ id: user.id, buyer_unreachable_count: 2 });
+    expect(second.bid_restricted_until).toBeInstanceOf(Date);
+  });
+
   it("counts user dashboard metrics from MySQL rows", async () => {
     const pool = new FakeMysqlPool();
     pool.users.push(
@@ -984,6 +1198,8 @@ describe("mysql repositories", () => {
         credit_score: 100,
         credit_reset_at: null,
         daily_publish_limit: null,
+        buyer_unreachable_count: 0,
+        bid_restricted_until: null,
         created_at: new Date("2026-05-25T00:00:00.000Z"),
         updated_at: new Date("2026-05-25T00:00:00.000Z")
       },
@@ -998,6 +1214,8 @@ describe("mysql repositories", () => {
         credit_score: 100,
         credit_reset_at: null,
         daily_publish_limit: null,
+        buyer_unreachable_count: 0,
+        bid_restricted_until: null,
         created_at: new Date("2026-05-24T23:59:59.000Z"),
         updated_at: new Date("2026-05-25T02:00:00.000Z")
       }
@@ -1139,6 +1357,20 @@ describe("mysql repositories", () => {
       pageSize: 1,
       items: [expect.objectContaining({ id: "3", status: "active", gameName: "塔防精灵", assetType: "账号" })]
     });
+  });
+
+  it("confirms active MySQL assets with bids as sold within principal scope", async () => {
+    const pool = new FakeMysqlPool();
+    pool.assets.push(
+      { ...activeAssetRow(), id: 1, principal_id: 1, status: "active", current_price_cents: 10000, highest_bidder_id: 2 },
+      { ...activeAssetRow(), id: 2, principal_id: 2, status: "active", current_price_cents: 10000, highest_bidder_id: 2 }
+    );
+    const assets = createMysqlAssetsRepository(pool);
+
+    const confirmed = await assets.confirmActiveDeal("1", { principalId: "1" });
+
+    expect(confirmed).toMatchObject({ id: "1", status: "ended", principalId: "1", currentPriceCents: 10000, highestBidderId: "2" });
+    await expect(assets.confirmActiveDeal("2", { principalId: "1" })).rejects.toThrow("Asset not found");
   });
 
   it("defaults MySQL admin asset rows to active and pending review by newest created time", async () => {
@@ -1436,6 +1668,85 @@ describe("mysql repositories", () => {
 
     expect(published.map((asset) => asset.id)).toEqual(["1", "3"]);
     expect(relatedResults).toEqual([expect.objectContaining({ id: "3", currentPriceCents: 12000 })]);
+  });
+
+  it("lists sold followup candidate assets from MySQL with principal and buyer scopes", async () => {
+    const pool = new FakeMysqlPool();
+    pool.assets.push(
+      {
+        ...activeAssetRow(),
+        id: 1,
+        principal_id: 1,
+        seller_id: 1,
+        current_price_cents: 10000,
+        highest_bidder_id: 2,
+        status: "ended",
+        updated_at: new Date("2026-05-25T12:00:00.000Z")
+      },
+      {
+        ...activeAssetRow(),
+        id: 2,
+        principal_id: 2,
+        seller_id: 3,
+        current_price_cents: 11000,
+        highest_bidder_id: 2,
+        status: "ended",
+        updated_at: new Date("2026-05-25T13:00:00.000Z")
+      },
+      {
+        ...activeAssetRow(),
+        id: 3,
+        principal_id: 1,
+        current_price_cents: null,
+        highest_bidder_id: null,
+        status: "ended"
+      }
+    );
+    const assets = createMysqlAssetsRepository(pool);
+
+    const scoped = await assets.listSoldFollowupCandidates({
+      principalId: "1",
+      nowIso: "2026-05-26T00:00:00.000Z"
+    });
+    const userScoped = await assets.listSoldFollowupCandidates({
+      userId: "2",
+      nowIso: "2026-05-26T00:00:00.000Z"
+    });
+
+    expect(scoped).toEqual([expect.objectContaining({ id: "1", principalId: "1", highestBidderId: "2" })]);
+    expect(userScoped.map((asset) => asset.id)).toEqual(["2", "1"]);
+  });
+
+  it("creates, lists, and updates deal followups in MySQL rows", async () => {
+    const pool = new FakeMysqlPool();
+    const followups = createMysqlDealFollowupsRepository(pool);
+
+    const ensured = await followups.ensureForSoldAsset({
+      ...activeAsset(),
+      status: "ended",
+      principalId: "1",
+      currentPriceCents: 10000,
+      highestBidderId: "2"
+    });
+    const listed = await followups.listForAdmin({ principalId: "1" });
+    const confirmed = await followups.updateBuyerStatus(ensured?.id ?? "", "2", "buyer_confirmed");
+    const unreachable = await followups.updateAdminStatus(ensured?.id ?? "", "buyer_unreachable", "买家未确认成交");
+
+    expect(ensured).toMatchObject({
+      assetId: "1",
+      principalId: "1",
+      sellerId: "1",
+      buyerId: "2",
+      finalPriceCents: 10000,
+      status: "pending_buyer_confirm"
+    });
+    expect(listed).toMatchObject({ total: 1, items: [expect.objectContaining({ id: ensured?.id })] });
+    expect(confirmed).toMatchObject({ status: "buyer_confirmed", buyerConfirmedAt: "2026-05-25T16:30:00.000Z" });
+    expect(unreachable).toMatchObject({
+      status: "buyer_unreachable",
+      note: "买家未确认成交",
+      buyerUnreachableAt: "2026-05-25T16:30:00.000Z"
+    });
   });
 
   it("rejects reports in the MySQL reports service", async () => {

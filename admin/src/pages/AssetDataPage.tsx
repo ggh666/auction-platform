@@ -49,7 +49,7 @@ const statusOptions: Array<{ value: "" | AssetStatus; label: string }> = [
   { value: "", label: "默认：待审核 / 已上架" },
   { value: "pending_review", label: "待审核" },
   { value: "active", label: "已上架" },
-  { value: "ended", label: "已结束" },
+  { value: "ended", label: "已结束 / 已成交" },
   { value: "rejected", label: "已拒绝" },
   { value: "cancelled", label: "已取消" },
   { value: "removed", label: "已移除" },
@@ -139,7 +139,15 @@ function appendAssetFilters(params: URLSearchParams, filters: AssetFilters): voi
   }
 }
 
-function renderStatus(status: AssetStatus) {
+function isConfirmedDeal(asset: AuctionAsset): boolean {
+  return asset.status === "ended" && asset.currentPriceCents !== null && asset.highestBidderId !== null;
+}
+
+function renderStatus(asset: AuctionAsset) {
+  if (isConfirmedDeal(asset)) {
+    return <span className="status success">已成交</span>;
+  }
+  const status = asset.status;
   const meta = statusMeta[status];
   return <span className={`status ${meta.tone}`}>{meta.label}</span>;
 }
@@ -205,6 +213,23 @@ export function AssetDataPage({ onOpenAsset }: AssetDataPageProps) {
       await loadAssets();
     } catch (removeError) {
       setError(removeError instanceof Error ? removeError.message : "下架资产失败");
+    } finally {
+      setActingId(null);
+    }
+  }
+
+  async function confirmDealAsset(assetId: string) {
+    if (!window.confirm("确认该资产已成交？确认后前台会展示成交状态，买家无法继续出价。")) {
+      return;
+    }
+
+    setActingId(assetId);
+    setError(null);
+    try {
+      await adminPost<AssetActionResponse>(`/admin/assets/${assetId}/confirm-deal`);
+      await loadAssets();
+    } catch (confirmError) {
+      setError(confirmError instanceof Error ? confirmError.message : "确认成交失败");
     } finally {
       setActingId(null);
     }
@@ -452,7 +477,7 @@ export function AssetDataPage({ onOpenAsset }: AssetDataPageProps) {
             }
 
             if (column.key === "status") {
-              return renderStatus(row.status);
+              return renderStatus(row);
             }
 
             if (column.key === "effectiveEndAt") {
@@ -466,6 +491,19 @@ export function AssetDataPage({ onOpenAsset }: AssetDataPageProps) {
             if (column.key === "actions") {
               return (
                 <div className="inline-actions">
+                  <button
+                    disabled={
+                      actingId === row.id ||
+                      batching ||
+                      row.status !== "active" ||
+                      row.currentPriceCents === null ||
+                      row.highestBidderId === null
+                    }
+                    onClick={() => void confirmDealAsset(row.id)}
+                    type="button"
+                  >
+                    确认成交
+                  </button>
                   <button
                     disabled={actingId === row.id || batching || row.status !== "active"}
                     onClick={() => void removeAsset(row.id)}

@@ -13,6 +13,7 @@ import { createReportsService } from "../../api/src/modules/reports/reports.serv
 describe("admin permissions", () => {
   it("allows reviewer to review assets but not manage admins", () => {
     expect(canAdmin("reviewer", "asset:review")).toBe(true);
+    expect(canAdmin("reviewer", "auction:confirm_deal")).toBe(true);
     expect(canAdmin("reviewer", "admin:manage")).toBe(false);
     expect(canAdmin("reviewer", "user:view")).toBe(false);
   });
@@ -161,7 +162,7 @@ describe("admin routes", () => {
         method: "POST",
         url: "/api/bids",
         headers: { authorization: `Bearer ${bidderToken}` },
-        payload: { assetId: activeAsset.json().asset.id, amountCents: 10000 }
+        payload: { assetId: activeAsset.json().asset.id, amountCents: 10000, commitmentAccepted: true }
       });
       await app.inject({
         method: "POST",
@@ -258,7 +259,7 @@ describe("admin routes", () => {
         method: "POST",
         url: "/api/bids",
         headers: { authorization: `Bearer ${bidderToken}` },
-        payload: { assetId, amountCents: 10000 }
+        payload: { assetId, amountCents: 10000, commitmentAccepted: true }
       });
 
       const response = await app.inject({
@@ -688,6 +689,11 @@ describe("admin routes", () => {
     const app = buildApp({ enableMockAuth: true, assetsRepository: assets });
 
     try {
+      await app.inject({
+        method: "POST",
+        url: "/api/auth/mock-login",
+        payload: { displayName: "审核队列卖家" }
+      });
       const token = await adminLogin(app, "super", "super-pass");
       const response = await app.inject({
         method: "GET",
@@ -696,7 +702,13 @@ describe("admin routes", () => {
       });
 
       expect(response.statusCode).toBe(200);
-      expect(response.json().items).toEqual([expect.objectContaining({ id: pending.id, status: "pending_review" })]);
+      expect(response.json().items).toEqual([
+        expect.objectContaining({
+          id: pending.id,
+          status: "pending_review",
+          seller: expect.objectContaining({ id: "1", displayName: "审核队列卖家" })
+        })
+      ]);
     } finally {
       await app.close();
     }
@@ -1019,7 +1031,54 @@ describe("admin routes", () => {
         method: "POST",
         url: "/api/bids",
         headers: { authorization: `Bearer ${bidder}` },
-        payload: { assetId: asset.id, amountCents: 10000 }
+        payload: { assetId: asset.id, amountCents: 10000, commitmentAccepted: true }
+      });
+      expect(bid.statusCode).toBe(400);
+      expect(bid.json().error.code).toBe("asset_not_active");
+    } finally {
+      await app.close();
+    }
+  });
+
+  it("allows a principal reviewer to confirm a bid asset as sold so buyers cannot keep bidding", async () => {
+    const admins = createInMemoryAdminRepository();
+    const assets = createInMemoryAssetsRepository();
+    const own = await assets.createPending({ ...pendingAssetInput(), principalId: "1", title: "主理人确认成交资产" });
+    const other = await assets.createPending({ ...pendingAssetInput(), principalId: "2", title: "其他主理人资产" });
+    const activeOwn = await assets.updateStatus(own.id, "active");
+    await assets.updateStatus(other.id, "active");
+    await assets.save({ ...activeOwn, currentPriceCents: 10000, highestBidderId: "2" });
+    const app = buildApp({ enableMockAuth: true, adminRepository: admins, assetsRepository: assets });
+
+    try {
+      const reviewer = await adminLogin(app, "reviewer", "reviewer-pass");
+      const confirmOther = await app.inject({
+        method: "POST",
+        url: `/admin/assets/${other.id}/confirm-deal`,
+        headers: { authorization: `Bearer ${reviewer}` }
+      });
+      const confirmOwn = await app.inject({
+        method: "POST",
+        url: `/admin/assets/${own.id}/confirm-deal`,
+        headers: { authorization: `Bearer ${reviewer}` }
+      });
+
+      expect(confirmOther.statusCode).toBe(404);
+      expect(confirmOwn.statusCode).toBe(200);
+      expect(confirmOwn.json().asset).toMatchObject({ id: own.id, status: "ended", currentPriceCents: 10000, highestBidderId: "2" });
+      await expect(admins.listOperations()).resolves.toMatchObject([
+        { adminId: 1, action: "asset.confirm_deal", targetType: "asset", targetId: own.id }
+      ]);
+
+      const list = await app.inject({ method: "GET", url: "/api/assets" });
+      expect(list.json().items.map((asset: { id: string }) => asset.id)).not.toContain(own.id);
+
+      const bidder = await userLogin(app);
+      const bid = await app.inject({
+        method: "POST",
+        url: "/api/bids",
+        headers: { authorization: `Bearer ${bidder}` },
+        payload: { assetId: own.id, amountCents: 10000, commitmentAccepted: true }
       });
       expect(bid.statusCode).toBe(400);
       expect(bid.json().error.code).toBe("asset_not_active");

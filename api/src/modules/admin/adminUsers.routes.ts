@@ -17,6 +17,8 @@ function toManagedUser(user: UserRow): AdminManagedUser {
     creditScore: user.credit_score,
     creditResetAt: user.credit_reset_at === null ? null : toIsoString(user.credit_reset_at),
     dailyPublishLimit: user.daily_publish_limit,
+    buyerUnreachableCount: user.buyer_unreachable_count,
+    bidRestrictedUntil: user.bid_restricted_until === null ? null : toIsoString(user.bid_restricted_until),
     createdAt: toIsoString(user.created_at),
     updatedAt: toIsoString(user.updated_at)
   };

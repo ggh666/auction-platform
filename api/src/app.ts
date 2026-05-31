@@ -26,6 +26,8 @@ import { createR2ImageStorage, type ImageStorage } from "./modules/images/r2Stor
 import { createInMemoryNotificationsRepository, type NotificationsRepository } from "./modules/notifications/notifications.repository";
 import { registerNotificationRoutes } from "./modules/notifications/notifications.routes";
 import { createInMemoryPrincipalsRepository, type PrincipalsRepository } from "./modules/principals/principals.repository";
+import { createInMemoryDealFollowupsRepository, type DealFollowupsRepository } from "./modules/dealFollowups/dealFollowups.repository";
+import { registerDealFollowupRoutes } from "./modules/dealFollowups/dealFollowups.routes";
 import { registerReportRoutes } from "./modules/reports/reports.routes";
 import { createReportsService, type ReportsService } from "./modules/reports/reports.service";
 import {
@@ -85,6 +87,7 @@ export type AppOptions = {
   principalsRepository?: PrincipalsRepository;
   configsRepository?: SystemConfigsRepository;
   notificationsRepository?: NotificationsRepository;
+  dealFollowupsRepository?: DealFollowupsRepository;
   imageStorage?: ImageStorage;
   contentSafetyService?: ContentSafetyService;
   subscribeMessageService?: SubscribeMessageService;
@@ -107,6 +110,7 @@ export function buildApp(options: AppOptions = {}) {
       !options.principalsRepository ||
       !options.configsRepository ||
       !options.notificationsRepository ||
+      !options.dealFollowupsRepository ||
       (env.contentSafetyEnabled && !options.imageSafetyRepository && !options.contentSafetyService))
   ) {
     throw new Error("Production repositories must be explicitly configured; in-memory repositories are development only");
@@ -123,6 +127,7 @@ export function buildApp(options: AppOptions = {}) {
   const bids = options.bidsRepository ?? createInMemoryBidsRepository((asset) => assets.save(asset), (assetId) => assets.findById(assetId));
   const configs = options.configsRepository ?? createInMemorySystemConfigsRepository();
   const notifications = options.notificationsRepository ?? createInMemoryNotificationsRepository();
+  const dealFollowups = options.dealFollowupsRepository ?? createInMemoryDealFollowupsRepository();
   const imageStorage = options.imageStorage ?? createR2ImageStorage(env);
   const imageSafety = options.imageSafetyRepository ?? createInMemoryImageSafetyRepository();
   const wechatTokenProvider = createWechatAccessTokenProvider({ env });
@@ -158,6 +163,7 @@ export function buildApp(options: AppOptions = {}) {
   registerWechatEventRoutes(app, contentSafety, env);
   registerProfileRoutes(app, { assets, bids });
   registerNotificationRoutes(app, notifications, users);
+  registerDealFollowupRoutes(app, { admins, assets, followups: dealFollowups, principals, users });
   registerImageRoutes(app, imageStorage, users, contentSafety);
   registerAssetRoutes(app, assets, users, bids, configs, reports, contentSafety, principals, assetFollows);
   registerAdminDashboardRoutes(app, admins, { assets, bids, reports, users, principals });

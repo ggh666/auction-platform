@@ -99,7 +99,7 @@ describe("bidding", () => {
         method: "POST",
         url: "/api/bids",
         headers: { authorization: `Bearer ${bidderToken}` },
-        payload: { assetId, amountCents: 10000 }
+        payload: { assetId, amountCents: 10000, commitmentAccepted: true }
       });
 
       expect(bid.statusCode).toBe(200);
@@ -107,6 +107,31 @@ describe("bidding", () => {
         extended: false,
         bid: { assetId, amountCents: 10000, bidder: { displayName: "买家" } },
         asset: { id: assetId, currentPriceCents: 10000 }
+      });
+    } finally {
+      await app.close();
+    }
+  });
+
+  it("rejects bids until the buyer accepts the bid commitment", async () => {
+    const app = buildApp({ enableMockAuth: true });
+
+    try {
+      const sellerToken = await login(app, "卖家");
+      const bidderToken = await login(app, "买家");
+      const assetId = await createActiveAsset(app, sellerToken);
+
+      const bid = await app.inject({
+        method: "POST",
+        url: "/api/bids",
+        headers: { authorization: `Bearer ${bidderToken}` },
+        payload: { assetId, amountCents: 10000 }
+      });
+
+      expect(bid.statusCode).toBe(400);
+      expect(bid.json().error).toMatchObject({
+        code: "bid_commitment_required",
+        message: "Bid commitment must be accepted"
       });
     } finally {
       await app.close();
@@ -125,13 +150,13 @@ describe("bidding", () => {
         method: "POST",
         url: "/api/bids",
         headers: { authorization: `Bearer ${bidderToken}` },
-        payload: { assetId, amountCents: 10000 }
+        payload: { assetId, amountCents: 10000, commitmentAccepted: true }
       });
       const repeatedBid = await app.inject({
         method: "POST",
         url: "/api/bids",
         headers: { authorization: `Bearer ${bidderToken}` },
-        payload: { assetId, amountCents: 10100 }
+        payload: { assetId, amountCents: 10100, commitmentAccepted: true }
       });
 
       expect(firstBid.statusCode).toBe(200);
@@ -156,7 +181,7 @@ describe("bidding", () => {
         method: "POST",
         url: "/api/bids",
         headers: { authorization: `Bearer ${bidderToken}` },
-        payload: { assetId, amountCents: 10000 }
+        payload: { assetId, amountCents: 10000, commitmentAccepted: true }
       });
 
       expect(bid.statusCode).toBe(403);
@@ -180,7 +205,7 @@ describe("bidding", () => {
         method: "POST",
         url: "/api/bids",
         headers: { authorization: `Bearer ${bidderToken}` },
-        payload: { assetId, amountCents: 10000 }
+        payload: { assetId, amountCents: 10000, commitmentAccepted: true }
       });
 
       expect(bid.statusCode).toBe(403);
@@ -205,7 +230,7 @@ describe("bidding", () => {
         method: "POST",
         url: "/api/bids",
         headers: { authorization: `Bearer ${sellerToken}` },
-        payload: { assetId, amountCents: 10000 }
+        payload: { assetId, amountCents: 10000, commitmentAccepted: true }
       });
 
       expect(bid.statusCode).toBe(403);
@@ -228,14 +253,14 @@ describe("bidding", () => {
         method: "POST",
         url: "/api/bids",
         headers: { authorization: `Bearer ${firstBidderToken}` },
-        payload: { assetId, amountCents: 10000 }
+        payload: { assetId, amountCents: 10000, commitmentAccepted: true }
       });
 
       const bid = await app.inject({
         method: "POST",
         url: "/api/bids",
         headers: { authorization: `Bearer ${secondBidderToken}` },
-        payload: { assetId, amountCents: 10099 }
+        payload: { assetId, amountCents: 10099, commitmentAccepted: true }
       });
 
       expect(bid.statusCode).toBe(400);
@@ -261,7 +286,7 @@ describe("bidding", () => {
         method: "POST",
         url: "/api/bids",
         headers: { authorization: `Bearer ${bidderToken}` },
-        payload: { assetId: asset.id, amountCents: 10000 }
+        payload: { assetId: asset.id, amountCents: 10000, commitmentAccepted: true }
       });
 
       expect(bid.statusCode).toBe(400);
@@ -290,7 +315,7 @@ describe("bidding", () => {
         method: "POST",
         url: "/api/bids",
         headers: { authorization: `Bearer ${bidderToken}` },
-        payload: { assetId: asset.id, amountCents: 10000 }
+        payload: { assetId: asset.id, amountCents: 10000, commitmentAccepted: true }
       });
 
       expect(bid.statusCode).toBe(200);
@@ -321,13 +346,13 @@ describe("bidding", () => {
         method: "POST",
         url: "/api/bids",
         headers: { authorization: `Bearer ${firstBidderToken}` },
-        payload: { assetId, amountCents: 10000 }
+        payload: { assetId, amountCents: 10000, commitmentAccepted: true }
       });
       await app.inject({
         method: "POST",
         url: "/api/bids",
         headers: { authorization: `Bearer ${secondBidderToken}` },
-        payload: { assetId, amountCents: 10100 }
+        payload: { assetId, amountCents: 10100, commitmentAccepted: true }
       });
 
       const firstBidderNotifications = await app.inject({
@@ -390,13 +415,13 @@ describe("bidding", () => {
         method: "POST",
         url: "/api/bids",
         headers: { authorization: `Bearer ${firstBidderToken}` },
-        payload: { assetId, amountCents: 10000 }
+        payload: { assetId, amountCents: 10000, commitmentAccepted: true }
       });
       const response = await app.inject({
         method: "POST",
         url: "/api/bids",
         headers: { authorization: `Bearer ${secondBidderToken}` },
-        payload: { assetId, amountCents: 10100 }
+        payload: { assetId, amountCents: 10100, commitmentAccepted: true }
       });
 
       expect(response.statusCode).toBe(200);
@@ -436,13 +461,13 @@ describe("bidding", () => {
         method: "POST",
         url: "/api/bids",
         headers: { authorization: `Bearer ${firstBidderToken}` },
-        payload: { assetId, amountCents: 10000 }
+        payload: { assetId, amountCents: 10000, commitmentAccepted: true }
       });
       const response = await app.inject({
         method: "POST",
         url: "/api/bids",
         headers: { authorization: `Bearer ${secondBidderToken}` },
-        payload: { assetId, amountCents: 10100 }
+        payload: { assetId, amountCents: 10100, commitmentAccepted: true }
       });
 
       expect(response.statusCode).toBe(200);
@@ -466,13 +491,13 @@ describe("bidding", () => {
         method: "POST",
         url: "/api/bids",
         headers: { authorization: `Bearer ${firstBidderToken}` },
-        payload: { assetId, amountCents: 10000 }
+        payload: { assetId, amountCents: 10000, commitmentAccepted: true }
       });
       await app.inject({
         method: "POST",
         url: "/api/bids",
         headers: { authorization: `Bearer ${secondBidderToken}` },
-        payload: { assetId, amountCents: 10100 }
+        payload: { assetId, amountCents: 10100, commitmentAccepted: true }
       });
       const notifications = await app.inject({
         method: "GET",
@@ -519,7 +544,7 @@ describe("bidding", () => {
         method: "POST",
         url: "/api/bids",
         headers: { authorization: `Bearer ${bidderToken}` },
-        payload: { assetId, amountCents: 10000 }
+        payload: { assetId, amountCents: 10000, commitmentAccepted: true }
       });
 
       expect(bid.statusCode).toBe(200);
@@ -553,7 +578,7 @@ describe("bidding", () => {
         method: "POST",
         url: "/api/bids",
         headers: { authorization: `Bearer ${bidderToken}` },
-        payload: { assetId, amountCents: 10000 }
+        payload: { assetId, amountCents: 10000, commitmentAccepted: true }
       });
 
       expect(bid.statusCode).toBe(200);

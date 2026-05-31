@@ -11,6 +11,7 @@ import { createMysqlImageSafetyRepository } from "./modules/contentSafety/imageS
 import { createMysqlSystemConfigsRepository } from "./modules/configs/configs.mysql.repository";
 import { createMysqlNotificationsRepository } from "./modules/notifications/notifications.mysql.repository";
 import { createMysqlPrincipalsRepository } from "./modules/principals/principals.mysql.repository";
+import { createMysqlDealFollowupsRepository } from "./modules/dealFollowups/dealFollowups.mysql.repository";
 import { createMysqlReportsService } from "./modules/reports/reports.mysql.service";
 import { createMysqlUsersRepository } from "./modules/users/users.mysql.repository";
 
@@ -44,6 +45,7 @@ export function buildRuntimeApp(options: RuntimeAppOptions = {}): RuntimeApp {
     principalsRepository: createMysqlPrincipalsRepository(pool),
     configsRepository: createMysqlSystemConfigsRepository(pool),
     notificationsRepository: createMysqlNotificationsRepository(pool),
+    dealFollowupsRepository: createMysqlDealFollowupsRepository(pool),
     imageSafetyRepository: createMysqlImageSafetyRepository(pool)
   });
 

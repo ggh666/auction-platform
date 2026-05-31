@@ -9,7 +9,8 @@ import {
   type AdminAssetListInput,
   type AssetsRepository,
   type CreateAssetInput,
-  type PublicAssetListInput
+  type PublicAssetListInput,
+  type SoldFollowupCandidateInput
 } from "./assets.repository";
 
 export type AssetDbRow = {
@@ -185,6 +186,24 @@ export function createMysqlAssetsRepository(db: MysqlExecutor): AssetsRepository
 
   function principalScopeWhere(input: Pick<AdminAssetListInput, "principalId"> = {}) {
     return input.principalId ? { clause: " AND principal_id = ?", params: [Number(input.principalId)] } : { clause: "", params: [] };
+  }
+
+  function soldFollowupCandidateWhere(input: SoldFollowupCandidateInput = {}) {
+    const where = [
+      "current_price_cents IS NOT NULL",
+      "highest_bidder_id IS NOT NULL",
+      "(status = 'ended' OR effective_end_at <= ?)"
+    ];
+    const params: unknown[] = [toMysqlDate(input.nowIso ?? new Date().toISOString())];
+    if (input.principalId) {
+      where.push("principal_id = ?");
+      params.push(Number(input.principalId));
+    }
+    if (input.userId) {
+      where.push("(seller_id = ? OR highest_bidder_id = ?)");
+      params.push(Number(input.userId), Number(input.userId));
+    }
+    return { clause: `WHERE ${where.join(" AND ")}`, params };
   }
 
   async function readById(id: string, input: Pick<AdminAssetListInput, "principalId"> = {}): Promise<AuctionAsset | null> {
@@ -417,6 +436,19 @@ export function createMysqlAssetsRepository(db: MysqlExecutor): AssetsRepository
       return assets.filter((asset) => asset.currentPriceCents !== null || asset.status === "ended");
     },
 
+    async listSoldFollowupCandidates(input = {}) {
+      const { clause, params } = soldFollowupCandidateWhere(input);
+      const limit = Number.isInteger(input.limit) && input.limit && input.limit > 0 ? Math.min(input.limit, 500) : 200;
+      const [rows] = await db.execute<AssetDbRow[]>(
+        `${assetSelect}
+         ${clause}
+         ORDER BY updated_at DESC, id DESC
+         LIMIT ?`,
+        [...params, limit]
+      );
+      return Promise.all(allRows<AssetDbRow>(rows).map(async (row) => toAuctionAsset(row, await readImageUrls(String(row.id)))));
+    },
+
     async findById(id, input = {}) {
       return readById(id, input);
     },
@@ -471,6 +503,31 @@ export function createMysqlAssetsRepository(db: MysqlExecutor): AssetsRepository
         `UPDATE auction_assets
          SET status = 'removed', ended_at = CURRENT_TIMESTAMP
          WHERE id = ? AND status = 'active'${scope.clause}`,
+        [Number(id), ...scope.params]
+      );
+      if (result.affectedRows === 0) {
+        const existing = await readById(id, input);
+        if (!existing) {
+          throw new Error("Asset not found");
+        }
+        throw new Error("Invalid asset state");
+      }
+      const asset = await readById(id);
+      if (!asset) {
+        throw new Error("Asset not found");
+      }
+      return asset;
+    },
+
+    async confirmActiveDeal(id, input = {}) {
+      const scope = principalScopeWhere(input);
+      const [result] = await db.execute<MysqlResultHeader>(
+        `UPDATE auction_assets
+         SET status = 'ended', effective_end_at = CURRENT_TIMESTAMP, ended_at = CURRENT_TIMESTAMP
+         WHERE id = ?
+           AND status = 'active'
+           AND current_price_cents IS NOT NULL
+           AND highest_bidder_id IS NOT NULL${scope.clause}`,
         [Number(id), ...scope.params]
       );
       if (result.affectedRows === 0) {

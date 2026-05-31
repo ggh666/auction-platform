@@ -12,6 +12,9 @@ describe("profile results page", () => {
     expect(page).toContain("page: requestedPage");
     expect(page).toContain("pageSize");
     expect(page).toContain("result.asset.title");
+    expect(page).toContain("listMyDealFollowups");
+    expect(page).toContain("confirmDealFollowup");
+    expect(page).toContain("abandonDealFollowup");
     expect(page).not.toContain("confirmTradingDisclaimer");
     expect(page).not.toContain("readSessionUser");
   });

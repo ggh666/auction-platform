@@ -6,7 +6,9 @@ import type {
   AdminUserActionResponse,
   AdminPrincipal,
   AdminRole,
-  AssetStatus
+  AuctionAsset,
+  AssetStatus,
+  UserSummary
 } from "@auction/shared";
 import { randomBytes } from "node:crypto";
 import type { FastifyInstance } from "fastify";
@@ -68,6 +70,10 @@ type AdminBatchAssetReviewFailure = {
   assetId: string;
   code: string;
   message: string;
+};
+
+type AdminReviewAsset = AuctionAsset & {
+  seller: UserSummary;
 };
 
 function stringQuery(value: unknown): string | undefined {
@@ -136,6 +142,15 @@ function readAdminAssetFilters(query: AdminAssetQuery): Pick<
     gameName: stringQuery(query.gameName),
     assetType: stringQuery(query.assetType)
   };
+}
+
+async function attachSellerSummaries(assets: AuctionAsset[], users: UsersRepository): Promise<AdminReviewAsset[]> {
+  return Promise.all(
+    assets.map(async (asset) => ({
+      ...asset,
+      seller: await readUserSummary(users, asset.sellerId)
+    }))
+  );
 }
 
 function readPrincipalBody(value: AdminPrincipalBody | undefined) {
@@ -498,7 +513,14 @@ export function registerAdminRoutes(
   app.get<{ Querystring: AdminListQuery }>("/admin/assets/review", { preHandler: requireAdmin("asset:review", admins) }, async (request) => {
     const scope = await readAdminDataScope(request, principals);
     const { page, pageSize } = readPagination(request.query);
-    return scope ? assets.listPendingReview({ ...scope, page, pageSize }) : emptyAdminAssetList(page, pageSize);
+    if (!scope) {
+      return emptyAdminAssetList(page, pageSize);
+    }
+    const result = await assets.listPendingReview({ ...scope, page, pageSize });
+    return {
+      ...result,
+      items: await attachSellerSummaries(result.items, users)
+    };
   });
 
   app.get<{ Querystring: AdminAssetQuery; Reply: AdminAssetListResponse }>(
@@ -611,6 +633,8 @@ export function registerAdminRoutes(
           creditResetAt: user.credit_reset_at === null ? null : new Date(user.credit_reset_at).toISOString(),
           banReason: user.ban_reason,
           dailyPublishLimit: user.daily_publish_limit,
+          buyerUnreachableCount: user.buyer_unreachable_count,
+          bidRestrictedUntil: user.bid_restricted_until === null ? null : new Date(user.bid_restricted_until).toISOString(),
           createdAt: new Date(user.created_at).toISOString(),
           updatedAt: new Date(user.updated_at).toISOString()
         }
@@ -695,6 +719,28 @@ export function registerAdminRoutes(
       await admins.logOperation({
         adminId,
         action: "asset.remove",
+        targetType: "asset",
+        targetId: asset.id
+      });
+    } catch (error) {
+      await assets.save({ ...asset, status: "active" });
+      throw error;
+    }
+    return asset;
+  }
+
+  async function confirmDeal(assetId: string, adminId: number, scope: AdminDataScope) {
+    let asset;
+    try {
+      asset = await assets.confirmActiveDeal(assetId, scope);
+    } catch (error) {
+      translateAssetActionError(error, "Only active assets with bids can be confirmed as sold");
+    }
+
+    try {
+      await admins.logOperation({
+        adminId,
+        action: "asset.confirm_deal",
         targetType: "asset",
         targetId: asset.id
       });
@@ -826,6 +872,22 @@ export function registerAdminRoutes(
         throw new HttpError(404, "not_found", "Asset not found");
       }
       return { asset: await removeAsset(request.params.assetId, request.admin.id, scope) };
+    }
+  );
+
+  app.post<{ Params: { assetId: string } }>(
+    "/admin/assets/:assetId/confirm-deal",
+    { preHandler: requireAdmin("auction:confirm_deal", admins) },
+    async (request) => {
+      if (!request.admin) {
+        throw new HttpError(401, "unauthorized", "Authentication required");
+      }
+
+      const scope = await readAdminDataScope(request, principals);
+      if (!scope) {
+        throw new HttpError(404, "not_found", "Asset not found");
+      }
+      return { asset: await confirmDeal(request.params.assetId, request.admin.id, scope) };
     }
   );
 }

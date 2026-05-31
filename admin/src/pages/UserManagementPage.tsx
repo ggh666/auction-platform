@@ -151,6 +151,8 @@ export function UserManagementPage() {
             { key: "name", label: "昵称" },
             { key: "creditScore", label: "信誉分", align: "right" },
             { key: "violationCount", label: "违规次数", align: "right" },
+            { key: "buyerUnreachableCount", label: "买家失联", align: "right" },
+            { key: "bidRestrictedUntil", label: "出价限制" },
             { key: "dailyPublishLimit", label: "每日发布", align: "right" },
             { key: "status", label: "状态" },
             { key: "banReason", label: "封禁原因" },
@@ -175,6 +177,14 @@ export function UserManagementPage() {
 
             if (column.key === "dailyPublishLimit") {
               return row.dailyPublishLimit === null ? <span className="muted">默认 3 次</span> : `${row.dailyPublishLimit} 次`;
+            }
+
+            if (column.key === "buyerUnreachableCount") {
+              return row.buyerUnreachableCount > 0 ? <span className="status warning">{row.buyerUnreachableCount}</span> : 0;
+            }
+
+            if (column.key === "bidRestrictedUntil") {
+              return row.bidRestrictedUntil ? formatTime(row.bidRestrictedUntil) : <span className="muted">无</span>;
             }
 
             if (column.key === "creditScore") {

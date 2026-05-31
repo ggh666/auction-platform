@@ -114,7 +114,9 @@ function isPubliclyFollowable(asset: AuctionAsset, now = new Date()): boolean {
 }
 
 function isPubliclyViewable(asset: AuctionAsset, now = new Date()): boolean {
-  return asset.status === "active" && new Date(asset.effectiveEndAt).getTime() > now.getTime();
+  const isActive = asset.status === "active" && new Date(asset.effectiveEndAt).getTime() > now.getTime();
+  const isConfirmedDeal = asset.status === "ended" && asset.currentPriceCents !== null && asset.highestBidderId !== null;
+  return isActive || isConfirmedDeal;
 }
 
 async function readFollowedAssetIds(

@@ -6,12 +6,13 @@ import { AssetDataPage } from "./pages/AssetDataPage";
 import { AssetDetailPage } from "./pages/AssetDetailPage";
 import { ConfigPage } from "./pages/ConfigPage";
 import { DashboardPage } from "./pages/DashboardPage";
+import { DealFollowupPage } from "./pages/DealFollowupPage";
 import { LoginPage } from "./pages/LoginPage";
 import { PrincipalManagementPage } from "./pages/PrincipalManagementPage";
 import { ReviewCenterPage } from "./pages/ReviewCenterPage";
 import { UserManagementPage } from "./pages/UserManagementPage";
 
-type PageKey = "dashboard" | "reviews" | "assetData" | "adminUsers" | "principals" | "users" | "configs";
+type PageKey = "dashboard" | "reviews" | "assetData" | "dealFollowups" | "adminUsers" | "principals" | "users" | "configs";
 
 function renderPage(page: PageKey, onOpenAsset: (assetId: string) => void, currentAdminId: string) {
   switch (page) {
@@ -19,6 +20,8 @@ function renderPage(page: PageKey, onOpenAsset: (assetId: string) => void, curre
       return <ReviewCenterPage onOpenAsset={onOpenAsset} />;
     case "assetData":
       return <AssetDataPage onOpenAsset={onOpenAsset} />;
+    case "dealFollowups":
+      return <DealFollowupPage onOpenAsset={onOpenAsset} />;
     case "adminUsers":
       return <AdminUserManagementPage currentAdminId={currentAdminId} />;
     case "users":
