@@ -68,6 +68,40 @@ async function createEndedSoldAsset(
   return assetId;
 }
 
+async function createExpiredSoldActiveAsset(
+  app: ReturnType<typeof buildApp>,
+  assets: AssetsRepository,
+  sellerToken: string,
+  bidderToken: string,
+  overrides: Record<string, unknown> = {}
+) {
+  const created = await app.inject({
+    method: "POST",
+    url: "/api/assets",
+    headers: { authorization: `Bearer ${sellerToken}` },
+    payload: assetPayload(overrides)
+  });
+  const assetId = created.json().asset.id as string;
+  const reviewer = await adminLogin(app);
+  await app.inject({
+    method: "POST",
+    url: `/admin/assets/${assetId}/approve`,
+    headers: { authorization: `Bearer ${reviewer}` }
+  });
+  await app.inject({
+    method: "POST",
+    url: "/api/bids",
+    headers: { authorization: `Bearer ${bidderToken}` },
+    payload: { assetId, amountCents: 10000, commitmentAccepted: true }
+  });
+  const asset = await assets.findById(assetId);
+  if (!asset) {
+    throw new Error("Created asset not found");
+  }
+  await assets.save({ ...asset, effectiveEndAt: new Date(Date.now() - 1000).toISOString() });
+  return assetId;
+}
+
 describe("deal followups", () => {
   it("lets the winning buyer confirm or abandon an ended sold asset without phone authorization", async () => {
     const assets = createInMemoryAssetsRepository();
@@ -164,6 +198,47 @@ describe("deal followups", () => {
         note: "已通过站内状态确认联系",
         principalContactedAt: expect.any(String)
       });
+    } finally {
+      await app.close();
+    }
+  });
+
+  it("uses the same completed status for asset confirmation and deal followup confirmation", async () => {
+    const assets = createInMemoryAssetsRepository();
+    const app = buildApp({ enableMockAuth: true, assetsRepository: assets });
+
+    try {
+      const seller = await login(app, "卖家");
+      const buyer = await login(app, "买家");
+      const assetId = await createExpiredSoldActiveAsset(app, assets, seller.token, buyer.token, { title: "跟进确认成交资产" });
+      const reviewer = await adminLogin(app);
+      const list = await app.inject({
+        method: "GET",
+        url: "/admin/deal-followups",
+        headers: { authorization: `Bearer ${reviewer}` }
+      });
+      const followupId = list.json().items[0].id as string;
+
+      const completed = await app.inject({
+        method: "POST",
+        url: `/admin/deal-followups/${followupId}/status`,
+        headers: { authorization: `Bearer ${reviewer}` },
+        payload: { status: "completed", note: "主理人确认已成交" }
+      });
+      const asset = await assets.findById(assetId);
+      const publicDetail = await app.inject({ method: "GET", url: `/api/assets/${assetId}` });
+
+      expect(completed.statusCode).toBe(200);
+      expect(completed.json().followup).toMatchObject({
+        id: followupId,
+        assetId,
+        status: "completed",
+        completedAt: expect.any(String),
+        note: "主理人确认已成交"
+      });
+      expect(asset).toMatchObject({ id: assetId, status: "ended", currentPriceCents: 10000, highestBidderId: buyer.user.id });
+      expect(publicDetail.statusCode).toBe(200);
+      expect(publicDetail.json().asset).toMatchObject({ id: assetId, status: "ended" });
     } finally {
       await app.close();
     }

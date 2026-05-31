@@ -1,5 +1,6 @@
 import type {
   AdminDealFollowupStatusRequest,
+  AuctionAsset,
   DealFollowupActionResponse,
   DealFollowupItem,
   DealFollowupListResponse,
@@ -103,6 +104,32 @@ async function toDealFollowupItem(
 
 function withHasMore<T extends { page: number; pageSize: number; total: number }>(result: T) {
   return { ...result, hasMore: result.page * result.pageSize < result.total };
+}
+
+async function confirmAssetForCompletedFollowup(
+  followup: DealFollowupRecord,
+  scope: { principalId?: string },
+  assets: AssetsRepository
+): Promise<AuctionAsset | null> {
+  const asset = await assets.findById(followup.assetId, scope);
+  if (!asset) {
+    throw new HttpError(404, "not_found", "Deal followup asset not found");
+  }
+  if (asset.status === "ended") {
+    return null;
+  }
+  try {
+    await assets.confirmActiveDeal(followup.assetId, scope);
+    return asset;
+  } catch (error) {
+    if (error instanceof Error && error.message === "Asset not found") {
+      throw new HttpError(404, "not_found", "Deal followup asset not found");
+    }
+    if (error instanceof Error && error.message === "Invalid asset state") {
+      throw badRequest("invalid_followup_state", "Deal followup asset cannot be confirmed as sold");
+    }
+    throw error;
+  }
 }
 
 export function registerDealFollowupRoutes(
@@ -219,9 +246,24 @@ export function registerDealFollowupRoutes(
       if (!scope || !existing || (scope.principalId && existing.principalId !== scope.principalId)) {
         throw new HttpError(404, "not_found", "Deal followup not found");
       }
+      let originalAsset: AuctionAsset | null = null;
+      if (body.status === "completed") {
+        originalAsset = await confirmAssetForCompletedFollowup(existing, scope, deps.assets);
+      }
 
-      const followup = await deps.followups.updateAdminStatus(followupId, body.status, body.note);
+      let followup;
+      try {
+        followup = await deps.followups.updateAdminStatus(followupId, body.status, body.note);
+      } catch (error) {
+        if (originalAsset) {
+          await deps.assets.save(originalAsset);
+        }
+        throw error;
+      }
       if (!followup) {
+        if (originalAsset) {
+          await deps.assets.save(originalAsset);
+        }
         throw new HttpError(404, "not_found", "Deal followup not found");
       }
       if (body.status === "buyer_unreachable" && existing.status !== "buyer_unreachable") {

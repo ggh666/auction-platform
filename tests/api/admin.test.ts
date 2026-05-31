@@ -1066,6 +1066,19 @@ describe("admin routes", () => {
       expect(confirmOther.statusCode).toBe(404);
       expect(confirmOwn.statusCode).toBe(200);
       expect(confirmOwn.json().asset).toMatchObject({ id: own.id, status: "ended", currentPriceCents: 10000, highestBidderId: "2" });
+      const followupList = await app.inject({
+        method: "GET",
+        url: "/admin/deal-followups",
+        headers: { authorization: `Bearer ${reviewer}` }
+      });
+      expect(followupList.json().items).toEqual([
+        expect.objectContaining({
+          assetId: own.id,
+          status: "completed",
+          completedAt: expect.any(String),
+          note: "主理人确认已成交"
+        })
+      ]);
       await expect(admins.listOperations()).resolves.toMatchObject([
         { adminId: 1, action: "asset.confirm_deal", targetType: "asset", targetId: own.id }
       ]);

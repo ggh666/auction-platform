@@ -17,6 +17,7 @@ import { HttpError, badRequest } from "../../http/errors";
 import { defaultAdminAssetStatuses, type AdminAssetListInput, type AssetsRepository } from "../assets/assets.repository";
 import type { BidsRepository } from "../bids/bids.repository";
 import type { ContentSafetyService } from "../contentSafety/contentSafety.service";
+import type { DealFollowupsRepository } from "../dealFollowups/dealFollowups.repository";
 import type { PrincipalRecord, PrincipalsRepository } from "../principals/principals.repository";
 import { readUserSummary, toBidDisplayRecord } from "../users/userSummary";
 import type { UsersRepository } from "../users/users.repository";
@@ -357,7 +358,8 @@ export function registerAdminRoutes(
   bids: BidsRepository,
   users: UsersRepository,
   contentSafety: ContentSafetyService,
-  principals: PrincipalsRepository
+  principals: PrincipalsRepository,
+  followups: DealFollowupsRepository
 ): void {
   const auth = createAdminAuthService(app, admins);
 
@@ -730,6 +732,10 @@ export function registerAdminRoutes(
   }
 
   async function confirmDeal(assetId: string, adminId: number, scope: AdminDataScope) {
+    const original = await assets.findById(assetId, scope);
+    if (!original) {
+      throw new HttpError(404, "not_found", "Asset not found");
+    }
     let asset;
     try {
       asset = await assets.confirmActiveDeal(assetId, scope);
@@ -737,17 +743,28 @@ export function registerAdminRoutes(
       translateAssetActionError(error, "Only active assets with bids can be confirmed as sold");
     }
 
+    let followup;
     try {
-      await admins.logOperation({
-        adminId,
-        action: "asset.confirm_deal",
-        targetType: "asset",
-        targetId: asset.id
-      });
+      const ensured = await followups.ensureForSoldAsset(asset);
+      if (!ensured) {
+        throw new Error("Deal followup could not be created");
+      }
+      followup = await followups.updateAdminStatus(ensured.id, "completed", "主理人确认已成交");
+      if (!followup) {
+        throw new Error("Deal followup could not be completed");
+      }
     } catch (error) {
-      await assets.save({ ...asset, status: "active" });
+      await assets.save(original);
       throw error;
     }
+
+    await admins.logOperation({
+      adminId,
+      action: "asset.confirm_deal",
+      targetType: "asset",
+      targetId: asset.id,
+      detail: { followupId: followup.id, status: "completed" }
+    });
     return asset;
   }
 

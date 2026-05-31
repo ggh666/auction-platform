@@ -149,7 +149,7 @@ Git 接入、首次提交、远程仓库、分支规范和发布标签建议见 
 - `POST /admin/assets/:assetId/remove`: 下架已上架资产，前台不可见且不能继续出价。
 - `POST /admin/assets/:assetId/confirm-deal`: 确认有出价的已上架资产成交，资产变为已结束并按已成交展示，前台详情会展示“成交”盖章且不能继续出价。
 - `GET /admin/deal-followups`: 成交跟进列表，支持状态筛选和分页，并按主理人数据范围隔离。
-- `POST /admin/deal-followups/:followupId/status`: 更新成交跟进状态，支持 `principal_contacted`、`buyer_unreachable`、`completed`、`cancelled`；标记买家失联会累计失联次数并触发出价限制。
+- `POST /admin/deal-followups/:followupId/status`: 更新成交跟进状态，支持 `principal_contacted`、`buyer_unreachable`、`completed`、`cancelled`；标记 `completed` 与资产数据页“确认成交”语义一致，会把有出价的资产确认为已成交并结束交换；标记买家失联会累计失联次数并触发出价限制。
 - `GET /admin/users`: 用户管理分页列表，支持关键词查询，返回封禁状态、每日发布次数、违规次数、信誉分、买家失联次数和出价限制截止时间。
 - `POST /admin/users/:userId/ban`: 封禁用户。
 - `POST /admin/users/:userId/unban`: 解除封禁。
