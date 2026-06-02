@@ -3,6 +3,7 @@ export type Env = {
   logLevel: LogLevel;
   host: string;
   port: number;
+  apiPublicBaseUrl: string;
   jwtSecret: string;
   mysqlUri: string;
   r2Endpoint: string;
@@ -59,6 +60,10 @@ function readLogLevel(value: string | undefined): LogLevel {
   throw new Error("Invalid LOG_LEVEL");
 }
 
+function defaultApiPublicBaseUrl(nodeEnv: string, port: number): string {
+  return nodeEnv === "production" ? "https://api-auction.toolmatrix.top" : `http://127.0.0.1:${port}`;
+}
+
 export function readEnv(source: NodeJS.ProcessEnv = process.env): Env {
   const port = Number(source.PORT ?? 3002);
   if (!Number.isInteger(port) || port < 1 || port > 65535) {
@@ -110,6 +115,7 @@ export function readEnv(source: NodeJS.ProcessEnv = process.env): Env {
     logLevel: readLogLevel(source.LOG_LEVEL),
     host: source.HOST ?? "0.0.0.0",
     port,
+    apiPublicBaseUrl: source.API_PUBLIC_BASE_URL?.trim() || defaultApiPublicBaseUrl(nodeEnv, port),
     jwtSecret: source.JWT_SECRET ?? defaultJwtSecret,
     mysqlUri: source.MYSQL_URI ?? defaultMysqlUri,
     r2Endpoint: source.R2_ENDPOINT ?? "",

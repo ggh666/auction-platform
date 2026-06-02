@@ -2,7 +2,7 @@
   <view class="page">
     <view class="header">
       <view>
-        <text class="title">选择游戏</text>
+        <text class="title">选择资源</text>
         <text class="subtitle">选择后进入对应资产交换区</text>
       </view>
       <button class="share-button" open-type="share">分享</button>

@@ -76,6 +76,7 @@ function runLocalTests() {
       "test",
       "--",
       "tests/api/content-safety.test.ts",
+      "tests/api/retry-failed-image-checks.test.ts",
       "tests/api/assets.test.ts",
       "tests/api/reports.test.ts"
     ],
@@ -87,7 +88,14 @@ function runLocalTests() {
 function checkEnvFile() {
   const envFile = process.env.ENV_FILE?.trim() || "/etc/auction-api.env";
   const content = readFileSync(envFile, "utf8");
-  const keys = ["WECHAT_APPID", "WECHAT_APP_SECRET", "WECHAT_EVENT_TOKEN", "CONTENT_SAFETY_ENABLED", "CONTENT_SAFETY_STRICT"];
+  const keys = [
+    "WECHAT_APPID",
+    "WECHAT_APP_SECRET",
+    "WECHAT_EVENT_TOKEN",
+    "API_PUBLIC_BASE_URL",
+    "CONTENT_SAFETY_ENABLED",
+    "CONTENT_SAFETY_STRICT"
+  ];
   for (const key of keys) {
     const match = new RegExp(`^${key}=(.*)$`, "m").exec(content);
     const value = match?.[1]?.trim();
@@ -101,7 +109,7 @@ function checkEnvFile() {
       console.log(`${key}=${value}`);
     }
   }
-  console.log("\nRequired: CONTENT_SAFETY_ENABLED=true and CONTENT_SAFETY_STRICT=true");
+  console.log("\nRequired: CONTENT_SAFETY_ENABLED=true, CONTENT_SAFETY_STRICT=true, and API_PUBLIC_BASE_URL must be a public HTTPS API base URL.");
 }
 
 async function checkCallbackReachable() {

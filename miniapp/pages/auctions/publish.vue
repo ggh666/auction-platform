@@ -4,6 +4,10 @@
     <view class="context-row">
       <text>{{ gameName }} / {{ assetType }}</text>
     </view>
+    <view class="privacy-note">
+      <text class="privacy-title">隐私说明</text>
+      <text class="privacy-text">标题、描述、图片、估价和主理人选择会用于信息展示、内容安全审核和交换沟通；请勿上传手机号、身份证号、住址等无关敏感信息。</text>
+    </view>
     <view class="field-label required">主理人</view>
     <picker
       mode="selector"
@@ -49,7 +53,7 @@
         <input v-model="dragonBallForm.attributes" class="input" placeholder="附加伤害+10%，无视冰甲+5%" />
       </view>
     </view>
-    <input v-model="form.startingPriceYuan" class="input" type="number" placeholder="起拍价，单位元宝" />
+    <input v-model="form.startingPriceYuan" class="input" type="number" placeholder="起估价，单位元宝" />
     <input v-model="form.minIncrementYuan" class="input" type="number" placeholder="最低加价，单位元宝" />
     <view class="image-panel">
       <view class="image-heading">
@@ -437,6 +441,32 @@ async function submitDraft() {
   border-radius: 8rpx;
 }
 
+.privacy-note {
+  padding: 18rpx 20rpx;
+  margin-bottom: 20rpx;
+  background: #f8fafc;
+  border-left: 6rpx solid #175cd3;
+  border-radius: 8rpx;
+}
+
+.privacy-title,
+.privacy-text {
+  display: block;
+}
+
+.privacy-title {
+  margin-bottom: 6rpx;
+  font-size: 24rpx;
+  font-weight: 700;
+  color: #175cd3;
+}
+
+.privacy-text {
+  font-size: 24rpx;
+  line-height: 1.55;
+  color: #475467;
+}
+
 .field-label {
   display: block;
   margin-bottom: 8rpx;
@@ -568,6 +598,7 @@ async function submitDraft() {
 }
 
 .context-row,
+.privacy-note,
 .dragon-ball-panel,
 .image-panel {
   background: linear-gradient(145deg, rgba(16, 42, 38, 0.96), rgba(8, 19, 20, 0.98));
@@ -577,6 +608,18 @@ async function submitDraft() {
 
 .context-row {
   color: #8df0c7;
+}
+
+.privacy-note {
+  border-left-color: #ffd66b;
+}
+
+.privacy-title {
+  color: #ffd66b;
+}
+
+.privacy-text {
+  color: #a9c9ba;
 }
 
 .field-label,

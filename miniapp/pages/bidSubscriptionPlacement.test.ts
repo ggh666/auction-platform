@@ -9,12 +9,13 @@ describe("bid subscription prompt placement", () => {
     const detailPage = readFileSync(detailPagePath, "utf8");
     const disclaimerIndex = detailPage.indexOf("const acceptedDisclaimer = await confirmTradingDisclaimer()");
     const bidRequestIndex = detailPage.indexOf("const response = await placeBid");
-    const subscribeIndex = detailPage.indexOf("await requestPriceChangeSubscription()");
+    const subscribeIndex = detailPage.indexOf("await requestPriceChangeSubscription({");
 
     expect(disclaimerIndex).toBeGreaterThanOrEqual(0);
     expect(bidRequestIndex).toBeGreaterThanOrEqual(0);
     expect(subscribeIndex).toBeGreaterThan(disclaimerIndex);
     expect(subscribeIndex).toBeLessThan(bidRequestIndex);
+    expect(detailPage).toContain("[price-change-subscribe]");
     expect(detailPage).toContain("确认出价承诺");
     expect(detailPage).toContain("commitmentAccepted: true");
   });

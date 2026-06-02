@@ -43,6 +43,10 @@
         <text class="content">最低加价：{{ formatPrice(detail.asset.minIncrementCents) }} 元宝</text>
         <text v-if="!unavailableMessage" class="content">本次最低出价：{{ formatPrice(requiredBidCentsForDetail()) }} 元宝</text>
         <text v-if="unavailableMessage" class="notice">{{ unavailableMessage }}</text>
+        <view class="privacy-note">
+          <text class="privacy-title">隐私说明</text>
+          <text class="privacy-text">估价金额和昵称会用于记录估价、展示最近估价和通知被超价用户，不会展示手机号等无关个人信息。</text>
+        </view>
         <input
           v-model="bidAmountYuan"
           class="input"
@@ -288,7 +292,12 @@ async function submitBid() {
     }
 
     // 微信订阅授权需要绑定在用户交互链路内，跨过网络请求后可能无法弹窗。
-    await requestPriceChangeSubscription();
+    const subscriptionResult = await requestPriceChangeSubscription({
+      onDebug(event) {
+        console.info("[price-change-subscribe]", event);
+      }
+    });
+    console.info("[price-change-subscribe]", { type: "request_result", result: subscriptionResult });
 
     const response = await placeBid({ assetId: assetId.value, amountCents: validation.amountCents, commitmentAccepted: true });
     if (detail.value) {
@@ -496,6 +505,32 @@ function formatTime(value: string) {
   border-radius: 8rpx;
 }
 
+.privacy-note {
+  padding: 18rpx 20rpx;
+  margin-top: 16rpx;
+  background: #f8fafc;
+  border-left: 6rpx solid #175cd3;
+  border-radius: 8rpx;
+}
+
+.privacy-title,
+.privacy-text {
+  display: block;
+}
+
+.privacy-title {
+  margin-bottom: 6rpx;
+  font-size: 24rpx;
+  font-weight: 700;
+  color: #175cd3;
+}
+
+.privacy-text {
+  font-size: 24rpx;
+  line-height: 1.55;
+  color: #475467;
+}
+
 .input {
   box-sizing: border-box;
   width: 100%;
@@ -626,6 +661,19 @@ function formatTime(value: string) {
   color: #f5f0dc;
   background: rgba(8, 24, 23, 0.94);
   border-color: rgba(134, 239, 172, 0.24);
+}
+
+.privacy-note {
+  background: rgba(8, 24, 23, 0.86);
+  border-left-color: #ffd66b;
+}
+
+.privacy-title {
+  color: #ffd66b;
+}
+
+.privacy-text {
+  color: #a9c9ba;
 }
 
 .commitment-row {

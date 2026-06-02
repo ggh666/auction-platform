@@ -4,7 +4,7 @@
   "type": "module",
   "scripts": {
     "dev:mp-weixin": "ESBUILD_BINARY_PATH=$PWD/node_modules/@esbuild/darwin-x64/bin/esbuild UNI_INPUT_DIR=$PWD uni -p mp-weixin",
-    "build:mp-weixin": "ESBUILD_BINARY_PATH=$PWD/node_modules/@esbuild/darwin-x64/bin/esbuild UNI_INPUT_DIR=$PWD uni build -p mp-weixin",
+    "build:mp-weixin": "ESBUILD_BINARY_PATH=$PWD/node_modules/@esbuild/darwin-x64/bin/esbuild UNI_INPUT_DIR=$PWD uni build -p mp-weixin && node scripts/patch-mp-weixin-project-config.mjs",
     "check:hbuilderx-layout": "node scripts/check-hbuilderx-layout.mjs",
     "postinstall": "node scripts/patch-local-esbuild.mjs",
     "typecheck": "vue-tsc --noEmit"

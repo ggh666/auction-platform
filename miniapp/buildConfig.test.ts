@@ -9,4 +9,12 @@ describe("miniapp build configuration", () => {
     expect(viteConfig).toContain("UNI_APP_PRICE_CHANGE_SUBSCRIBE_TEMPLATE_ID");
     expect(viteConfig).toContain("__PRICE_CHANGE_SUBSCRIBE_TEMPLATE_ID__");
   });
+
+  it("keeps the source project root compatible with HBuilderX and WeChat DevTools", () => {
+    const projectConfig = JSON.parse(readFileSync(resolve(import.meta.dirname, "project.config.json"), "utf8")) as {
+      miniprogramRoot?: string;
+    };
+
+    expect(projectConfig.miniprogramRoot).toBe("");
+  });
 });

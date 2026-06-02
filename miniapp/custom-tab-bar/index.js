@@ -1,5 +1,5 @@
 const tabList = [
-  { pagePath: "pages/games/index", text: "游戏" },
+  { pagePath: "pages/games/index", text: "资源" },
   { pagePath: "pages/profile/index", text: "我的" }
 ];
 

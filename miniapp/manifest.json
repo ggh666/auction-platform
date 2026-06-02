@@ -1,7 +1,7 @@
 {
     "name" : "游戏资产交换",
     "appid" : "__UNI__AUCTION",
-    "description" : "游戏资产信息发布与竞价工具",
+    "description" : "资源信息发布与估价工具",
     "versionName" : "0.1.0",
     "versionCode" : "1",
     "vueVersion" : "3",

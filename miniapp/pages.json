@@ -3,7 +3,7 @@
     {
       "path": "pages/games/index",
       "style": {
-        "navigationBarTitleText": "选择游戏",
+        "navigationBarTitleText": "选择资源",
         "navigationBarBackgroundColor": "#071112",
         "navigationBarTextStyle": "white",
         "backgroundColor": "#071112"
@@ -112,7 +112,7 @@
     "borderStyle": "black",
     "custom": true,
     "list": [
-      { "pagePath": "pages/games/index", "text": "游戏" },
+      { "pagePath": "pages/games/index", "text": "资源" },
       { "pagePath": "pages/profile/index", "text": "我的" }
     ]
   }

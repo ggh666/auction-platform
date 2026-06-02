@@ -5,6 +5,7 @@ import { readEnv } from "../config/env";
 import { createPool } from "../db/pool";
 import { allRows, type MysqlExecutor } from "../db/mysqlTypes";
 import { createWechatAccessTokenProvider } from "../modules/contentSafety/wechatAccessToken.service";
+import { createWechatMediaCheckUrl } from "../modules/contentSafety/wechatMediaProxy";
 
 const wechatMediaDownloadErrorCode = -1008;
 
@@ -30,6 +31,19 @@ type RetryOptions = {
   limit: number;
   dryRun: boolean;
   skipUrlCheck: boolean;
+};
+
+type WechatMediaCheckUrlInput = {
+  apiPublicBaseUrl: string;
+  jwtSecret: string;
+  objectKey: string;
+  nowMs?: number;
+};
+
+type MediaCheckDetail = {
+  submittedUrlType: "backend_proxy" | "public_url";
+  submittedHost: string | null;
+  submittedPath: string | null;
 };
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -150,15 +164,15 @@ async function markRetryFailure(
   );
 }
 
-async function assertPublicImageReadable(publicUrl: string): Promise<void> {
-  const response = await fetch(publicUrl, { headers: { range: "bytes=0-0" } });
+async function assertImageReadable(imageUrl: string): Promise<void> {
+  const response = await fetch(imageUrl, { headers: { range: "bytes=0-0" } });
   await response.arrayBuffer();
   if (!response.ok && response.status !== 206) {
-    throw new Error(`Public image URL is not readable: HTTP ${response.status}`);
+    throw new Error(`Image URL is not readable: HTTP ${response.status}`);
   }
   const contentType = response.headers.get("content-type") ?? "";
   if (!contentType.startsWith("image/")) {
-    throw new Error(`Public image URL is not an image: ${contentType || "<missing content-type>"}`);
+    throw new Error(`Image URL is not an image: ${contentType || "<missing content-type>"}`);
   }
 }
 
@@ -187,7 +201,43 @@ async function submitWechatImageCheck(input: { accessToken: string; publicUrl: s
   return body;
 }
 
-async function markRetryPending(db: MysqlExecutor, row: FailedImageCheckRow, body: WechatMediaCheckResponse, attempt: number): Promise<void> {
+export function wechatMediaCheckUrlForImageCheck(input: WechatMediaCheckUrlInput): string {
+  return createWechatMediaCheckUrl({
+    baseUrl: input.apiPublicBaseUrl,
+    objectKey: input.objectKey,
+    secret: input.jwtSecret,
+    nowMs: input.nowMs
+  });
+}
+
+function safeUrlDetail(value: string): { host: string | null; path: string | null } {
+  try {
+    const url = new URL(value);
+    return {
+      host: url.host,
+      path: url.pathname.startsWith("/api/wechat/media-check-image/") ? "/api/wechat/media-check-image/*" : url.pathname
+    };
+  } catch {
+    return { host: null, path: null };
+  }
+}
+
+export function mediaCheckDetailForImageCheck(publicUrl: string, submittedUrl: string): MediaCheckDetail {
+  const detail = safeUrlDetail(submittedUrl);
+  return {
+    submittedUrlType: submittedUrl === publicUrl ? "public_url" : "backend_proxy",
+    submittedHost: detail.host,
+    submittedPath: detail.path
+  };
+}
+
+async function markRetryPending(
+  db: MysqlExecutor,
+  row: FailedImageCheckRow,
+  body: WechatMediaCheckResponse,
+  attempt: number,
+  mediaCheckUrl: string
+): Promise<void> {
   await db.execute(
     `UPDATE content_safety_image_checks
      SET status = 'pending', trace_id = ?, label = NULL, detail_json = ?, updated_at = CURRENT_TIMESTAMP
@@ -200,7 +250,8 @@ async function markRetryPending(db: MysqlExecutor, row: FailedImageCheckRow, bod
           attempt,
           previousTraceId: row.trace_id,
           reason: "manual_wechat_media_download_retry"
-        }
+        },
+        mediaCheck: mediaCheckDetailForImageCheck(row.public_url, mediaCheckUrl)
       }),
       row.id
     ]
@@ -236,18 +287,27 @@ export async function retryFailedImageChecks(db: MysqlExecutor, options: RetryOp
     }
 
     try {
+      const mediaCheckUrl = wechatMediaCheckUrlForImageCheck({
+        apiPublicBaseUrl: env.apiPublicBaseUrl,
+        jwtSecret: env.jwtSecret,
+        objectKey: row.object_key
+      });
       if (!options.skipUrlCheck) {
-        await assertPublicImageReadable(row.public_url);
+        await assertImageReadable(mediaCheckUrl);
       }
       if (options.dryRun) {
         retried += 1;
-        stdout.write(`[dry-run] #${row.id} would retry ${row.public_url}\n`);
+        stdout.write(`[dry-run] #${row.id} would retry ${row.public_url} via backend proxy\n`);
         continue;
       }
 
       const accessToken = await tokenProvider.getAccessToken();
-      const body = await submitWechatImageCheck({ accessToken, publicUrl: row.public_url, openid });
-      await markRetryPending(db, row, body, attempt);
+      const body = await submitWechatImageCheck({
+        accessToken,
+        publicUrl: mediaCheckUrl,
+        openid
+      });
+      await markRetryPending(db, row, body, attempt, mediaCheckUrl);
       retried += 1;
       stdout.write(`[retried] #${row.id} -> trace_id=${String(body.trace_id)}\n`);
     } catch (error) {

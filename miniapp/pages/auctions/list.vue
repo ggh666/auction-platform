@@ -39,6 +39,7 @@
       <button class="search-button" @tap="submitSearch">搜索</button>
       <button v-if="searchKeyword" class="clear-button" @tap="clearSearch">清除</button>
     </view>
+    <text class="search-privacy">隐私说明：搜索词仅用于本次列表查询；关注操作仅用于生成个人关注记录，不会公开展示。</text>
 
     <view v-if="loading && assets.length === 0" class="empty">正在加载交换宝贝</view>
     <view v-else-if="assets.length === 0" class="empty">暂无匹配的进行中交换</view>
@@ -505,6 +506,14 @@ function openPublish() {
   background: #e4e7ec;
 }
 
+.search-privacy {
+  display: block;
+  margin: -12rpx 0 24rpx;
+  font-size: 24rpx;
+  line-height: 1.6;
+  color: #667085;
+}
+
 .asset {
   padding: 24rpx;
   margin-bottom: 16rpx;
@@ -700,6 +709,10 @@ function openPublish() {
   color: #d6e6dc;
   background: rgba(22, 47, 43, 0.92);
   border: 1px solid rgba(154, 180, 168, 0.24);
+}
+
+.search-privacy {
+  color: #9ab4a8;
 }
 
 .asset {

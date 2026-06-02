@@ -49,6 +49,9 @@ describe("asset workflow", () => {
           objectKey: input.objectKey,
           publicUrl: `https://img.example.com/${input.objectKey}`
         };
+      },
+      async getImage() {
+        return null;
       }
     };
   }

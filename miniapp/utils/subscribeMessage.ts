@@ -8,7 +8,16 @@ type SubscribeMessageRuntime = { requestSubscribeMessage?: SubscribeMessageReque
 
 declare const __PRICE_CHANGE_SUBSCRIBE_TEMPLATE_ID__: string | undefined;
 
+const defaultPriceChangeSubscribeTemplateId = "xnfSOrsId25WJBEWJkbG8UDRp4PD8pyHAx2F_47_2X0";
+
 export type PriceChangeSubscriptionResult = "accepted" | "rejected" | "failed" | "skipped";
+export type PriceChangeSubscriptionDebugEvent =
+  | { type: "template_missing" }
+  | { type: "requester_unavailable"; templateId: string; hasWxRequester: boolean; hasUniRequester: boolean }
+  | { type: "request_start"; templateId: string }
+  | { type: "request_success"; templateId: string; result: Exclude<PriceChangeSubscriptionResult, "failed" | "skipped">; response: SubscribeMessageResponse }
+  | { type: "request_fail"; templateId: string; error: unknown }
+  | { type: "request_throw"; templateId: string; error: unknown };
 
 export type SubscribeMessageRequester = (options: {
   tmplIds: string[];
@@ -16,15 +25,25 @@ export type SubscribeMessageRequester = (options: {
   fail: (error: unknown) => void;
 }) => void;
 
+function firstNonEmptyTemplateId(...values: Array<string | undefined>): string {
+  for (const value of values) {
+    const normalized = value?.trim();
+    if (normalized) {
+      return normalized;
+    }
+  }
+  return "";
+}
+
 export function readPriceChangeSubscribeTemplateId(env: ImportMetaEnv = (import.meta as ImportMeta & { env?: ImportMetaEnv }).env ?? {}): string {
   const buildTimeTemplateId =
     typeof __PRICE_CHANGE_SUBSCRIBE_TEMPLATE_ID__ === "undefined" ? "" : __PRICE_CHANGE_SUBSCRIBE_TEMPLATE_ID__;
-  return (
+  return firstNonEmptyTemplateId(
     env.UNI_APP_PRICE_CHANGE_SUBSCRIBE_TEMPLATE_ID ??
-    env.VITE_PRICE_CHANGE_SUBSCRIBE_TEMPLATE_ID ??
-    buildTimeTemplateId ??
-    ""
-  ).trim();
+      env.VITE_PRICE_CHANGE_SUBSCRIBE_TEMPLATE_ID,
+    buildTimeTemplateId,
+    defaultPriceChangeSubscribeTemplateId
+  );
 }
 
 function defaultSubscribeRequester(): SubscribeMessageRequester | null {
@@ -38,29 +57,46 @@ function defaultSubscribeRequester(): SubscribeMessageRequester | null {
 export function requestPriceChangeSubscription(input: {
   templateId?: string;
   requestSubscribeMessage?: SubscribeMessageRequester;
+  onDebug?: (event: PriceChangeSubscriptionDebugEvent) => void;
 } = {}): Promise<PriceChangeSubscriptionResult> {
   const templateId = (input.templateId ?? readPriceChangeSubscribeTemplateId()).trim();
   if (!templateId) {
+    input.onDebug?.({ type: "template_missing" });
     return Promise.resolve("skipped");
   }
 
   const requestSubscribeMessage = input.requestSubscribeMessage ?? defaultSubscribeRequester();
   if (!requestSubscribeMessage) {
+    const runtime = globalThis as typeof globalThis & {
+      uni?: SubscribeMessageRuntime;
+      wx?: SubscribeMessageRuntime;
+    };
+    input.onDebug?.({
+      type: "requester_unavailable",
+      templateId,
+      hasWxRequester: typeof runtime.wx?.requestSubscribeMessage === "function",
+      hasUniRequester: typeof runtime.uni?.requestSubscribeMessage === "function"
+    });
     return Promise.resolve("skipped");
   }
 
   return new Promise((resolve) => {
     try {
+      input.onDebug?.({ type: "request_start", templateId });
       requestSubscribeMessage({
         tmplIds: [templateId],
         success(response) {
-          resolve(response[templateId] === "accept" ? "accepted" : "rejected");
+          const result = response[templateId] === "accept" ? "accepted" : "rejected";
+          input.onDebug?.({ type: "request_success", templateId, result, response });
+          resolve(result);
         },
-        fail() {
+        fail(error) {
+          input.onDebug?.({ type: "request_fail", templateId, error });
           resolve("failed");
         }
       });
-    } catch {
+    } catch (error) {
+      input.onDebug?.({ type: "request_throw", templateId, error });
       resolve("failed");
     }
   });

@@ -1,15 +1,19 @@
 <template>
   <view class="page">
-    <text class="title">登录</text>
-    <text class="copy">使用微信授权登录，昵称和头像会保存到交换平台账号。</text>
+    <text class="title">账号登录</text>
+    <text class="copy">完善昵称和头像后进入资源交换平台。</text>
+    <view class="privacy-note">
+      <text class="privacy-title">隐私说明</text>
+      <text class="privacy-text">昵称和头像仅用于平台账号展示、消息提醒和必要身份区分，不会用于无关用途。</text>
+    </view>
 
     <button class="avatar-button" open-type="chooseAvatar" @chooseavatar="chooseAvatar">
       <image v-if="avatarUrl" class="avatar" :src="avatarUrl" mode="aspectFill" />
       <text v-else class="avatar-placeholder">选择头像</text>
     </button>
 
-    <input v-model="displayName" class="input" type="nickname" placeholder="请输入微信昵称" />
-    <button class="primary-action" :loading="loading" :disabled="loading" @tap="login">微信登录</button>
+    <input v-model="displayName" class="input" type="nickname" placeholder="请输入昵称" />
+    <button class="primary-action" :loading="loading" :disabled="loading" @tap="login">进入平台</button>
   </view>
 </template>
 
@@ -45,7 +49,7 @@ function getWeixinLoginCode(): Promise<string> {
           return;
         }
 
-        reject(new Error("未获取到微信登录凭证"));
+        reject(new Error("未获取到登录凭证"));
       },
       fail(error) {
         reject(error);
@@ -64,13 +68,13 @@ function readErrorMessage(error: unknown): string {
     return errMsg;
   }
 
-  return "微信登录失败，请稍后重试";
+  return "登录失败，请稍后重试";
 }
 
 async function login() {
   const nickname = displayName.value.trim();
   if (!nickname) {
-    uni.showToast({ title: "请填写微信昵称", icon: "none" });
+    uni.showToast({ title: "请填写昵称", icon: "none" });
     return;
   }
 
@@ -110,6 +114,32 @@ async function login() {
   margin-bottom: 24rpx;
   line-height: 1.6;
   color: #667085;
+}
+
+.privacy-note {
+  padding: 18rpx 20rpx;
+  margin-bottom: 24rpx;
+  background: #f8fafc;
+  border-left: 6rpx solid #175cd3;
+  border-radius: 8rpx;
+}
+
+.privacy-title,
+.privacy-text {
+  display: block;
+}
+
+.privacy-title {
+  margin-bottom: 6rpx;
+  font-size: 24rpx;
+  font-weight: 700;
+  color: #175cd3;
+}
+
+.privacy-text {
+  font-size: 24rpx;
+  line-height: 1.55;
+  color: #475467;
 }
 
 .input {
@@ -170,6 +200,19 @@ async function login() {
 
 .copy {
   color: #9ab4a8;
+}
+
+.privacy-note {
+  background: rgba(8, 24, 23, 0.86);
+  border-left-color: #ffd66b;
+}
+
+.privacy-title {
+  color: #ffd66b;
+}
+
+.privacy-text {
+  color: #a9c9ba;
 }
 
 .input {

@@ -7,6 +7,7 @@ const env: Env = {
   nodeEnv: "production",
   host: "0.0.0.0",
   port: 3002,
+  apiPublicBaseUrl: "https://api-auction.example.com",
   jwtSecret: "production-secret",
   mysqlUri: "mysql://auction:secret@127.0.0.1:3306/auction_platform",
   r2Endpoint: "https://account-id.r2.cloudflarestorage.com",

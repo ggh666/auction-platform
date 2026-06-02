@@ -20,6 +20,8 @@ import { createInMemoryImageSafetyRepository, type ImageSafetyRepository } from 
 import { createWechatAccessTokenProvider } from "./modules/contentSafety/wechatAccessToken.service";
 import { createWechatContentSafetyService } from "./modules/contentSafety/wechatContentSafety.service";
 import { registerWechatEventRoutes } from "./modules/contentSafety/wechatEvent.routes";
+import { createWechatMediaCheckUrl } from "./modules/contentSafety/wechatMediaProxy";
+import { registerWechatMediaProxyRoutes } from "./modules/contentSafety/wechatMediaProxy.routes";
 import { createInMemorySystemConfigsRepository, type SystemConfigsRepository } from "./modules/configs/configs.repository";
 import { registerImageRoutes } from "./modules/images/images.routes";
 import { createR2ImageStorage, type ImageStorage } from "./modules/images/r2Storage";
@@ -139,7 +141,13 @@ export function buildApp(options: AppOptions = {}) {
       tokenProvider: wechatTokenProvider,
       imageSafetyRepository: imageSafety,
       assetsRepository: assets,
-      usersRepository: users
+      usersRepository: users,
+      imageCheckUrlBuilder: ({ objectKey }) =>
+        createWechatMediaCheckUrl({
+          baseUrl: env.apiPublicBaseUrl,
+          objectKey,
+          secret: env.jwtSecret
+        })
     });
   const subscribeMessages =
     options.subscribeMessageService ??
@@ -162,6 +170,7 @@ export function buildApp(options: AppOptions = {}) {
     wechatCodeSessionExchanger: options.wechatCodeSessionExchanger
   });
   registerWechatEventRoutes(app, contentSafety, env);
+  registerWechatMediaProxyRoutes(app, imageStorage, env);
   registerProfileRoutes(app, { assets, bids });
   registerNotificationRoutes(app, notifications, users);
   registerDealFollowupRoutes(app, { admins, assets, followups: dealFollowups, principals, users });

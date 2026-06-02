@@ -7,6 +7,8 @@ import { createWechatAccessTokenProvider } from "../../api/src/modules/contentSa
 import { createWechatContentSafetyService } from "../../api/src/modules/contentSafety/wechatContentSafety.service";
 import { createInMemoryAssetsRepository } from "../../api/src/modules/assets/assets.repository";
 import { createInMemoryUsersRepository } from "../../api/src/modules/users/users.repository";
+import { createWechatMediaCheckToken } from "../../api/src/modules/contentSafety/wechatMediaProxy";
+import type { ImageStorage } from "../../api/src/modules/images/r2Storage";
 
 function jsonResponse(body: unknown, ok = true): Response {
   return {
@@ -162,6 +164,117 @@ describe("WeChat content safety", () => {
     ]);
   });
 
+  it("sends a backend proxy URL to WeChat while keeping the public image URL for asset validation", async () => {
+    const imageSafetyRepository = createInMemoryImageSafetyRepository();
+    const fetchImpl = vi.fn(async () => jsonResponse({ errcode: 0, trace_id: "image-proxy-trace" }));
+    const service = createWechatContentSafetyService({
+      enabled: true,
+      strict: true,
+      tokenProvider: { getAccessToken: async () => "token-1" },
+      imageSafetyRepository,
+      assetsRepository: createInMemoryAssetsRepository(),
+      imageCheckUrlBuilder({ objectKey }) {
+        return `https://api.example.com/api/wechat/media-check-image/signed-${encodeURIComponent(objectKey)}`;
+      },
+      fetchImpl
+    });
+
+    await expect(
+      service.requestImageCheck({
+        userId: "1",
+        objectKey: "uploads/accounts/1/proxy.jpg",
+        mediaUrl: "https://auction-pic.example.com/uploads/accounts/1/proxy.jpg",
+        openid: "openid-1",
+        scene: 3
+      })
+    ).resolves.toEqual({ status: "pending", traceId: "image-proxy-trace" });
+
+    expect(fetchImpl).toHaveBeenCalledWith(
+      "https://api.weixin.qq.com/wxa/media_check_async?access_token=token-1",
+      expect.objectContaining({
+        method: "POST",
+        body: JSON.stringify({
+          media_url: "https://api.example.com/api/wechat/media-check-image/signed-uploads%2Faccounts%2F1%2Fproxy.jpg",
+          media_type: 2,
+          version: 2,
+          scene: 3,
+          openid: "openid-1"
+        })
+      })
+    );
+    await expect(imageSafetyRepository.findByPublicUrls(["https://auction-pic.example.com/uploads/accounts/1/proxy.jpg"])).resolves.toEqual([
+      expect.objectContaining({
+        objectKey: "uploads/accounts/1/proxy.jpg",
+        publicUrl: "https://auction-pic.example.com/uploads/accounts/1/proxy.jpg",
+        status: "pending",
+        traceId: "image-proxy-trace",
+        detailJson: expect.objectContaining({
+          mediaCheck: {
+            submittedUrlType: "backend_proxy",
+            submittedHost: "api.example.com",
+            submittedPath: "/api/wechat/media-check-image/*"
+          }
+        })
+      })
+    ]);
+  });
+
+  it("retries WeChat media download errors synchronously by default", async () => {
+    const imageSafetyRepository = createInMemoryImageSafetyRepository();
+    const usersRepository = createInMemoryUsersRepository();
+    await usersRepository.findOrCreateWechatUser({ openid: "openid-1", displayName: "图片上传用户" });
+    const fetchImpl = vi
+      .fn()
+      .mockResolvedValueOnce(jsonResponse({ errcode: 0, trace_id: "image-trace-1" }))
+      .mockResolvedValueOnce(jsonResponse({ errcode: 0, trace_id: "image-trace-2" }));
+    const service = createWechatContentSafetyService({
+      enabled: true,
+      strict: true,
+      tokenProvider: { getAccessToken: async () => "token-1" },
+      imageSafetyRepository,
+      assetsRepository: createInMemoryAssetsRepository(),
+      usersRepository,
+      imageCheckUrlBuilder({ objectKey }) {
+        return `https://api.example.com/api/wechat/media-check-image/sync-${encodeURIComponent(objectKey)}`;
+      },
+      fetchImpl
+    });
+
+    await service.requestImageCheck({
+      userId: "1",
+      objectKey: "uploads/accounts/1/sync-retry.jpg",
+      mediaUrl: "https://auction-pic.example.com/uploads/accounts/1/sync-retry.jpg",
+      openid: "openid-1",
+      scene: 3
+    });
+
+    await service.handleImageCheckCallback({
+      trace_id: "image-trace-1",
+      errcode: -1008,
+      errmsg: "下载错误，请检查媒体链接是否有效"
+    });
+
+    expect(fetchImpl).toHaveBeenCalledTimes(2);
+    await expect(imageSafetyRepository.findByPublicUrls(["https://auction-pic.example.com/uploads/accounts/1/sync-retry.jpg"])).resolves.toEqual([
+      expect.objectContaining({
+        status: "pending",
+        traceId: "image-trace-2",
+        detailJson: expect.objectContaining({
+          retry: expect.objectContaining({
+            attempt: 1,
+            previousTraceId: "image-trace-1",
+            reason: "wechat_media_download_error"
+          }),
+          mediaCheck: {
+            submittedUrlType: "backend_proxy",
+            submittedHost: "api.example.com",
+            submittedPath: "/api/wechat/media-check-image/*"
+          }
+        })
+      })
+    ]);
+  });
+
   it("retries async image checks when WeChat reports a media download error", async () => {
     const imageSafetyRepository = createInMemoryImageSafetyRepository();
     const usersRepository = createInMemoryUsersRepository();
@@ -293,6 +406,128 @@ describe("WeChat content safety", () => {
         })
       })
     );
+  });
+
+  it("uses the backend proxy URL when retrying a WeChat media download error", async () => {
+    const imageSafetyRepository = createInMemoryImageSafetyRepository();
+    const usersRepository = createInMemoryUsersRepository();
+    await usersRepository.findOrCreateWechatUser({ openid: "openid-1", displayName: "图片上传用户" });
+    const scheduledRetries: Array<() => Promise<void>> = [];
+    const fetchImpl = vi
+      .fn()
+      .mockResolvedValueOnce(jsonResponse({ errcode: 0, trace_id: "image-trace-1" }))
+      .mockResolvedValueOnce(jsonResponse({ errcode: 0, trace_id: "image-trace-2" }));
+    const service = createWechatContentSafetyService({
+      enabled: true,
+      strict: true,
+      tokenProvider: { getAccessToken: async () => "token-1" },
+      imageSafetyRepository,
+      assetsRepository: createInMemoryAssetsRepository(),
+      usersRepository,
+      imageCheckUrlBuilder({ objectKey }) {
+        return `https://api.example.com/api/wechat/media-check-image/retry-${encodeURIComponent(objectKey)}`;
+      },
+      imageDownloadRetryScheduler(task) {
+        scheduledRetries.push(task);
+      },
+      fetchImpl
+    });
+
+    await service.requestImageCheck({
+      userId: "1",
+      objectKey: "uploads/accounts/1/retry.jpg",
+      mediaUrl: "https://auction-pic.example.com/uploads/accounts/1/retry.jpg",
+      openid: "openid-1",
+      scene: 3
+    });
+    await service.handleImageCheckCallback({
+      trace_id: "image-trace-1",
+      errcode: -1008,
+      errmsg: "下载错误，请检查媒体链接是否有效"
+    });
+
+    await scheduledRetries[0]();
+
+    expect(fetchImpl).toHaveBeenLastCalledWith(
+      "https://api.weixin.qq.com/wxa/media_check_async?access_token=token-1",
+      expect.objectContaining({
+        body: JSON.stringify({
+          media_url: "https://api.example.com/api/wechat/media-check-image/retry-uploads%2Faccounts%2F1%2Fretry.jpg",
+          media_type: 2,
+          version: 2,
+          scene: 3,
+          openid: "openid-1"
+        })
+      })
+    );
+    await expect(imageSafetyRepository.findByPublicUrls(["https://auction-pic.example.com/uploads/accounts/1/retry.jpg"])).resolves.toEqual([
+      expect.objectContaining({
+        status: "pending",
+        traceId: "image-trace-2"
+      })
+    ]);
+  });
+
+  it("preserves media check diagnostics when a retried image check fails again", async () => {
+    const imageSafetyRepository = createInMemoryImageSafetyRepository();
+    const usersRepository = createInMemoryUsersRepository();
+    await usersRepository.findOrCreateWechatUser({ openid: "openid-1", displayName: "图片上传用户" });
+    const fetchImpl = vi
+      .fn()
+      .mockResolvedValueOnce(jsonResponse({ errcode: 0, trace_id: "image-trace-1" }))
+      .mockResolvedValueOnce(jsonResponse({ errcode: 0, trace_id: "image-trace-2" }));
+    const service = createWechatContentSafetyService({
+      enabled: true,
+      strict: true,
+      tokenProvider: { getAccessToken: async () => "token-1" },
+      imageSafetyRepository,
+      assetsRepository: createInMemoryAssetsRepository(),
+      usersRepository,
+      imageCheckUrlBuilder({ objectKey }) {
+        return `https://api.example.com/api/wechat/media-check-image/diagnostic-${encodeURIComponent(objectKey)}`;
+      },
+      imageDownloadRetryMaxAttempts: 1,
+      fetchImpl
+    });
+
+    await service.requestImageCheck({
+      userId: "1",
+      objectKey: "uploads/accounts/1/diagnostic.jpg",
+      mediaUrl: "https://auction-pic.example.com/uploads/accounts/1/diagnostic.jpg",
+      openid: "openid-1",
+      scene: 3
+    });
+    await service.handleImageCheckCallback({
+      trace_id: "image-trace-1",
+      errcode: -1008,
+      errmsg: "下载错误，请检查媒体链接是否有效"
+    });
+    await service.handleImageCheckCallback({
+      trace_id: "image-trace-2",
+      errcode: -1008,
+      errmsg: "下载错误，请检查媒体链接是否有效"
+    });
+
+    await expect(imageSafetyRepository.findByPublicUrls(["https://auction-pic.example.com/uploads/accounts/1/diagnostic.jpg"])).resolves.toEqual([
+      expect.objectContaining({
+        status: "failed",
+        traceId: "image-trace-2",
+        detailJson: expect.objectContaining({
+          errcode: -1008,
+          errmsg: "下载错误，请检查媒体链接是否有效",
+          retry: expect.objectContaining({
+            attempt: 1,
+            previousTraceId: "image-trace-1",
+            reason: "wechat_media_download_error"
+          }),
+          mediaCheck: {
+            submittedUrlType: "backend_proxy",
+            submittedHost: "api.example.com",
+            submittedPath: "/api/wechat/media-check-image/*"
+          }
+        })
+      })
+    ]);
   });
 
   it("records retry failure details when a download-error retry cannot be submitted", async () => {
@@ -486,7 +721,7 @@ describe("WeChat content safety", () => {
         payload: { trace_id: "image-trace", result: { suggest: "pass", label: 100 } }
       });
 
-      expect(response.statusCode).toBe(200);
+      expect(response.statusCode, response.body).toBe(200);
       expect(response.json()).toEqual({ ok: true });
       expect(received).toEqual([{ trace_id: "image-trace", result: { suggest: "pass", label: 100 } }]);
     } finally {
@@ -525,7 +760,7 @@ describe("WeChat content safety", () => {
         payload: `<xml><trace_id><![CDATA[image-trace]]></trace_id><result><suggest><![CDATA[pass]]></suggest><label>100</label></result></xml>`
       });
 
-      expect(response.statusCode).toBe(200);
+      expect(response.statusCode, response.body).toBe(200);
       expect(response.json()).toEqual({ ok: true });
       expect(received).toEqual([{ trace_id: "image-trace", result: { suggest: "pass", label: 100 } }]);
     } finally {
@@ -573,6 +808,84 @@ describe("WeChat content safety", () => {
           errmsg: "下载错误，请检查媒体链接是否有效"
         }
       ]);
+    } finally {
+      await app.close();
+    }
+  });
+
+  it("serves uploaded images through a signed backend proxy for WeChat media checks", async () => {
+    const body = Buffer.from("proxy-image-bytes");
+    const imageStorage: ImageStorage = {
+      async putImage(input) {
+        return {
+          objectKey: input.objectKey,
+          publicUrl: `https://auction-pic.example.com/${input.objectKey}`
+        };
+      },
+      async getImage(objectKey) {
+        return objectKey === "uploads/accounts/1/proxy-route.jpg"
+          ? { body, mimeType: "image/jpeg", sizeBytes: body.length }
+          : null;
+      }
+    };
+    const secret = "test-secret";
+    const token = createWechatMediaCheckToken({
+      objectKey: "uploads/accounts/1/proxy-route.jpg",
+      secret,
+      expiresAt: Math.floor(Date.now() / 1000) + 60
+    });
+    const app = buildApp({
+      enableMockAuth: true,
+      env: { JWT_SECRET: secret },
+      imageStorage
+    });
+
+    try {
+      const response = await app.inject({
+        method: "GET",
+        url: `/api/wechat/media-check-image/${token}`
+      });
+
+      expect(response.statusCode, response.body).toBe(200);
+      expect(response.headers["content-type"]).toBe("image/jpeg");
+      expect(response.headers["cache-control"]).toContain("max-age=86400");
+      expect(response.rawPayload).toEqual(body);
+    } finally {
+      await app.close();
+    }
+  });
+
+  it("rejects invalid WeChat media proxy tokens before reading image storage", async () => {
+    const imageStorage: ImageStorage = {
+      async putImage(input) {
+        return {
+          objectKey: input.objectKey,
+          publicUrl: `https://auction-pic.example.com/${input.objectKey}`
+        };
+      },
+      async getImage() {
+        throw new Error("storage should not be read for invalid proxy tokens");
+      }
+    };
+    const app = buildApp({
+      enableMockAuth: true,
+      env: { JWT_SECRET: "test-secret" },
+      imageStorage
+    });
+
+    try {
+      const response = await app.inject({
+        method: "GET",
+        url: "/api/wechat/media-check-image/not-a-valid-token"
+      });
+
+      expect(response.statusCode).toBe(403);
+      expect(response.json()).toEqual({
+        error: {
+          code: "invalid_wechat_media_token",
+          message: "Invalid WeChat media token"
+        }
+      });
     } finally {
       await app.close();
     }
