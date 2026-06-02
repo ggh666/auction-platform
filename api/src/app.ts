@@ -177,7 +177,7 @@ export function buildApp(options: AppOptions = {}) {
   registerImageRoutes(app, imageStorage, users, contentSafety);
   registerAssetRoutes(app, assets, users, bids, configs, reports, contentSafety, principals, assetFollows);
   registerAdminDashboardRoutes(app, admins, { assets, bids, reports, users, principals });
-  registerAdminRoutes(app, admins, assets, bids, users, contentSafety, principals, dealFollowups, imageSafety);
+  registerAdminRoutes(app, admins, assets, bids, users, contentSafety, principals, dealFollowups, imageSafety, imageStorage);
   registerAdminUserRoutes(app, admins, users);
   registerAdminConfigRoutes(app, admins, configs);
   registerBidRoutes(app, { assets, bids, hub, users, notifications, subscribeMessages });

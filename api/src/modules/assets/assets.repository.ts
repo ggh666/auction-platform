@@ -10,6 +10,7 @@ export function approvedAuctionEndAt(now = new Date()): string {
 
 export type CreateAssetInput = {
   sellerId: string;
+  sellerGameId?: string | null;
   principalId?: string;
   gameName: string;
   serverName: string;
@@ -201,6 +202,7 @@ export function createInMemoryAssetsRepository(): AssetsRepository {
       const asset: AuctionAsset = {
         id: String(nextId++),
         sellerId: input.sellerId,
+        sellerGameId: input.sellerGameId?.trim() || null,
         principalId: input.principalId ?? null,
         gameName: input.gameName,
         serverName: input.serverName,

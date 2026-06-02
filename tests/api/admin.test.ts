@@ -18,6 +18,7 @@ import { createReportsService } from "../../api/src/modules/reports/reports.serv
 describe("admin permissions", () => {
   it("allows reviewer to review assets but not manage admins", () => {
     expect(canAdmin("reviewer", "asset:review")).toBe(true);
+    expect(canAdmin("reviewer", "asset:create")).toBe(true);
     expect(canAdmin("reviewer", "auction:confirm_deal")).toBe(true);
     expect(canAdmin("reviewer", "admin:manage")).toBe(false);
     expect(canAdmin("reviewer", "user:view")).toBe(false);
@@ -62,6 +63,23 @@ describe("admin routes", () => {
     };
   }
 
+  function adminAssetPayload(overrides: Record<string, unknown> = {}) {
+    return {
+      principalId: "1",
+      gameName: "塔防精灵",
+      serverName: "内容审核区",
+      assetType: "账号",
+      sellerGameId: "game-seller-1001",
+      title: "后台代发账号",
+      description: "后台主理人代发的交换信息",
+      startingPriceCents: 10000,
+      minIncrementCents: 100,
+      endAt: new Date(Date.now() + 6 * 60 * 60 * 1000).toISOString(),
+      images: [],
+      ...overrides
+    };
+  }
+
   it("logs in a seeded reviewer", async () => {
     const app = buildApp({ enableMockAuth: true });
 
@@ -91,6 +109,270 @@ describe("admin routes", () => {
 
       expect(response.statusCode).toBe(400);
       expect(response.json().error.code).toBe("invalid_admin_credentials");
+    } finally {
+      await app.close();
+    }
+  });
+
+  it("allows the current backend user to change their own password", async () => {
+    const app = buildApp({ enableMockAuth: true });
+
+    try {
+      const token = await adminLogin(app, "reviewer", "reviewer-pass");
+
+      const wrongCurrentPassword = await app.inject({
+        method: "POST",
+        url: "/admin/auth/change-password",
+        headers: { authorization: `Bearer ${token}` },
+        payload: {
+          currentPassword: "wrong-password",
+          newPassword: "new-reviewer-pass",
+          confirmNewPassword: "new-reviewer-pass"
+        }
+      });
+      expect(wrongCurrentPassword.statusCode).toBe(401);
+      expect(wrongCurrentPassword.json().error.code).toBe("invalid_current_password");
+
+      const mismatch = await app.inject({
+        method: "POST",
+        url: "/admin/auth/change-password",
+        headers: { authorization: `Bearer ${token}` },
+        payload: {
+          currentPassword: "reviewer-pass",
+          newPassword: "new-reviewer-pass",
+          confirmNewPassword: "new-reviewer-pass-mismatch"
+        }
+      });
+      expect(mismatch.statusCode).toBe(400);
+      expect(mismatch.json().error.code).toBe("invalid_admin_password_confirmation");
+
+      const changed = await app.inject({
+        method: "POST",
+        url: "/admin/auth/change-password",
+        headers: { authorization: `Bearer ${token}` },
+        payload: {
+          currentPassword: "reviewer-pass",
+          newPassword: "new-reviewer-pass",
+          confirmNewPassword: "new-reviewer-pass"
+        }
+      });
+      expect(changed.statusCode).toBe(200);
+      expect(changed.json().admin).toMatchObject({ username: "reviewer", role: "reviewer" });
+
+      const oldLogin = await app.inject({
+        method: "POST",
+        url: "/admin/auth/login",
+        payload: { username: "reviewer", password: "reviewer-pass" }
+      });
+      expect(oldLogin.statusCode).toBe(401);
+
+      const newLogin = await app.inject({
+        method: "POST",
+        url: "/admin/auth/login",
+        payload: { username: "reviewer", password: "new-reviewer-pass" }
+      });
+      expect(newLogin.statusCode).toBe(200);
+    } finally {
+      await app.close();
+    }
+  });
+
+  it("allows a super admin to publish an active asset with a selected principal and end time", async () => {
+    const app = buildApp({ enableMockAuth: true });
+
+    try {
+      const token = await adminLogin(app, "super", "super-pass");
+      const endAt = new Date(Date.now() + 8 * 60 * 60 * 1000).toISOString();
+
+      const response = await app.inject({
+        method: "POST",
+        url: "/admin/assets",
+        headers: { authorization: `Bearer ${token}` },
+        payload: adminAssetPayload({ principalId: "2", endAt })
+      });
+
+      expect(response.statusCode).toBe(200);
+      expect(response.json().asset).toMatchObject({
+        status: "active",
+        principalId: "2",
+        sellerId: "1",
+        sellerGameId: "game-seller-1001",
+        originalEndAt: endAt,
+        effectiveEndAt: endAt
+      });
+    } finally {
+      await app.close();
+    }
+  });
+
+  it("requires and returns the seller game id for admin published assets", async () => {
+    const app = buildApp({ enableMockAuth: true });
+
+    try {
+      const token = await adminLogin(app, "super", "super-pass");
+
+      const missing = await app.inject({
+        method: "POST",
+        url: "/admin/assets",
+        headers: { authorization: `Bearer ${token}` },
+        payload: adminAssetPayload({ sellerGameId: "" })
+      });
+      expect(missing.statusCode).toBe(400);
+      expect(missing.json().error.code).toBe("invalid_seller_game_id");
+
+      const created = await app.inject({
+        method: "POST",
+        url: "/admin/assets",
+        headers: { authorization: `Bearer ${token}` },
+        payload: adminAssetPayload({ sellerGameId: "game-7788" })
+      });
+      expect(created.statusCode).toBe(200);
+      expect(created.json().asset.sellerGameId).toBe("game-7788");
+
+      const listed = await app.inject({
+        method: "GET",
+        url: "/admin/assets",
+        headers: { authorization: `Bearer ${token}` }
+      });
+      expect(listed.statusCode).toBe(200);
+      expect(listed.json().items).toEqual([expect.objectContaining({ id: created.json().asset.id, sellerGameId: "game-7788" })]);
+
+      const detail = await app.inject({
+        method: "GET",
+        url: `/admin/assets/${created.json().asset.id}`,
+        headers: { authorization: `Bearer ${token}` }
+      });
+      expect(detail.statusCode).toBe(200);
+      expect(detail.json().asset.sellerGameId).toBe("game-7788");
+    } finally {
+      await app.close();
+    }
+  });
+
+  it("defaults admin published asset end time to six hours from now", async () => {
+    const app = buildApp({ enableMockAuth: true });
+
+    try {
+      const token = await adminLogin(app, "reviewer", "reviewer-pass");
+      const beforePublish = Date.now();
+
+      const response = await app.inject({
+        method: "POST",
+        url: "/admin/assets",
+        headers: { authorization: `Bearer ${token}` },
+        payload: adminAssetPayload({ endAt: undefined })
+      });
+      const afterPublish = Date.now();
+
+      expect(response.statusCode).toBe(200);
+      expect(response.json().asset.status).toBe("active");
+      const originalEndAt = new Date(response.json().asset.originalEndAt).getTime();
+      const effectiveEndAt = new Date(response.json().asset.effectiveEndAt).getTime();
+      expect(originalEndAt).toBeGreaterThanOrEqual(beforePublish + 6 * 60 * 60 * 1000);
+      expect(originalEndAt).toBeLessThanOrEqual(afterPublish + 6 * 60 * 60 * 1000);
+      expect(effectiveEndAt).toBe(originalEndAt);
+    } finally {
+      await app.close();
+    }
+  });
+
+  it("rejects admin published assets with a past end time", async () => {
+    const app = buildApp({ enableMockAuth: true });
+
+    try {
+      const token = await adminLogin(app, "reviewer", "reviewer-pass");
+
+      const response = await app.inject({
+        method: "POST",
+        url: "/admin/assets",
+        headers: { authorization: `Bearer ${token}` },
+        payload: adminAssetPayload({ endAt: "2020-01-01T00:00:00.000Z" })
+      });
+
+      expect(response.statusCode).toBe(400);
+      expect(response.json().error.code).toBe("invalid_asset_end_at");
+    } finally {
+      await app.close();
+    }
+  });
+
+  it("prevents a principal admin from publishing into another principal scope", async () => {
+    const app = buildApp({ enableMockAuth: true });
+
+    try {
+      const token = await adminLogin(app, "reviewer", "reviewer-pass");
+
+      const response = await app.inject({
+        method: "POST",
+        url: "/admin/assets",
+        headers: { authorization: `Bearer ${token}` },
+        payload: adminAssetPayload({ principalId: "1" })
+      });
+
+      expect(response.statusCode).toBe(200);
+      expect(response.json().asset.principalId).toBe("1");
+    } finally {
+      await app.close();
+    }
+  });
+
+  it("blocks locally risky text when admins publish assets", async () => {
+    const app = buildApp({ enableMockAuth: true });
+
+    try {
+      const token = await adminLogin(app, "reviewer", "reviewer-pass");
+
+      const response = await app.inject({
+        method: "POST",
+        url: "/admin/assets",
+        headers: { authorization: `Bearer ${token}` },
+        payload: adminAssetPayload({ title: "赌博账号" })
+      });
+
+      expect(response.statusCode).toBe(400);
+      expect(response.json().error.code).toBe("content_safety_risky");
+    } finally {
+      await app.close();
+    }
+  });
+
+  it("uploads admin asset images without requiring a miniapp user token", async () => {
+    const app = buildApp({
+      enableMockAuth: true,
+      imageStorage: {
+        async putImage(input) {
+          return {
+            objectKey: input.objectKey,
+            publicUrl: `https://img.example.com/${input.objectKey}`
+          };
+        },
+        async getImage() {
+          return null;
+        }
+      }
+    });
+
+    try {
+      const token = await adminLogin(app, "reviewer", "reviewer-pass");
+
+      const response = await app.inject({
+        method: "POST",
+        url: "/admin/images",
+        headers: { authorization: `Bearer ${token}` },
+        payload: {
+          assetType: "道具",
+          mimeType: "image/png",
+          base64Data: Buffer.from("png bytes").toString("base64")
+        }
+      });
+
+      expect(response.statusCode).toBe(200);
+      expect(response.json().image).toMatchObject({
+        mimeType: "image/png",
+        sizeBytes: 9,
+        safetyStatus: "pass"
+      });
+      expect(response.json().image.objectKey).toContain("uploads/items/1/");
     } finally {
       await app.close();
     }
@@ -126,7 +408,8 @@ describe("admin routes", () => {
   });
 
   it("returns real dashboard metrics and pending work items", async () => {
-    const app = buildApp({ enableMockAuth: true });
+    const assets = createInMemoryAssetsRepository();
+    const app = buildApp({ enableMockAuth: true, assetsRepository: assets });
 
     try {
       const sellerLogin = await app.inject({
@@ -139,41 +422,24 @@ describe("admin routes", () => {
         url: "/api/auth/mock-login",
         payload: { displayName: "仪表盘买家" }
       });
-      const sellerToken = sellerLogin.json().token as string;
       const bidderToken = bidderLogin.json().token as string;
       const sellerId = sellerLogin.json().user.id as string;
       const bidderId = bidderLogin.json().user.id as string;
-      const { sellerId: _sellerId, ...payload } = pendingAssetInput();
-
-      const pendingAsset = await app.inject({
-        method: "POST",
-        url: "/api/assets",
-        headers: { authorization: `Bearer ${sellerToken}` },
-        payload: { ...payload, title: "待办资产" }
-      });
-      const activeAsset = await app.inject({
-        method: "POST",
-        url: "/api/assets",
-        headers: { authorization: `Bearer ${sellerToken}` },
-        payload: { ...payload, title: "进行中资产" }
-      });
+      const pendingAsset = await assets.createPending({ ...pendingAssetInput(), sellerId, title: "待办资产" });
+      const activeAsset = await assets.createPending({ ...pendingAssetInput(), sellerId, title: "进行中资产" });
+      await assets.updateStatus(activeAsset.id, "active");
       const adminToken = await adminLogin(app, "super", "super-pass");
-      await app.inject({
-        method: "POST",
-        url: `/admin/assets/${activeAsset.json().asset.id}/approve`,
-        headers: { authorization: `Bearer ${adminToken}` }
-      });
       await app.inject({
         method: "POST",
         url: "/api/bids",
         headers: { authorization: `Bearer ${bidderToken}` },
-        payload: { assetId: activeAsset.json().asset.id, amountCents: 10000, commitmentAccepted: true }
+        payload: { assetId: activeAsset.id, amountCents: 10000, commitmentAccepted: true }
       });
       await app.inject({
         method: "POST",
         url: "/api/reports",
         headers: { authorization: `Bearer ${bidderToken}` },
-        payload: { targetUserId: sellerId, assetId: activeAsset.json().asset.id, reason: "资料不完整", evidence: "截图说明" }
+        payload: { targetUserId: sellerId, assetId: activeAsset.id, reason: "资料不完整", evidence: "截图说明" }
       });
       await app.inject({
         method: "POST",
@@ -200,9 +466,9 @@ describe("admin routes", () => {
           todayPublishedAssets: 2,
           todayBids: 1
         },
-        pendingAssets: [expect.objectContaining({ id: pendingAsset.json().asset.id, title: "待办资产" })],
+        pendingAssets: [expect.objectContaining({ id: pendingAsset.id, title: "待办资产" })],
         pendingReports: [
-          expect.objectContaining({ reason: "资料不完整", targetUserId: sellerId, assetId: activeAsset.json().asset.id })
+          expect.objectContaining({ reason: "资料不完整", targetUserId: sellerId, assetId: activeAsset.id })
         ]
       });
     } finally {
@@ -296,7 +562,8 @@ describe("admin routes", () => {
   });
 
   it("returns recent bid records in admin asset detail", async () => {
-    const app = buildApp({ enableMockAuth: true });
+    const assets = createInMemoryAssetsRepository();
+    const app = buildApp({ enableMockAuth: true, assetsRepository: assets });
 
     try {
       const sellerLogin = await app.inject({
@@ -309,22 +576,15 @@ describe("admin routes", () => {
         url: "/api/auth/mock-login",
         payload: { displayName: "后台详情买家" }
       });
-      const sellerToken = sellerLogin.json().token as string;
       const bidderToken = bidderLogin.json().token as string;
-      const { sellerId: _sellerId, ...payload } = pendingAssetInput();
-      const created = await app.inject({
-        method: "POST",
-        url: "/api/assets",
-        headers: { authorization: `Bearer ${sellerToken}` },
-        payload: { ...payload, title: "有竞价详情资产" }
+      const asset = await assets.createPending({
+        ...pendingAssetInput(),
+        sellerId: sellerLogin.json().user.id,
+        title: "有竞价详情资产"
       });
-      const assetId = created.json().asset.id as string;
+      await assets.updateStatus(asset.id, "active");
+      const assetId = asset.id;
       const adminToken = await adminLogin(app, "super", "super-pass");
-      await app.inject({
-        method: "POST",
-        url: `/admin/assets/${assetId}/approve`,
-        headers: { authorization: `Bearer ${adminToken}` }
-      });
       await app.inject({
         method: "POST",
         url: "/api/bids",
@@ -356,7 +616,7 @@ describe("admin routes", () => {
     }
   });
 
-  it("requires miniapp publishers to choose an active principal", async () => {
+  it("keeps public principal lookup available while miniapp publishing is disabled", async () => {
     const app = buildApp({ enableMockAuth: true });
 
     try {
@@ -366,7 +626,6 @@ describe("admin routes", () => {
         payload: { displayName: "发布用户" }
       });
       const token = login.json().token as string;
-      const { sellerId: _sellerId, principalId: _principalId, ...payload } = pendingAssetInput();
 
       const principals = await app.inject({ method: "GET", url: "/api/principals" });
       expect(principals.statusCode).toBe(200);
@@ -374,23 +633,14 @@ describe("admin routes", () => {
         expect.arrayContaining([expect.objectContaining({ id: "1", displayName: "默认主理人" })])
       );
 
-      const missingPrincipal = await app.inject({
-        method: "POST",
-        url: "/api/assets",
-        headers: { authorization: `Bearer ${token}` },
-        payload
-      });
-      expect(missingPrincipal.statusCode).toBe(400);
-      expect(missingPrincipal.json().error.code).toBe("invalid_asset_principal");
-
       const created = await app.inject({
         method: "POST",
         url: "/api/assets",
         headers: { authorization: `Bearer ${token}` },
-        payload: { ...payload, principalId: "1" }
+        payload: { ...pendingAssetInput(), principalId: "1" }
       });
-      expect(created.statusCode).toBe(200);
-      expect(created.json().asset).toMatchObject({ principalId: "1" });
+      expect(created.statusCode).toBe(410);
+      expect(created.json().error.code).toBe("user_asset_publish_disabled");
     } finally {
       await app.close();
     }
@@ -1306,7 +1556,8 @@ describe("admin routes", () => {
   });
 
   it("allows a principal reviewer to deduct five credit points for a violating asset", async () => {
-    const app = buildApp({ enableMockAuth: true });
+    const assets = createInMemoryAssetsRepository();
+    const app = buildApp({ enableMockAuth: true, assetsRepository: assets });
 
     try {
       const sellerLogin = await app.inject({
@@ -1314,16 +1565,9 @@ describe("admin routes", () => {
         url: "/api/auth/mock-login",
         payload: { displayName: "违规卖家" }
       });
-      const sellerToken = sellerLogin.json().token as string;
       const sellerId = sellerLogin.json().user.id as string;
-      const { sellerId: _sellerId, ...payload } = pendingAssetInput();
-      const created = await app.inject({
-        method: "POST",
-        url: "/api/assets",
-        headers: { authorization: `Bearer ${sellerToken}` },
-        payload: { ...payload, title: "违规资产" }
-      });
-      const assetId = created.json().asset.id as string;
+      const asset = await assets.createPending({ ...pendingAssetInput(), sellerId, title: "违规资产" });
+      const assetId = asset.id;
       const reviewerToken = await adminLogin(app, "reviewer", "reviewer-pass");
 
       const response = await app.inject({
@@ -1483,7 +1727,8 @@ describe("admin routes", () => {
   });
 
   it("defaults the asset data list to active and pending review assets by newest created time", async () => {
-    const app = buildApp({ enableMockAuth: true });
+    const assets = createInMemoryAssetsRepository();
+    const app = buildApp({ enableMockAuth: true, assetsRepository: assets });
 
     try {
       const sellerLogin = await app.inject({
@@ -1491,54 +1736,19 @@ describe("admin routes", () => {
         url: "/api/auth/mock-login",
         payload: { displayName: "资产数据卖家" }
       });
-      const sellerToken = sellerLogin.json().token as string;
       const sellerId = sellerLogin.json().user.id as string;
-      const { sellerId: _sellerId, ...payload } = pendingAssetInput();
       const adminToken = await adminLogin(app, "super", "super-pass");
-
-      await app.inject({
-        method: "POST",
-        url: `/admin/users/${sellerId}/publish-limit`,
-        headers: { authorization: `Bearer ${adminToken}` },
-        payload: { limit: 10 }
-      });
-
-      const oldPending = await app.inject({
-        method: "POST",
-        url: "/api/assets",
-        headers: { authorization: `Bearer ${sellerToken}` },
-        payload: { ...payload, title: "较早待审核资产" }
-      });
-      const active = await app.inject({
-        method: "POST",
-        url: "/api/assets",
-        headers: { authorization: `Bearer ${sellerToken}` },
-        payload: { ...payload, title: "已上架资产" }
-      });
-      const rejected = await app.inject({
-        method: "POST",
-        url: "/api/assets",
-        headers: { authorization: `Bearer ${sellerToken}` },
-        payload: { ...payload, title: "已拒绝资产" }
-      });
-      const newestPending = await app.inject({
-        method: "POST",
-        url: "/api/assets",
-        headers: { authorization: `Bearer ${sellerToken}` },
-        payload: { ...payload, title: "最新待审核资产" }
-      });
-
-      await app.inject({
-        method: "POST",
-        url: `/admin/assets/${active.json().asset.id}/approve`,
-        headers: { authorization: `Bearer ${adminToken}` }
-      });
-      await app.inject({
-        method: "POST",
-        url: `/admin/assets/${rejected.json().asset.id}/reject`,
-        headers: { authorization: `Bearer ${adminToken}` },
-        payload: { note: "不展示在默认资产数据" }
-      });
+      const baseTime = Date.now();
+      const oldPending = await assets.createPending({ ...pendingAssetInput(), sellerId, title: "较早待审核资产" });
+      const active = await assets.createPending({ ...pendingAssetInput(), sellerId, title: "已上架资产" });
+      const rejected = await assets.createPending({ ...pendingAssetInput(), sellerId, title: "已拒绝资产" });
+      const newestPending = await assets.createPending({ ...pendingAssetInput(), sellerId, title: "最新待审核资产" });
+      await assets.save({ ...oldPending, createdAt: new Date(baseTime).toISOString() });
+      const activeRow = await assets.updateStatus(active.id, "active");
+      await assets.save({ ...activeRow, createdAt: new Date(baseTime + 1000).toISOString() });
+      const rejectedRow = await assets.updateStatus(rejected.id, "rejected");
+      await assets.save({ ...rejectedRow, createdAt: new Date(baseTime + 2000).toISOString() });
+      await assets.save({ ...newestPending, createdAt: new Date(baseTime + 3000).toISOString() });
 
       const response = await app.inject({
         method: "GET",
@@ -1546,17 +1756,16 @@ describe("admin routes", () => {
         headers: { authorization: `Bearer ${adminToken}` }
       });
 
-      expect(newestPending.statusCode).toBe(200);
       expect(response.statusCode).toBe(200);
       expect(response.json()).toMatchObject({
         total: 3,
         items: [
-          expect.objectContaining({ id: newestPending.json().asset.id, status: "pending_review" }),
-          expect.objectContaining({ id: active.json().asset.id, status: "active" }),
-          expect.objectContaining({ id: oldPending.json().asset.id, status: "pending_review" })
+          expect.objectContaining({ id: newestPending.id, status: "pending_review" }),
+          expect.objectContaining({ id: active.id, status: "active" }),
+          expect.objectContaining({ id: oldPending.id, status: "pending_review" })
         ]
       });
-      expect(response.json().items.map((asset: { id: string }) => asset.id)).not.toContain(rejected.json().asset.id);
+      expect(response.json().items.map((asset: { id: string }) => asset.id)).not.toContain(rejected.id);
     } finally {
       await app.close();
     }

@@ -1,9 +1,11 @@
 import { useState } from "react";
 import { clearAdminToken, readAdminSession, readAdminToken, type AdminSession } from "./auth/session";
 import { AppLayout } from "./components/AppLayout";
+import { ChangePasswordDialog } from "./components/ChangePasswordDialog";
 import { AdminUserManagementPage } from "./pages/AdminUserManagementPage";
 import { AssetDataPage } from "./pages/AssetDataPage";
 import { AssetDetailPage } from "./pages/AssetDetailPage";
+import { AssetPublishPage } from "./pages/AssetPublishPage";
 import { ConfigPage } from "./pages/ConfigPage";
 import { DashboardPage } from "./pages/DashboardPage";
 import { DealFollowupPage } from "./pages/DealFollowupPage";
@@ -12,7 +14,16 @@ import { PrincipalManagementPage } from "./pages/PrincipalManagementPage";
 import { ReviewCenterPage } from "./pages/ReviewCenterPage";
 import { UserManagementPage } from "./pages/UserManagementPage";
 
-type PageKey = "dashboard" | "reviews" | "assetData" | "dealFollowups" | "adminUsers" | "principals" | "users" | "configs";
+type PageKey =
+  | "dashboard"
+  | "reviews"
+  | "assetData"
+  | "assetPublish"
+  | "dealFollowups"
+  | "adminUsers"
+  | "principals"
+  | "users"
+  | "configs";
 
 function renderPage(page: PageKey, onOpenAsset: (assetId: string) => void, currentAdminId: string) {
   switch (page) {
@@ -20,6 +31,8 @@ function renderPage(page: PageKey, onOpenAsset: (assetId: string) => void, curre
       return <ReviewCenterPage onOpenAsset={onOpenAsset} />;
     case "assetData":
       return <AssetDataPage onOpenAsset={onOpenAsset} />;
+    case "assetPublish":
+      return <AssetPublishPage onOpenAsset={onOpenAsset} />;
     case "dealFollowups":
       return <DealFollowupPage onOpenAsset={onOpenAsset} />;
     case "adminUsers":
@@ -41,6 +54,8 @@ export function App() {
   const [admin, setAdmin] = useState<AdminSession | null>(() => readAdminSession());
   const [page, setPage] = useState<PageKey>("dashboard");
   const [detailAssetId, setDetailAssetId] = useState<string | null>(null);
+  const [passwordDialogOpen, setPasswordDialogOpen] = useState(false);
+  const [loginNotice, setLoginNotice] = useState("");
 
   function logout() {
     clearAdminToken();
@@ -48,12 +63,20 @@ export function App() {
     setAdmin(null);
     setPage("dashboard");
     setDetailAssetId(null);
+    setPasswordDialogOpen(false);
+  }
+
+  function handlePasswordChanged() {
+    logout();
+    setLoginNotice("密码已修改，请使用新密码重新登录。");
   }
 
   if (!loggedIn || !admin) {
     return (
       <LoginPage
+        notice={loginNotice}
         onLoggedIn={(nextAdmin) => {
+          setLoginNotice("");
           setAdmin(nextAdmin);
           setLoggedIn(true);
         }}
@@ -65,10 +88,12 @@ export function App() {
     <AppLayout
       active={page}
       role={admin.role}
+      username={admin.username}
       onNavigate={(nextPage) => {
         setDetailAssetId(null);
         setPage(nextPage as PageKey);
       }}
+      onChangePassword={() => setPasswordDialogOpen(true)}
       onLogout={logout}
     >
       {detailAssetId ? (
@@ -76,6 +101,9 @@ export function App() {
       ) : (
         renderPage(page, setDetailAssetId, admin.id)
       )}
+      {passwordDialogOpen ? (
+        <ChangePasswordDialog onChanged={handlePasswordChanged} onClose={() => setPasswordDialogOpen(false)} />
+      ) : null}
     </AppLayout>
   );
 }

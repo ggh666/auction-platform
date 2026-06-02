@@ -16,10 +16,6 @@
         <text class="summary">违规记录：{{ user?.violationCount ?? 0 }} 条</text>
       </view>
     </view>
-    <view class="menu-item" @tap="go('/pages/profile/assets')">
-      <text class="menu-title">我的发布</text>
-      <text class="menu-desc">查看审核中、进行中、已结束的资产</text>
-    </view>
     <view class="menu-item" @tap="go('/pages/profile/follows')">
       <text class="menu-title">我的关注</text>
       <text class="menu-desc">查看关注过的交换信息</text>
@@ -87,7 +83,7 @@ function showCreditRules() {
   uni.showModal({
     title: "信誉分规则",
     content:
-      "信誉分默认 100 分。每次违规扣 5 分；70 分及以下只能浏览，不能发布信息、上传图片、关注或取消关注、出价、举报、标记通知已读。扣分满 3 个月后会自动恢复为 100 分。",
+      "信誉分默认 100 分。每次违规扣 5 分；70 分及以下只能浏览，不能关注或取消关注、出价、标记通知已读。扣分满 3 个月后会自动恢复为 100 分。",
     showCancel: false,
     confirmText: "我知道了"
   });

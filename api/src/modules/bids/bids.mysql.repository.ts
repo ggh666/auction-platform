@@ -160,6 +160,22 @@ export function createMysqlBidsRepository(pool: MysqlPool, options: { now?: () =
       return allRows<BidDbRow>(rows).map(toBidRecord);
     },
 
+    async listLatestByAssetBidders(assetId) {
+      const [rows] = await pool.execute<BidDbRow[]>(
+        `SELECT b.id, b.asset_id, b.bidder_id, b.amount_cents, b.created_at
+         FROM bids b
+         INNER JOIN (
+           SELECT bidder_id, MAX(id) AS latest_id
+           FROM bids
+           WHERE asset_id = ?
+           GROUP BY bidder_id
+         ) latest ON latest.latest_id = b.id
+         ORDER BY b.created_at ASC, b.id ASC`,
+        [Number(assetId)]
+      );
+      return allRows<BidDbRow>(rows).map(toBidRecord);
+    },
+
     async listByBidder(bidderId) {
       const [rows] = await pool.execute<BidDbRow[]>(
         `${bidSelect}

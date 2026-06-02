@@ -2,6 +2,7 @@ import type { AdminRole } from "@auction/shared";
 
 export type AdminPermission =
   | "admin:manage"
+  | "asset:create"
   | "asset:view"
   | "asset:review"
   | "asset:remove"
@@ -15,6 +16,7 @@ export type AdminPermission =
 const permissions: Record<AdminRole, AdminPermission[]> = {
   super_admin: [
     "admin:manage",
+    "asset:create",
     "asset:view",
     "asset:review",
     "asset:remove",
@@ -25,8 +27,8 @@ const permissions: Record<AdminRole, AdminPermission[]> = {
     "violation:publish",
     "config:manage"
   ],
-  reviewer: ["asset:view", "asset:review", "auction:confirm_deal", "report:review", "violation:publish"],
-  operator: ["asset:view", "asset:remove", "auction:confirm_deal"]
+  reviewer: ["asset:create", "asset:view", "asset:review", "auction:confirm_deal", "report:review", "violation:publish"],
+  operator: ["asset:create", "asset:view", "asset:remove", "auction:confirm_deal"]
 };
 
 export function canAdmin(role: AdminRole, permission: AdminPermission): boolean {

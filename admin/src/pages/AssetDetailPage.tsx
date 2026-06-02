@@ -220,6 +220,10 @@ export function AssetDetailPage({ assetId, onBack }: AssetDetailPageProps) {
                 <strong>{seller ? `${seller.displayName}（ID：${asset.sellerId}）` : `ID：${asset.sellerId}`}</strong>
               </div>
               <div>
+                <span>卖家游戏ID</span>
+                <strong>{asset.sellerGameId || "未填写"}</strong>
+              </div>
+              <div>
                 <span>主理人</span>
                 <strong>
                   {principal

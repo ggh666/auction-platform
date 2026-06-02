@@ -8,6 +8,10 @@ type CreateAssetDraftInput = Omit<CreateAssetInput, "originalEndAt" | "itemCateg
   dragonBall?: unknown;
 };
 
+type CreateActiveAssetInput = Omit<CreateAssetDraftInput, "originalEndAt"> & {
+  endAt: string;
+};
+
 function isNonEmptyString(value: unknown): value is string {
   return typeof value === "string" && value.trim().length > 0;
 }
@@ -92,50 +96,64 @@ function normalizeDragonBallInput(assetType: string, itemCategory: unknown, drag
   };
 }
 
+function normalizeCreateAssetInput(input: CreateAssetDraftInput, originalEndAtIso: string): CreateAssetInput {
+  if (
+    !isNonEmptyString(input.gameName) ||
+    !isNonEmptyString(input.principalId) ||
+    !isNonEmptyString(input.serverName) ||
+    !isNonEmptyString(input.assetType) ||
+    !isNonEmptyString(input.title) ||
+    !isNonEmptyString(input.description)
+  ) {
+    throw badRequest("invalid_asset", "Required asset fields are missing");
+  }
+
+  const originalEndAt = new Date(originalEndAtIso);
+  const originalEndAtTime = originalEndAt.getTime();
+  if (
+    !Number.isFinite(originalEndAtTime) ||
+    originalEndAt.toISOString() !== originalEndAtIso ||
+    originalEndAtTime <= Date.now()
+  ) {
+    throw badRequest("invalid_end_time", "Auction end time must be in the future");
+  }
+
+  if (!isPositiveWholeYuanCents(input.startingPriceCents)) {
+    throw badRequest("invalid_price", "Starting price must be a positive whole amount");
+  }
+  if (!isPositiveWholeYuanCents(input.minIncrementCents)) {
+    throw badRequest("invalid_increment", "Minimum increment must be a positive whole amount");
+  }
+  const assetType = input.assetType.trim();
+  const dragonBallMetadata = normalizeDragonBallInput(assetType, input.itemCategory, input.dragonBall);
+  return {
+    ...input,
+    sellerGameId: isNonEmptyString(input.sellerGameId) ? input.sellerGameId.trim() : null,
+    gameName: input.gameName.trim(),
+    serverName: input.serverName.trim(),
+    assetType,
+    itemCategory: dragonBallMetadata.itemCategory,
+    dragonBall: dragonBallMetadata.dragonBall,
+    title: input.title.trim(),
+    description: input.description.trim(),
+    originalEndAt: originalEndAtIso,
+    images: sanitizeImages(input.images)
+  };
+}
+
 export function createAssetsService(repository: AssetsRepository) {
   return {
     async createPending(input: CreateAssetDraftInput) {
-      if (
-        !isNonEmptyString(input.gameName) ||
-        !isNonEmptyString(input.principalId) ||
-        !isNonEmptyString(input.serverName) ||
-        !isNonEmptyString(input.assetType) ||
-        !isNonEmptyString(input.title) ||
-        !isNonEmptyString(input.description)
-      ) {
-        throw badRequest("invalid_asset", "Required asset fields are missing");
-      }
-
       const originalEndAtIso = isNonEmptyString(input.originalEndAt) ? input.originalEndAt.trim() : DEFAULT_ASSET_END_AT;
-      const originalEndAt = new Date(originalEndAtIso);
-      const originalEndAtTime = originalEndAt.getTime();
-      if (
-        !Number.isFinite(originalEndAtTime) ||
-        originalEndAt.toISOString() !== originalEndAtIso ||
-        originalEndAtTime <= Date.now()
-      ) {
-        throw badRequest("invalid_end_time", "Auction end time must be in the future");
-      }
-
-      if (!isPositiveWholeYuanCents(input.startingPriceCents)) {
-        throw badRequest("invalid_price", "Starting price must be a positive whole amount");
-      }
-      if (!isPositiveWholeYuanCents(input.minIncrementCents)) {
-        throw badRequest("invalid_increment", "Minimum increment must be a positive whole amount");
-      }
-      const assetType = input.assetType.trim();
-      const dragonBallMetadata = normalizeDragonBallInput(assetType, input.itemCategory, input.dragonBall);
-      return repository.createPending({
-        ...input,
-        gameName: input.gameName.trim(),
-        serverName: input.serverName.trim(),
-        assetType,
-        itemCategory: dragonBallMetadata.itemCategory,
-        dragonBall: dragonBallMetadata.dragonBall,
-        title: input.title.trim(),
-        description: input.description.trim(),
-        originalEndAt: originalEndAtIso,
-        images: sanitizeImages(input.images)
+      return repository.createPending(normalizeCreateAssetInput(input, originalEndAtIso));
+    },
+    async createActive(input: CreateActiveAssetInput) {
+      const asset = await repository.createPending(normalizeCreateAssetInput(input, input.endAt.trim()));
+      return repository.save({
+        ...asset,
+        status: "active",
+        originalEndAt: input.endAt.trim(),
+        effectiveEndAt: input.endAt.trim()
       });
     },
     async listActive(input: PublicAssetListInput = {}) {

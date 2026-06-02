@@ -20,3 +20,7 @@ export function forbidden(code: string, message: string): HttpError {
 export function notFound(code: string, message: string): HttpError {
   return new HttpError(404, code, message);
 }
+
+export function gone(code: string, message: string): HttpError {
+  return new HttpError(410, code, message);
+}

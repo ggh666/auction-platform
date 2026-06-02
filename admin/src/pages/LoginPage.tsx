@@ -4,12 +4,13 @@ import { adminLogin } from "../api/client";
 import { saveAdminSession } from "../auth/session";
 
 type LoginPageProps = {
+  notice?: string;
   onLoggedIn: (admin: AdminLoginResponse["admin"]) => void;
 };
 
 const isDevelopment = import.meta.env.DEV;
 
-export function LoginPage({ onLoggedIn }: LoginPageProps) {
+export function LoginPage({ notice, onLoggedIn }: LoginPageProps) {
   const [username, setUsername] = useState(isDevelopment ? "reviewer" : "");
   const [password, setPassword] = useState(isDevelopment ? "reviewer-pass" : "");
   const [error, setError] = useState("");
@@ -41,6 +42,7 @@ export function LoginPage({ onLoggedIn }: LoginPageProps) {
             {isDevelopment ? "本地开发账号：reviewer / reviewer-pass" : "请输入管理员账号登录"}
           </p>
         </div>
+        {notice ? <p className="notice success">{notice}</p> : null}
         <label>
           用户名
           <input

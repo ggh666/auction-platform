@@ -29,6 +29,7 @@ const columns: ExportColumn[] = [
   { title: "区服", value: ({ asset }) => asset.serverName },
   { title: "类型", value: ({ asset }) => asset.assetType },
   { title: "卖家ID", value: ({ asset }) => asset.sellerId },
+  { title: "卖家游戏ID", value: ({ asset }) => asset.sellerGameId ?? "" },
   { title: "主理人", value: ({ principalName }) => principalName },
   { title: "状态", value: ({ asset }) => statusLabels[asset.status] },
   { title: "起始价", value: ({ asset }) => centsToYuan(asset.startingPriceCents) },

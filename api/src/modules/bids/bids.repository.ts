@@ -11,6 +11,7 @@ export type BidsRepository = {
   createBid(input: CreateBidInput): Promise<{ bid: BidRecord; asset: AuctionAsset }>;
   countCreatedSince(since: string, input?: { principalId?: string }): Promise<number>;
   listByAsset(assetId: string): Promise<BidRecord[]>;
+  listLatestByAssetBidders(assetId: string): Promise<BidRecord[]>;
   listByBidder(bidderId: string): Promise<BidRecord[]>;
 };
 
@@ -67,6 +68,23 @@ export function createInMemoryBidsRepository(
     },
     async listByAsset(assetId) {
       return bids.filter((bid) => bid.assetId === assetId).map(cloneBid);
+    },
+    async listLatestByAssetBidders(assetId) {
+      const latestByBidderId = new Map<string, BidRecord>();
+      for (const bid of bids.filter((item) => item.assetId === assetId)) {
+        const current = latestByBidderId.get(bid.bidderId);
+        const bidTime = new Date(bid.createdAt).getTime();
+        const currentTime = current ? new Date(current.createdAt).getTime() : Number.NEGATIVE_INFINITY;
+        if (!current || bidTime > currentTime || (bidTime === currentTime && Number(bid.id) > Number(current.id))) {
+          latestByBidderId.set(bid.bidderId, bid);
+        }
+      }
+      return [...latestByBidderId.values()]
+        .sort(
+          (left, right) =>
+            new Date(left.createdAt).getTime() - new Date(right.createdAt).getTime() || Number(left.id) - Number(right.id)
+        )
+        .map(cloneBid);
     },
     async listByBidder(bidderId) {
       return bids.filter((bid) => bid.bidderId === bidderId).map(cloneBid);

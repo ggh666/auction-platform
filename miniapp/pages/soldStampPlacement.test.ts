@@ -12,11 +12,10 @@ describe("sold asset stamp placement", () => {
   it("shows a sold stamp on frontend asset surfaces", () => {
     const detailPage = readPage("pages/auctions/detail.vue");
     const listPage = readPage("pages/auctions/list.vue");
-    const profileAssetsPage = readPage("pages/profile/assets.vue");
     const profileFollowsPage = readPage("pages/profile/follows.vue");
     const profileBidsPage = readPage("pages/profile/bids.vue");
 
-    for (const page of [detailPage, listPage, profileAssetsPage, profileFollowsPage, profileBidsPage]) {
+    for (const page of [detailPage, listPage, profileFollowsPage, profileBidsPage]) {
       expect(page).toContain("isSoldAsset");
       expect(page).toContain("sold-stamp");
       expect(page).toContain("成交");

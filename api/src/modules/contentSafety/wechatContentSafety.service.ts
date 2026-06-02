@@ -1,6 +1,7 @@
 import { HttpError, badRequest } from "../../http/errors";
 import type { AssetsRepository } from "../assets/assets.repository";
 import type { UsersRepository } from "../users/users.repository";
+import { assertLocalMarketplaceTextAllowed } from "./contentSafety.service";
 import type {
   ContentSafetyService,
   ImageSafetyInput,
@@ -43,7 +44,6 @@ type WechatContentSafetyOptions = {
   fetchImpl?: FetchLike;
 };
 
-const prohibitedMarketplaceTerms = ["赌博", "博彩", "卖淫", "嫖娼", "招嫖", "援交", "偷盗", "盗号", "洗钱", "诈骗"];
 const wechatMediaDownloadErrorCode = -1008;
 const defaultImageDownloadRetryDelayMs = 0;
 const defaultImageDownloadRetryMaxAttempts = 3;
@@ -76,19 +76,6 @@ function assertOpenid(openid: string | null | undefined): string {
     throw badRequest("content_safety_openid_missing", "WeChat openid is required for content safety check");
   }
   return openid.trim();
-}
-
-function assertLocalTextPolicyAllowed(content: string): void {
-  const normalizedContent = content.replace(/\s+/g, "");
-  const matchedTerm = prohibitedMarketplaceTerms.find((term) => normalizedContent.includes(term));
-  if (!matchedTerm) {
-    return;
-  }
-
-  throw badRequest("content_safety_risky", "Content safety check failed", {
-    source: "local_text_policy",
-    keyword: matchedTerm
-  });
 }
 
 function normalizeImageUploadCandidates(images: ImageUploadSafetyInput["images"]): Array<{ objectKey: string; publicUrl: string }> {
@@ -362,7 +349,7 @@ export function createWechatContentSafetyService(options: WechatContentSafetyOpt
       if (!options.enabled || !input.content.trim()) {
         return;
       }
-      assertLocalTextPolicyAllowed(input.content);
+      assertLocalMarketplaceTextAllowed(input.content);
       const accessToken = await options.tokenProvider.getAccessToken();
       const openid = assertOpenid(input.openid);
       const response = await fetchImpl(`https://api.weixin.qq.com/wxa/msg_sec_check?access_token=${accessToken}`, {

@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { buildApp } from "../../api/src/app";
 import { HttpError } from "../../api/src/http/errors";
+import { createInMemoryAssetsRepository, type AssetsRepository } from "../../api/src/modules/assets/assets.repository";
 import { createReportsService } from "../../api/src/modules/reports/reports.service";
 import { createInMemoryUsersRepository } from "../../api/src/modules/users/users.repository";
 
@@ -15,46 +16,36 @@ async function userToken(app: ReturnType<typeof buildApp>, displayName: string) 
   return response.json().token as string;
 }
 
-async function createReportableAuction(app: ReturnType<typeof buildApp>) {
+async function createReportableAuction(app: ReturnType<typeof buildApp>, assets: AssetsRepository) {
   const sellerToken = await userToken(app, "卖家");
   const bidderToken = await userToken(app, "出价人");
-  const reviewer = await adminToken(app);
-  const created = await app.inject({
-    method: "POST",
-    url: "/api/assets",
-    headers: { authorization: `Bearer ${sellerToken}` },
-    payload: {
-      gameName: "塔防精灵",
-      serverName: "测试区",
-      assetType: "账号",
-      principalId: "1",
-      title: "可举报资产",
-      description: "测试举报权限",
-      startingPriceCents: 10000,
-      minIncrementCents: 100,
-      originalEndAt: futureEndAt()
-    }
+  const asset = await assets.createPending({
+    sellerId: "1",
+    gameName: "塔防精灵",
+    serverName: "测试区",
+    assetType: "账号",
+    principalId: "1",
+    title: "可举报资产",
+    description: "测试举报权限",
+    startingPriceCents: 10000,
+    minIncrementCents: 100,
+    originalEndAt: futureEndAt()
   });
-  const assetId = created.json().asset.id as string;
-  await app.inject({
-    method: "POST",
-    url: `/admin/assets/${assetId}/approve`,
-    headers: { authorization: `Bearer ${reviewer}` }
-  });
+  await assets.updateStatus(asset.id, "active");
   await app.inject({
     method: "POST",
     url: "/api/bids",
     headers: { authorization: `Bearer ${bidderToken}` },
-    payload: { assetId, amountCents: 10000, commitmentAccepted: true }
+    payload: { assetId: asset.id, amountCents: 10000, commitmentAccepted: true }
   });
 
   return {
-    assetId,
+    assetId: asset.id,
     sellerId: "1",
     bidderId: "2",
     sellerToken,
     bidderToken,
-    reviewer
+    reviewer: await adminToken(app)
   };
 }
 
@@ -150,10 +141,11 @@ describe("report routes", () => {
 
   it("rejects report creation when the reporter credit score is 70 or below", async () => {
     const users = createInMemoryUsersRepository();
-    const app = buildApp({ enableMockAuth: true, usersRepository: users });
+    const assets = createInMemoryAssetsRepository();
+    const app = buildApp({ enableMockAuth: true, usersRepository: users, assetsRepository: assets });
 
     try {
-      const auction = await createReportableAuction(app);
+      const auction = await createReportableAuction(app, assets);
       await users.deductCreditScore(Number(auction.bidderId), 30);
 
       const response = await app.inject({
@@ -221,10 +213,11 @@ describe("report routes", () => {
   });
 
   it("trims valid report payloads and keeps them pending", async () => {
-    const app = buildApp({ enableMockAuth: true });
+    const assets = createInMemoryAssetsRepository();
+    const app = buildApp({ enableMockAuth: true, assetsRepository: assets });
 
     try {
-      const auction = await createReportableAuction(app);
+      const auction = await createReportableAuction(app, assets);
       const response = await app.inject({
         method: "POST",
         url: "/api/reports",
@@ -252,10 +245,11 @@ describe("report routes", () => {
   });
 
   it("rejects report creation when the reporter did not bid on the asset", async () => {
-    const app = buildApp({ enableMockAuth: true });
+    const assets = createInMemoryAssetsRepository();
+    const app = buildApp({ enableMockAuth: true, assetsRepository: assets });
 
     try {
-      const auction = await createReportableAuction(app);
+      const auction = await createReportableAuction(app, assets);
       const outsiderToken = await userToken(app, "围观用户");
       const response = await app.inject({
         method: "POST",
@@ -277,10 +271,11 @@ describe("report routes", () => {
   });
 
   it("rejects report creation from the asset seller", async () => {
-    const app = buildApp({ enableMockAuth: true });
+    const assets = createInMemoryAssetsRepository();
+    const app = buildApp({ enableMockAuth: true, assetsRepository: assets });
 
     try {
-      const auction = await createReportableAuction(app);
+      const auction = await createReportableAuction(app, assets);
       const response = await app.inject({
         method: "POST",
         url: "/api/reports",
@@ -301,8 +296,10 @@ describe("report routes", () => {
   });
 
   it("blocks report creation when text content safety rejects reason or evidence", async () => {
+    const assets = createInMemoryAssetsRepository();
     const app = buildApp({
       enableMockAuth: true,
+      assetsRepository: assets,
       contentSafetyService: {
         async assertTextAllowed(input: { content: string }) {
           if (input.content.includes("违规广告")) {
@@ -318,7 +315,7 @@ describe("report routes", () => {
     });
 
     try {
-      const auction = await createReportableAuction(app);
+      const auction = await createReportableAuction(app, assets);
       const response = await app.inject({
         method: "POST",
         url: "/api/reports",
@@ -339,10 +336,11 @@ describe("report routes", () => {
   });
 
   it("allows admin confirmation and only then publishes public violations", async () => {
-    const app = buildApp({ enableMockAuth: true });
+    const assets = createInMemoryAssetsRepository();
+    const app = buildApp({ enableMockAuth: true, assetsRepository: assets });
 
     try {
-      const auction = await createReportableAuction(app);
+      const auction = await createReportableAuction(app, assets);
       const reviewer = await adminToken(app);
       const created = await app.inject({
         method: "POST",
@@ -407,32 +405,25 @@ describe("report routes", () => {
   });
 
   it("marks only the reported asset as publicly violated, not every asset from the same seller", async () => {
-    const app = buildApp({ enableMockAuth: true });
+    const assets = createInMemoryAssetsRepository();
+    const app = buildApp({ enableMockAuth: true, assetsRepository: assets });
 
     try {
-      const auction = await createReportableAuction(app);
-      const createdOtherAsset = await app.inject({
-        method: "POST",
-        url: "/api/assets",
-        headers: { authorization: `Bearer ${auction.sellerToken}` },
-        payload: {
-          gameName: "塔防精灵",
-          serverName: "测试区",
-          assetType: "账号",
-          principalId: "1",
-          title: "同卖家正常资产",
-          description: "这个资产没有违规公示",
-          startingPriceCents: 12000,
-          minIncrementCents: 100,
-          originalEndAt: futureEndAt()
-        }
+      const auction = await createReportableAuction(app, assets);
+      const otherAsset = await assets.createPending({
+        sellerId: auction.sellerId,
+        gameName: "塔防精灵",
+        serverName: "测试区",
+        assetType: "账号",
+        principalId: "1",
+        title: "同卖家正常资产",
+        description: "这个资产没有违规公示",
+        startingPriceCents: 12000,
+        minIncrementCents: 100,
+        originalEndAt: futureEndAt()
       });
-      const otherAssetId = createdOtherAsset.json().asset.id as string;
-      await app.inject({
-        method: "POST",
-        url: `/admin/assets/${otherAssetId}/approve`,
-        headers: { authorization: `Bearer ${auction.reviewer}` }
-      });
+      await assets.updateStatus(otherAsset.id, "active");
+      const otherAssetId = otherAsset.id;
       const createdReport = await app.inject({
         method: "POST",
         url: "/api/reports",
@@ -470,10 +461,11 @@ describe("report routes", () => {
   });
 
   it("allows admins to reject pending reports", async () => {
-    const app = buildApp({ enableMockAuth: true });
+    const assets = createInMemoryAssetsRepository();
+    const app = buildApp({ enableMockAuth: true, assetsRepository: assets });
 
     try {
-      const auction = await createReportableAuction(app);
+      const auction = await createReportableAuction(app, assets);
       const reviewer = await adminToken(app);
       const created = await app.inject({
         method: "POST",
@@ -515,10 +507,11 @@ describe("report routes", () => {
   });
 
   it("requires violation publish permission for publishing routes", async () => {
-    const app = buildApp({ enableMockAuth: true });
+    const assets = createInMemoryAssetsRepository();
+    const app = buildApp({ enableMockAuth: true, assetsRepository: assets });
 
     try {
-      const auction = await createReportableAuction(app);
+      const auction = await createReportableAuction(app, assets);
       const operator = await adminToken(app, "operator", "operator-pass");
       const created = await app.inject({
         method: "POST",

@@ -7,7 +7,6 @@
       </view>
       <view class="header-actions">
         <button class="share-button" open-type="share">分享</button>
-        <button class="publish-button" @tap="openPublish">发布{{ selectedAssetType }}</button>
       </view>
     </view>
 
@@ -321,13 +320,6 @@ function goHome() {
   uni.switchTab({ url: "/pages/games/index" });
 }
 
-function openPublish() {
-  uni.navigateTo({
-    url: `/pages/auctions/publish?gameName=${encodeURIComponent(gameName.value)}&assetType=${encodeURIComponent(
-      selectedAssetType.value
-    )}`
-  });
-}
 </script>
 
 <style scoped>
@@ -374,18 +366,6 @@ function openPublish() {
   border-radius: 8rpx;
 }
 
-.publish-button {
-  min-width: 160rpx;
-  height: 64rpx;
-  margin: 0;
-  padding: 0 20rpx;
-  font-size: 26rpx;
-  line-height: 64rpx;
-  color: #fff;
-  background: #175cd3;
-  border-radius: 8rpx;
-}
-
 .header-actions {
   display: flex;
   flex: 0 0 auto;
@@ -404,10 +384,6 @@ function openPublish() {
   color: #175cd3;
   background: #eff8ff;
   border-radius: 8rpx;
-}
-
-.publish-button::after {
-  border: 0;
 }
 
 .home-button::after,
@@ -650,13 +626,6 @@ function openPublish() {
   font-weight: 800;
   background: rgba(11, 32, 30, 0.9);
   border: 1px solid rgba(246, 196, 83, 0.32);
-}
-
-.publish-button {
-  color: #1b1305;
-  font-weight: 800;
-  background: linear-gradient(180deg, #ffd66b, #f6a821);
-  box-shadow: 0 12rpx 26rpx rgba(0, 0, 0, 0.32), inset 0 2rpx 0 rgba(255, 255, 255, 0.36);
 }
 
 .share-button {

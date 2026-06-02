@@ -45,27 +45,17 @@ async function createEndedSoldAsset(
   bidderToken: string,
   overrides: Record<string, unknown> = {}
 ) {
-  const created = await app.inject({
-    method: "POST",
-    url: "/api/assets",
-    headers: { authorization: `Bearer ${sellerToken}` },
-    payload: assetPayload(overrides)
-  });
-  const assetId = created.json().asset.id as string;
-  const reviewer = await adminLogin(app);
-  await app.inject({
-    method: "POST",
-    url: `/admin/assets/${assetId}/approve`,
-    headers: { authorization: `Bearer ${reviewer}` }
-  });
+  expect(sellerToken).toEqual(expect.any(String));
+  const created = await assets.createPending({ ...assetPayload(overrides), sellerId: "1" });
+  await assets.updateStatus(created.id, "active");
   await app.inject({
     method: "POST",
     url: "/api/bids",
     headers: { authorization: `Bearer ${bidderToken}` },
-    payload: { assetId, amountCents: 10000, commitmentAccepted: true }
+    payload: { assetId: created.id, amountCents: 10000, commitmentAccepted: true }
   });
-  await assets.updateStatus(assetId, "ended");
-  return assetId;
+  await assets.updateStatus(created.id, "ended");
+  return created.id;
 }
 
 async function createExpiredSoldActiveAsset(
@@ -75,31 +65,21 @@ async function createExpiredSoldActiveAsset(
   bidderToken: string,
   overrides: Record<string, unknown> = {}
 ) {
-  const created = await app.inject({
-    method: "POST",
-    url: "/api/assets",
-    headers: { authorization: `Bearer ${sellerToken}` },
-    payload: assetPayload(overrides)
-  });
-  const assetId = created.json().asset.id as string;
-  const reviewer = await adminLogin(app);
-  await app.inject({
-    method: "POST",
-    url: `/admin/assets/${assetId}/approve`,
-    headers: { authorization: `Bearer ${reviewer}` }
-  });
+  expect(sellerToken).toEqual(expect.any(String));
+  const created = await assets.createPending({ ...assetPayload(overrides), sellerId: "1" });
+  await assets.updateStatus(created.id, "active");
   await app.inject({
     method: "POST",
     url: "/api/bids",
     headers: { authorization: `Bearer ${bidderToken}` },
-    payload: { assetId, amountCents: 10000, commitmentAccepted: true }
+    payload: { assetId: created.id, amountCents: 10000, commitmentAccepted: true }
   });
-  const asset = await assets.findById(assetId);
+  const asset = await assets.findById(created.id);
   if (!asset) {
     throw new Error("Created asset not found");
   }
   await assets.save({ ...asset, effectiveEndAt: new Date(Date.now() - 1000).toISOString() });
-  return assetId;
+  return created.id;
 }
 
 describe("deal followups", () => {
@@ -319,18 +299,10 @@ describe("deal followups", () => {
       }
 
       const buyerRecord = await users.findById(Number(buyer.user.id));
-      const nextAsset = await app.inject({
-        method: "POST",
-        url: "/api/assets",
-        headers: { authorization: `Bearer ${seller.token}` },
-        payload: assetPayload({ title: "后续限制出价资产" })
-      });
-      const nextAssetId = nextAsset.json().asset.id as string;
-      await app.inject({
-        method: "POST",
-        url: `/admin/assets/${nextAssetId}/approve`,
-        headers: { authorization: `Bearer ${reviewer}` }
-      });
+      expect(seller.token).toEqual(expect.any(String));
+      const nextAsset = await assets.createPending({ ...assetPayload({ title: "后续限制出价资产" }), sellerId: seller.user.id });
+      await assets.updateStatus(nextAsset.id, "active");
+      const nextAssetId = nextAsset.id;
       const blocked = await app.inject({
         method: "POST",
         url: "/api/bids",

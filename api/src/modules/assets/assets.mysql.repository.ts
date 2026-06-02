@@ -16,6 +16,7 @@ import {
 export type AssetDbRow = {
   id: number;
   seller_id: number;
+  seller_game_id: string | null;
   principal_id: number | null;
   game_name: string;
   server_name: string;
@@ -41,6 +42,7 @@ const assetSelect = `
   SELECT
     id,
     seller_id,
+    seller_game_id,
     principal_id,
     game_name,
     server_name,
@@ -75,6 +77,7 @@ export function toAuctionAsset(row: AssetDbRow, imageUrls: string[] = []): Aucti
   return normalizeActiveAssetEndAt({
     id: String(row.id),
     sellerId: String(row.seller_id),
+    sellerGameId: row.seller_game_id ?? null,
     principalId: row.principal_id === null ? null : String(row.principal_id),
     gameName: row.game_name,
     serverName: row.server_name,
@@ -237,6 +240,7 @@ export function createMysqlAssetsRepository(db: MysqlExecutor): AssetsRepository
       const [result] = await db.execute<MysqlResultHeader>(
         `INSERT INTO auction_assets (
            seller_id,
+           seller_game_id,
            principal_id,
            game_name,
            server_name,
@@ -255,9 +259,10 @@ export function createMysqlAssetsRepository(db: MysqlExecutor): AssetsRepository
            original_end_at,
            effective_end_at
          )
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'pending_review', ?, NULL, ?, NULL, ?, ?)`,
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'pending_review', ?, NULL, ?, NULL, ?, ?)`,
         [
           Number(input.sellerId),
+          input.sellerGameId?.trim() || null,
           input.principalId ? Number(input.principalId) : null,
           input.gameName,
           input.serverName,
@@ -565,6 +570,7 @@ export function createMysqlAssetsRepository(db: MysqlExecutor): AssetsRepository
         `UPDATE auction_assets
          SET
            seller_id = ?,
+           seller_game_id = ?,
            principal_id = ?,
            game_name = ?,
            server_name = ?,
@@ -585,6 +591,7 @@ export function createMysqlAssetsRepository(db: MysqlExecutor): AssetsRepository
          WHERE id = ?`,
         [
           Number(asset.sellerId),
+          asset.sellerGameId?.trim() || null,
           asset.principalId === null ? null : Number(asset.principalId),
           asset.gameName,
           asset.serverName,

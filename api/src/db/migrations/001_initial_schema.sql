@@ -62,6 +62,7 @@ CREATE TABLE principals (
 CREATE TABLE auction_assets (
   id BIGINT UNSIGNED PRIMARY KEY AUTO_INCREMENT,
   seller_id BIGINT UNSIGNED NOT NULL,
+  seller_game_id VARCHAR(80) NULL,
   principal_id BIGINT UNSIGNED NULL,
   game_name VARCHAR(80) NOT NULL,
   server_name VARCHAR(80) NOT NULL,

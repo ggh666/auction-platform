@@ -8,7 +8,6 @@ import type {
   NotificationListResponse,
   PlaceBidRequest,
   PlaceBidResponse,
-  PrincipalListResponse,
   ProfileResultsResponse,
   UserSummary,
   WechatLoginRequest
@@ -110,10 +109,6 @@ export function getProfile(): Promise<{ user: UserSummary }> {
   return request<{ user: UserSummary }>("/api/profile/me");
 }
 
-export function listMyAssets(): Promise<AssetListResponse> {
-  return request<AssetListResponse>("/api/profile/assets");
-}
-
 export type ProfileBidItem = {
   id: string;
   assetId: string;
@@ -177,61 +172,8 @@ export function listFollowedAssets(query: Pick<AssetListQuery, "page" | "pageSiz
   return request<AssetListResponse>(`/api/profile/follows${queryString(query)}`);
 }
 
-export function listPrincipals(): Promise<PrincipalListResponse> {
-  return request<PrincipalListResponse>("/api/principals");
-}
-
 export function getAssetDetail(assetId: string): Promise<AssetDetailResponse> {
   return request<AssetDetailResponse>(`/api/assets/${assetId}`);
-}
-
-export type CreateAssetRequest = {
-  gameName: string;
-  serverName: string;
-  assetType: string;
-  principalId: string;
-  itemCategory?: string;
-  dragonBall?: {
-    profession: string;
-    quality: string;
-    attributes: string;
-  };
-  title: string;
-  description: string;
-  startingPriceCents: number;
-  minIncrementCents: number;
-  originalEndAt?: string;
-  images?: UploadedImage[];
-};
-
-export type UploadedImage = {
-  objectKey: string;
-  publicUrl: string;
-  mimeType: string;
-  sizeBytes: number;
-  safetyStatus?: "pending" | "pass" | "review" | "risky" | "failed";
-  safetyTraceId?: string;
-};
-
-export type UploadImageRequest = {
-  assetType?: string;
-  fileName: string;
-  mimeType: string;
-  base64Data: string;
-};
-
-export function uploadImage(input: UploadImageRequest): Promise<{ image: UploadedImage }> {
-  return request<{ image: UploadedImage }>("/api/images", {
-    method: "POST",
-    data: input
-  });
-}
-
-export function createAsset(input: CreateAssetRequest): Promise<{ asset: AuctionAsset }> {
-  return request<{ asset: AuctionAsset }>("/api/assets", {
-    method: "POST",
-    data: input
-  });
 }
 
 export function followAsset(assetId: string): Promise<{ assetId: string; followed: true }> {

@@ -71,6 +71,7 @@ export type AdminPrincipal = PrincipalSummary & {
 export type AuctionAsset = {
   id: string;
   sellerId: string;
+  sellerGameId?: string | null;
   principalId: string | null;
   principal?: PrincipalSummary | null;
   gameName: string;

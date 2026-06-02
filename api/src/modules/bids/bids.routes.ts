@@ -4,7 +4,9 @@ import { requireActiveUser } from "../../http/auth";
 import { HttpError, badRequest } from "../../http/errors";
 import type { AuctionHub } from "../../realtime/auctionHub";
 import type { AssetsRepository } from "../assets/assets.repository";
+import { toPublicAsset } from "../assets/publicAsset";
 import type { NotificationsRepository } from "../notifications/notifications.repository";
+import { createInProcessPriceChangeQueue } from "../subscribeMessages/priceChangeQueue";
 import type { SubscribeMessageService } from "../subscribeMessages/subscribeMessage.service";
 import { toBidDisplayRecord } from "../users/userSummary";
 import type { UsersRepository } from "../users/users.repository";
@@ -70,6 +72,11 @@ export function registerBidRoutes(
     extensionWindowSeconds: 300,
     extensionDurationSeconds: 300
   });
+  const priceChangeQueue = createInProcessPriceChangeQueue({
+    users: deps.users,
+    subscribeMessages: deps.subscribeMessages,
+    log: app.log
+  });
 
   app.post<{ Body: unknown; Reply: PlaceBidResponse }>("/api/bids", { preHandler: requireActiveUser(deps.users) }, async (request) => {
     if (!request.user?.id) {
@@ -84,37 +91,33 @@ export function registerBidRoutes(
     }
     const result = await service.placeBid(request.user.id, body.assetId, body.amountCents);
     const bid = await toBidDisplayRecord(deps.users, result.bid);
+    const publicAsset = toPublicAsset(result.asset);
     const serverTime = new Date().toISOString();
 
     deps.hub.publish(result.asset.id, {
       type: "bid_accepted",
-      asset: result.asset,
+      asset: publicAsset,
       bid,
       serverTime
     });
     if (result.extended) {
       deps.hub.publish(result.asset.id, {
         type: "auction_extended",
-        asset: result.asset,
+        asset: publicAsset,
         serverTime
       });
     }
 
-    const allBids = await deps.bids.listByAsset(result.asset.id);
-    const previousAmountByBidderId = new Map<string, number>();
-    for (const existingBid of allBids) {
-      if (existingBid.id === result.bid.id) {
-        continue;
-      }
-      previousAmountByBidderId.set(existingBid.bidderId, existingBid.amountCents);
-    }
-    const recipientIds = [...new Set(allBids.map((existingBid) => existingBid.bidderId))]
-      .filter((bidderId) => bidderId !== request.user.id);
+    const latestBidsByBidder = await deps.bids.listLatestByAssetBidders(result.asset.id);
+    const priorRecipientBids = latestBidsByBidder.filter(
+      (existingBid) => existingBid.id !== result.bid.id && existingBid.bidderId !== request.user.id
+    );
+    const previousAmountByBidderId = new Map(priorRecipientBids.map((existingBid) => [existingBid.bidderId, existingBid.amountCents]));
     let createdNotifications: Awaited<ReturnType<NotificationsRepository["createMany"]>> = [];
     try {
       createdNotifications = await deps.notifications.createMany(
-        recipientIds.map((userId) => ({
-          userId,
+        priorRecipientBids.map((existingBid) => ({
+          userId: existingBid.bidderId,
           type: "outbid",
           assetId: result.asset.id,
           bidId: result.bid.id,
@@ -129,22 +132,18 @@ export function registerBidRoutes(
     }
 
     for (const notification of createdNotifications) {
-      try {
-        const recipient = await deps.users.findById(Number(notification.userId));
-        await deps.subscribeMessages.sendPriceChange({
-          touserOpenid: recipient?.openid ?? null,
-          assetId: notification.assetId,
-          assetTitle: notification.assetTitle,
-          previousAmountCents: previousAmountByBidderId.get(notification.userId) ?? notification.amountCents,
-          amountCents: notification.amountCents,
-          actorDisplayName: notification.actorDisplayName,
-          changedAt: notification.createdAt
-        });
-      } catch (error) {
-        request.log.error({ err: error, notificationId: notification.id }, "failed to send price change subscribe message");
-      }
+      priceChangeQueue.enqueue({
+        notificationId: notification.id,
+        userId: notification.userId,
+        assetId: notification.assetId,
+        assetTitle: notification.assetTitle,
+        previousAmountCents: previousAmountByBidderId.get(notification.userId) ?? notification.amountCents,
+        amountCents: notification.amountCents,
+        actorDisplayName: notification.actorDisplayName,
+        changedAt: notification.createdAt
+      });
     }
 
-    return { ...result, bid };
+    return { ...result, asset: publicAsset, bid };
   });
 }

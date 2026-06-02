@@ -11,26 +11,32 @@ import type {
   AssetStatus,
   UserSummary
 } from "@auction/shared";
-import { randomBytes } from "node:crypto";
+import { randomBytes, randomUUID } from "node:crypto";
 import type { FastifyInstance } from "fastify";
 import { requireAdmin } from "../../http/auth";
 import { HttpError, badRequest } from "../../http/errors";
 import { defaultAdminAssetStatuses, type AdminAssetListInput, type AssetsRepository } from "../assets/assets.repository";
+import { createAssetsService } from "../assets/assets.service";
 import type { BidsRepository } from "../bids/bids.repository";
-import type { ContentSafetyService } from "../contentSafety/contentSafety.service";
+import { assertLocalMarketplaceTextAllowed, type ContentSafetyService } from "../contentSafety/contentSafety.service";
 import type { ImageSafetyRecord, ImageSafetyRepository } from "../contentSafety/imageSafety.repository";
 import type { DealFollowupsRepository } from "../dealFollowups/dealFollowups.repository";
+import { extensionForMimeType, uploadDirectoryForAssetType, validateImageUpload } from "../images/images.service";
+import type { ImageStorage } from "../images/r2Storage";
 import type { PrincipalRecord, PrincipalsRepository } from "../principals/principals.repository";
 import { readUserSummary, toBidDisplayRecord } from "../users/userSummary";
 import type { UsersRepository } from "../users/users.repository";
 import { buildAdminAssetExcelWorkbook, type AdminAssetExportRow } from "./adminAssetExport";
 import { emptyAdminAssetList, readAdminDataScope, type AdminDataScope } from "./adminPrincipalScope";
 import { createAdminAuthService } from "./adminAuth.service";
-import { hashAdminPassword } from "./adminPassword";
+import { hashAdminPassword, verifyAdminPassword } from "./adminPassword";
 import type { AdminRepository, AdminUserRow } from "./admin.repository";
 import { paginateItems, readPagination, type PageQuery } from "./pagination";
 
 const assetStatuses: AssetStatus[] = ["draft", "pending_review", "active", "ended", "rejected", "cancelled", "removed"];
+const platformPublisherOpenid = "platform:asset-publisher";
+const platformPublisherDisplayName = "平台代发";
+const defaultAdminPublishDurationMs = 6 * 60 * 60 * 1000;
 type AdminAssetQuery = {
   keyword?: unknown;
   status?: unknown;
@@ -53,6 +59,26 @@ type AdminApproveAssetBody = {
 };
 type AdminDeductCreditBody = {
   reason?: unknown;
+};
+type AdminChangePasswordBody = {
+  currentPassword?: unknown;
+  newPassword?: unknown;
+  confirmNewPassword?: unknown;
+};
+type AdminPublishAssetBody = {
+  principalId?: unknown;
+  gameName?: unknown;
+  sellerGameId?: unknown;
+  serverName?: unknown;
+  assetType?: unknown;
+  itemCategory?: unknown;
+  dragonBall?: unknown;
+  title?: unknown;
+  description?: unknown;
+  startingPriceCents?: unknown;
+  minIncrementCents?: unknown;
+  endAt?: unknown;
+  images?: unknown;
 };
 
 type AdminBatchAssetReviewAction = "approve" | "reject";
@@ -119,6 +145,65 @@ function readBatchAction(value: unknown): AdminBatchAssetReviewAction {
     return value;
   }
   throw badRequest("invalid_asset_batch_action", "Batch asset review action is invalid");
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+function decodeBase64Image(value: unknown): Buffer {
+  if (typeof value !== "string" || !value.trim()) {
+    throw badRequest("invalid_image", "base64Data is required");
+  }
+
+  const buffer = Buffer.from(value, "base64");
+  if (buffer.length === 0) {
+    throw badRequest("invalid_image", "Image data is invalid");
+  }
+  return buffer;
+}
+
+function defaultAdminAssetEndAt(now = new Date()): string {
+  return new Date(now.getTime() + defaultAdminPublishDurationMs).toISOString();
+}
+
+function readAdminAssetEndAt(value: unknown): string {
+  const endAtIso = typeof value === "string" && value.trim() ? value.trim() : defaultAdminAssetEndAt();
+  const endAt = new Date(endAtIso);
+  if (!Number.isFinite(endAt.getTime()) || endAt.toISOString() !== endAtIso || endAt.getTime() <= Date.now()) {
+    throw badRequest("invalid_asset_end_at", "Asset end time must be a valid future ISO time");
+  }
+  return endAtIso;
+}
+
+function readSellerGameId(value: unknown): string {
+  const sellerGameId = typeof value === "string" ? value.trim() : "";
+  if (!sellerGameId || sellerGameId.length > 80) {
+    throw badRequest("invalid_seller_game_id", "Seller game id is required");
+  }
+  return sellerGameId;
+}
+
+function readDragonBallTextFields(value: unknown): string[] {
+  if (!isRecord(value)) {
+    return [];
+  }
+  return [value.profession, value.quality, value.attributes].filter((field): field is string => typeof field === "string");
+}
+
+function adminPublishText(body: AdminPublishAssetBody): string {
+  return [
+    body.gameName,
+    body.sellerGameId,
+    body.serverName,
+    body.assetType,
+    body.itemCategory,
+    body.title,
+    body.description,
+    ...readDragonBallTextFields(body.dragonBall)
+  ]
+    .filter((value): value is string => typeof value === "string")
+    .join("\n");
 }
 
 function readReviewNote(value: unknown): string {
@@ -280,6 +365,19 @@ function readAdminUserUpdateBody(value: AdminUserBody | undefined) {
   return input;
 }
 
+function readAdminChangePasswordBody(value: AdminChangePasswordBody | undefined) {
+  const currentPassword = typeof value?.currentPassword === "string" ? value.currentPassword : "";
+  const newPassword = readAdminPassword(value?.newPassword, true) as string;
+  const confirmNewPassword = typeof value?.confirmNewPassword === "string" ? value.confirmNewPassword : "";
+  if (!currentPassword) {
+    throw badRequest("invalid_current_password", "请输入当前密码");
+  }
+  if (newPassword !== confirmNewPassword) {
+    throw badRequest("invalid_admin_password_confirmation", "两次输入的新密码不一致");
+  }
+  return { currentPassword, newPassword };
+}
+
 async function assertUsernameAvailable(admins: AdminRepository, username: string, currentAdminId?: number) {
   const existing = await admins.findByUsername(username);
   if (existing && existing.id !== currentAdminId) {
@@ -414,13 +512,51 @@ export function registerAdminRoutes(
   contentSafety: ContentSafetyService,
   principals: PrincipalsRepository,
   followups: DealFollowupsRepository,
-  imageSafety: ImageSafetyRepository
+  imageSafety: ImageSafetyRepository,
+  imageStorage: ImageStorage
 ): void {
   const auth = createAdminAuthService(app, admins);
+  const assetService = createAssetsService(assets);
 
   app.post<{ Body: { username?: unknown; password?: unknown } }>("/admin/auth/login", async (request) => {
     return auth.login(request.body?.username, request.body?.password, request.ip);
   });
+
+  app.post<{ Body: AdminChangePasswordBody }>(
+    "/admin/auth/change-password",
+    { preHandler: requireAdmin("asset:view", admins) },
+    async (request) => {
+      if (!request.admin) {
+        throw new HttpError(401, "unauthorized", "Authentication required");
+      }
+
+      const body = readAdminChangePasswordBody(request.body);
+      const admin = await admins.findById(request.admin.id);
+      if (!admin || admin.disabled_at) {
+        throw new HttpError(401, "unauthorized", "Authentication required");
+      }
+      if (!(await verifyAdminPassword(body.currentPassword, admin.password_hash))) {
+        throw new HttpError(401, "invalid_current_password", "当前密码不正确");
+      }
+
+      const updated = await admins.update(admin.id, { passwordHash: await hashAdminPassword(body.newPassword) });
+      await admins.logOperation({
+        adminId: admin.id,
+        action: "admin.password_change",
+        targetType: "admin",
+        targetId: String(admin.id),
+        detail: { self: true }
+      });
+
+      return {
+        admin: {
+          id: String(updated.id),
+          username: updated.username,
+          role: updated.role
+        }
+      };
+    }
+  );
 
   app.get<{ Querystring: AdminListQuery }>("/admin/principals", { preHandler: requireAdmin("admin:manage", admins) }, async (request) => {
     const { page, pageSize } = readPagination(request.query);
@@ -598,6 +734,114 @@ export function registerAdminRoutes(
       });
     }
   );
+
+  app.get("/admin/asset-publish-context", { preHandler: requireAdmin("asset:create", admins) }, async (request) => {
+    const scope = await readAdminDataScope(request, principals);
+    const principalItems = scope?.principalId
+      ? [await principals.findActiveById(scope.principalId)].filter((principal): principal is PrincipalRecord => principal !== null)
+      : scope
+        ? await principals.listActive()
+        : [];
+
+    return {
+      principals: principalItems.map((principal) => ({ id: principal.id, displayName: principal.displayName })),
+      defaultEndAt: defaultAdminAssetEndAt()
+    };
+  });
+
+  app.post<{ Body: unknown }>("/admin/images", { preHandler: requireAdmin("asset:create", admins) }, async (request) => {
+    if (!isRecord(request.body)) {
+      throw badRequest("invalid_image", "Image payload is invalid");
+    }
+
+    const mimeType = request.body.mimeType;
+    if (typeof mimeType !== "string") {
+      throw badRequest("invalid_image", "mimeType is required");
+    }
+    const body = decodeBase64Image(request.body.base64Data);
+    try {
+      validateImageUpload({ mimeType, sizeBytes: body.length });
+    } catch (error) {
+      throw badRequest("invalid_image", error instanceof Error ? error.message : "Image payload is invalid");
+    }
+
+    const publisher = await users.findOrCreateWechatUser({
+      openid: platformPublisherOpenid,
+      displayName: platformPublisherDisplayName
+    });
+    let uploadDirectory: string;
+    try {
+      uploadDirectory = uploadDirectoryForAssetType(String(publisher.id), request.body.assetType);
+    } catch (error) {
+      throw badRequest("invalid_image_asset_type", error instanceof Error ? error.message : "Unsupported image asset type");
+    }
+
+    const objectKey = `${uploadDirectory}/${randomUUID()}.${extensionForMimeType(mimeType)}`;
+    const stored = await imageStorage.putImage({ objectKey, body, mimeType });
+    return {
+      image: {
+        objectKey: stored.objectKey,
+        publicUrl: stored.publicUrl,
+        mimeType,
+        sizeBytes: body.length,
+        safetyStatus: "pass",
+        safetyTraceId: null
+      }
+    };
+  });
+
+  app.post<{ Body: AdminPublishAssetBody }>("/admin/assets", { preHandler: requireAdmin("asset:create", admins) }, async (request) => {
+    if (!request.admin) {
+      throw new HttpError(401, "unauthorized", "Authentication required");
+    }
+    if (!isRecord(request.body)) {
+      throw badRequest("invalid_asset", "Asset payload is invalid");
+    }
+
+    const scope = await readAdminDataScope(request, principals);
+    if (!scope) {
+      throw badRequest("invalid_asset_principal", "Active principal is required");
+    }
+    const principalId =
+      scope.principalId ??
+      (typeof request.body.principalId === "string" && request.body.principalId.trim() ? request.body.principalId.trim() : "");
+    const principal = principalId ? await principals.findActiveById(principalId) : null;
+    if (!principal) {
+      throw badRequest("invalid_asset_principal", "Active principal is required");
+    }
+
+    assertLocalMarketplaceTextAllowed(adminPublishText(request.body));
+    const sellerGameId = readSellerGameId(request.body.sellerGameId);
+    const publisher = await users.findOrCreateWechatUser({
+      openid: platformPublisherOpenid,
+      displayName: platformPublisherDisplayName
+    });
+    const endAt = readAdminAssetEndAt(request.body.endAt);
+    const asset = await assetService.createActive({
+      sellerId: String(publisher.id),
+      sellerGameId,
+      principalId: principal.id,
+      gameName: request.body.gameName as string,
+      serverName: request.body.serverName as string,
+      assetType: request.body.assetType as string,
+      itemCategory: request.body.itemCategory,
+      dragonBall: request.body.dragonBall,
+      title: request.body.title as string,
+      description: request.body.description as string,
+      startingPriceCents: request.body.startingPriceCents as number,
+      minIncrementCents: request.body.minIncrementCents as number,
+      endAt,
+      images: request.body.images as Parameters<typeof assetService.createActive>[0]["images"]
+    });
+    await admins.logOperation({
+      adminId: request.admin.id,
+      action: "asset.create",
+      targetType: "asset",
+      targetId: asset.id,
+      detail: { principalId: principal.id, sellerGameId, endAt }
+    });
+    return { asset };
+  });
 
   app.get<{ Querystring: AdminAssetQuery }>(
     "/admin/assets/export",

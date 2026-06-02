@@ -41,6 +41,7 @@ function assetPayload(overrides: Record<string, unknown> = {}) {
     serverName: "测试区",
     assetType: "角色",
     principalId: "1",
+    sellerGameId: "seller-game-test",
     title: "69级角色",
     description: "展示用资产",
     startingPriceCents: 10000,
@@ -51,20 +52,36 @@ function assetPayload(overrides: Record<string, unknown> = {}) {
 }
 
 async function createActiveAsset(app: ReturnType<typeof buildApp>, sellerToken: string, overrides: Record<string, unknown> = {}) {
+  expect(sellerToken).toEqual(expect.any(String));
+  const adminToken = await reviewerToken(app);
   const created = await app.inject({
     method: "POST",
-    url: "/api/assets",
-    headers: { authorization: `Bearer ${sellerToken}` },
-    payload: assetPayload(overrides)
+    url: "/admin/assets",
+    headers: { authorization: `Bearer ${adminToken}` },
+    payload: {
+      ...assetPayload(overrides),
+      endAt: String(overrides.originalEndAt ?? futureEndAt()),
+      images: []
+    }
   });
-  const assetId = created.json().asset.id as string;
-  const adminToken = await reviewerToken(app);
-  await app.inject({
-    method: "POST",
-    url: `/admin/assets/${assetId}/approve`,
-    headers: { authorization: `Bearer ${adminToken}` }
+  expect(created.statusCode).toBe(200);
+  return created.json().asset.id as string;
+}
+
+function delay(ms: number): Promise<void> {
+  return new Promise((resolve) => {
+    setTimeout(resolve, ms);
   });
-  return assetId;
+}
+
+async function waitFor(condition: () => boolean, timeoutMs = 500): Promise<void> {
+  const startedAt = Date.now();
+  while (!condition()) {
+    if (Date.now() - startedAt > timeoutMs) {
+      throw new Error("Timed out waiting for condition");
+    }
+    await delay(10);
+  }
 }
 
 describe("bidding", () => {
@@ -242,17 +259,19 @@ describe("bidding", () => {
   });
 
   it("rejects seller bidding on own asset", async () => {
-    const app = buildApp({ enableMockAuth: true });
+    const assets = createInMemoryAssetsRepository();
+    const app = buildApp({ enableMockAuth: true, assetsRepository: assets });
 
     try {
       const sellerToken = await login(app, "卖家");
-      const assetId = await createActiveAsset(app, sellerToken);
+      const asset = await assets.createPending({ ...assetPayload(), sellerId: "1" });
+      await assets.updateStatus(asset.id, "active");
 
       const bid = await app.inject({
         method: "POST",
         url: "/api/bids",
         headers: { authorization: `Bearer ${sellerToken}` },
-        payload: { assetId, amountCents: 10000, commitmentAccepted: true }
+        payload: { assetId: asset.id, amountCents: 10000, commitmentAccepted: true }
       });
 
       expect(bid.statusCode).toBe(403);
@@ -447,6 +466,7 @@ describe("bidding", () => {
       });
 
       expect(response.statusCode).toBe(200);
+      await waitFor(() => sentMessages.length === 1);
       expect(sentMessages).toEqual([
         expect.objectContaining({
           touserOpenid: "openid-first-bidder",
@@ -458,6 +478,88 @@ describe("bidding", () => {
         })
       ]);
     } finally {
+      await app.close();
+    }
+  });
+
+  it("sends one async subscribe message per prior bidder using their latest bid amount", async () => {
+    const sentMessages: unknown[] = [];
+    let releaseSend: (() => void) | null = null;
+    const app = buildApp({
+      enableMockAuth: false,
+      wechatCodeSessionExchanger: async (code: string) => ({ openid: `openid-${code}` }),
+      subscribeMessageService: {
+        async sendPriceChange(input: unknown) {
+          sentMessages.push(input);
+          if (
+            typeof input === "object" &&
+            input !== null &&
+            "amountCents" in input &&
+            input.amountCents === 10300 &&
+            releaseSend === null
+          ) {
+            await new Promise<void>((resolve) => {
+              releaseSend = resolve;
+            });
+          }
+        }
+      }
+    } as Parameters<typeof buildApp>[0]);
+
+    try {
+      const sellerToken = await wechatLogin(app, "seller", "卖家");
+      const firstBidderToken = await wechatLogin(app, "first-bidder", "买家一");
+      const secondBidderToken = await wechatLogin(app, "second-bidder", "买家二");
+      const thirdBidderToken = await wechatLogin(app, "third-bidder", "买家三");
+      const assetId = await createActiveAsset(app, sellerToken, { title: "异步提醒资产" });
+
+      await app.inject({
+        method: "POST",
+        url: "/api/bids",
+        headers: { authorization: `Bearer ${firstBidderToken}` },
+        payload: { assetId, amountCents: 10000, commitmentAccepted: true }
+      });
+      await app.inject({
+        method: "POST",
+        url: "/api/bids",
+        headers: { authorization: `Bearer ${secondBidderToken}` },
+        payload: { assetId, amountCents: 10100, commitmentAccepted: true }
+      });
+      await app.inject({
+        method: "POST",
+        url: "/api/bids",
+        headers: { authorization: `Bearer ${firstBidderToken}` },
+        payload: { assetId, amountCents: 10200, commitmentAccepted: true }
+      });
+
+      const finalBidPromise = app.inject({
+        method: "POST",
+        url: "/api/bids",
+        headers: { authorization: `Bearer ${thirdBidderToken}` },
+        payload: { assetId, amountCents: 10300, commitmentAccepted: true }
+      });
+      const earlyResult = await Promise.race([finalBidPromise.then(() => "response"), delay(50).then(() => "pending")]);
+      expect(earlyResult).toBe("response");
+      const finalBid = await finalBidPromise;
+      expect(finalBid.statusCode).toBe(200);
+
+      await waitFor(() => releaseSend !== null);
+      releaseSend?.();
+      await waitFor(() => sentMessages.length === 4);
+      expect(sentMessages.slice(-2)).toEqual(expect.arrayContaining([
+        expect.objectContaining({
+          touserOpenid: "openid-first-bidder",
+          previousAmountCents: 10200,
+          amountCents: 10300
+        }),
+        expect.objectContaining({
+          touserOpenid: "openid-second-bidder",
+          previousAmountCents: 10100,
+          amountCents: 10300
+        })
+      ]));
+    } finally {
+      releaseSend?.();
       await app.close();
     }
   });

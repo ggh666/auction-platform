@@ -3,10 +3,12 @@ import type { AuctionAsset, ProfileResultItem, ProfileResultsResponse } from "@a
 import { createSettlementService } from "../settlement/settlement.service";
 import type { Env } from "../../config/env";
 import { requireUser } from "../../http/auth";
+import { gone } from "../../http/errors";
 import { createAuthService, type WechatCodeSessionExchanger } from "./auth.service";
 import { paginateItems, readPagination, type PageQuery } from "../admin/pagination";
 import type { AssetsRepository } from "../assets/assets.repository";
 import type { BidsRepository } from "../bids/bids.repository";
+import { toPublicAsset } from "../assets/publicAsset";
 import type { UsersRepository } from "../users/users.repository";
 
 export type AuthRouteOptions = {
@@ -78,8 +80,8 @@ export function registerProfileRoutes(
 ): void {
   const settlement = createSettlementService();
 
-  app.get("/api/profile/assets", { preHandler: requireUser }, async (request) => {
-    return { items: await deps.assets.listBySeller(request.user.id) };
+  app.get("/api/profile/assets", async () => {
+    throw gone("user_asset_records_disabled", "Miniapp user published asset records are disabled");
   });
 
   app.get("/api/profile/bids", { preHandler: requireUser }, async (request) => {
@@ -88,7 +90,7 @@ export function registerProfileRoutes(
     for (const bid of bidRecords) {
       const asset = await deps.assets.findById(bid.assetId);
       if (asset) {
-        items.push({ ...bid, asset });
+        items.push({ ...bid, asset: toPublicAsset(asset) });
       }
     }
     return { items };

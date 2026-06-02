@@ -29,6 +29,7 @@ function assetPayload(overrides: Record<string, unknown> = {}) {
     serverName: "测试区",
     assetType: "角色",
     principalId: "1",
+    sellerGameId: "seller-game-test",
     title: "69级角色",
     description: "展示用资产",
     startingPriceCents: 10000,
@@ -39,22 +40,24 @@ function assetPayload(overrides: Record<string, unknown> = {}) {
 }
 
 async function createAsset(app: ReturnType<typeof buildApp>, sellerToken: string, overrides: Record<string, unknown> = {}) {
+  expect(sellerToken).toEqual(expect.any(String));
+  const reviewer = await adminToken(app);
   const response = await app.inject({
     method: "POST",
-    url: "/api/assets",
-    headers: { authorization: `Bearer ${sellerToken}` },
-    payload: assetPayload(overrides)
+    url: "/admin/assets",
+    headers: { authorization: `Bearer ${reviewer}` },
+    payload: {
+      ...assetPayload(overrides),
+      endAt: futureEndAt(),
+      images: []
+    }
   });
+  expect(response.statusCode).toBe(200);
   return response.json().asset as { id: string };
 }
 
-async function approveAsset(app: ReturnType<typeof buildApp>, assetId: string) {
-  const reviewer = await adminToken(app);
-  await app.inject({
-    method: "POST",
-    url: `/admin/assets/${assetId}/approve`,
-    headers: { authorization: `Bearer ${reviewer}` }
-  });
+async function approveAsset(_app: ReturnType<typeof buildApp>, _assetId: string) {
+  return;
 }
 
 describe("profile routes", () => {
@@ -89,14 +92,11 @@ describe("profile routes", () => {
     }
   });
 
-  it("lists the current user's published assets", async () => {
+  it("disables miniapp user published asset records", async () => {
     const app = buildApp({ enableMockAuth: true });
 
     try {
       const seller = await login(app, "卖家");
-      const otherSeller = await login(app, "其他卖家");
-      const mine = await createAsset(app, seller, { title: "我的资产" });
-      await createAsset(app, otherSeller, { title: "别人的资产" });
 
       const response = await app.inject({
         method: "GET",
@@ -104,48 +104,36 @@ describe("profile routes", () => {
         headers: { authorization: `Bearer ${seller}` }
       });
 
-      expect(response.statusCode).toBe(200);
-      expect(response.json().items).toEqual([expect.objectContaining({ id: mine.id, title: "我的资产" })]);
+      expect(response.statusCode).toBe(410);
+      expect(response.json().error.code).toBe("user_asset_records_disabled");
     } finally {
       await app.close();
     }
   });
 
-  it("does not expose stale default deadlines for active published assets", async () => {
+  it("still normalizes stale default deadlines inside the asset repository", async () => {
     const assets = createInMemoryAssetsRepository();
-    const app = buildApp({ enableMockAuth: true, assetsRepository: assets });
+    const staleAsset = await assets.createPending({
+      sellerId: "1",
+      principalId: "1",
+      gameName: "塔防精灵",
+      serverName: "17区",
+      assetType: "道具",
+      title: "旧数据龙珠",
+      description: "审核后截止时间旧数据",
+      startingPriceCents: 10000,
+      minIncrementCents: 100,
+      originalEndAt: DEFAULT_ASSET_END_AT
+    });
+    const beforeActivate = Date.now();
+    await assets.save({ ...staleAsset, status: "active", effectiveEndAt: DEFAULT_ASSET_END_AT });
+    const afterActivate = Date.now();
 
-    try {
-      const seller = await login(app, "卖家");
-      const staleAsset = await assets.createPending({
-        sellerId: "1",
-        principalId: "1",
-        gameName: "塔防精灵",
-        serverName: "17区",
-        assetType: "道具",
-        title: "旧数据龙珠",
-        description: "审核后截止时间旧数据",
-        startingPriceCents: 10000,
-        minIncrementCents: 100,
-        originalEndAt: DEFAULT_ASSET_END_AT
-      });
-      const beforeActivate = Date.now();
-      await assets.save({ ...staleAsset, status: "active", effectiveEndAt: DEFAULT_ASSET_END_AT });
-      const afterActivate = Date.now();
+    const [asset] = await assets.listBySeller("1");
 
-      const response = await app.inject({
-        method: "GET",
-        url: "/api/profile/assets",
-        headers: { authorization: `Bearer ${seller}` }
-      });
-
-      expect(response.statusCode).toBe(200);
-      const effectiveEndAt = new Date(response.json().items[0].effectiveEndAt).getTime();
-      expect(effectiveEndAt).toBeGreaterThanOrEqual(beforeActivate + 24 * 60 * 60 * 1000);
-      expect(effectiveEndAt).toBeLessThanOrEqual(afterActivate + 24 * 60 * 60 * 1000);
-    } finally {
-      await app.close();
-    }
+    const effectiveEndAt = new Date(asset.effectiveEndAt).getTime();
+    expect(effectiveEndAt).toBeGreaterThanOrEqual(beforeActivate + 24 * 60 * 60 * 1000);
+    expect(effectiveEndAt).toBeLessThanOrEqual(afterActivate + 24 * 60 * 60 * 1000);
   });
 
   it("follows active assets, marks public lists, paginates follows, and unfollows", async () => {
@@ -226,12 +214,14 @@ describe("profile routes", () => {
   });
 
   it("does not allow following hidden pending assets by id", async () => {
-    const app = buildApp({ enableMockAuth: true });
+    const assets = createInMemoryAssetsRepository();
+    const app = buildApp({ enableMockAuth: true, assetsRepository: assets });
 
     try {
       const seller = await login(app, "卖家");
       const follower = await login(app, "关注用户");
-      const asset = await createAsset(app, seller, { title: "待审核不可关注" });
+      expect(seller).toEqual(expect.any(String));
+      const asset = await assets.createPending({ ...assetPayload({ title: "待审核不可关注" }), sellerId: "1" });
 
       const response = await app.inject({
         method: "POST",

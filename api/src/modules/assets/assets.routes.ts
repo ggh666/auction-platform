@@ -1,6 +1,6 @@
 import type { FastifyInstance } from "fastify";
 import { readOptionalUserId, requireActiveUser, requireUser } from "../../http/auth";
-import { HttpError, badRequest, notFound } from "../../http/errors";
+import { HttpError, badRequest, gone, notFound } from "../../http/errors";
 import type { AssetFollowsRepository } from "../assetFollows/assetFollows.repository";
 import type { BidsRepository } from "../bids/bids.repository";
 import type { ContentSafetyService } from "../contentSafety/contentSafety.service";
@@ -11,6 +11,7 @@ import { readUserSummary, toBidDisplayRecord } from "../users/userSummary";
 import type { UsersRepository } from "../users/users.repository";
 import type { AssetsRepository } from "./assets.repository";
 import { createAssetsService } from "./assets.service";
+import { toPublicAsset } from "./publicAsset";
 import type { AssetDetailResponse, AssetListResponse, AuctionAsset, PrincipalListResponse } from "@auction/shared";
 
 const DEFAULT_DAILY_PUBLISH_LIMIT = 3;
@@ -168,7 +169,9 @@ export function registerAssetRoutes(
     return {
       items: await Promise.all(
         result.items.map((asset) =>
-          enrichAssetWithPrincipal(enrichAssetWithFollow(enrichAssetWithViolations(asset, violationSummary), followedAssetIds), principals)
+          enrichAssetWithPrincipal(enrichAssetWithFollow(enrichAssetWithViolations(asset, violationSummary), followedAssetIds), principals).then(
+            toPublicAsset
+          )
         )
       ),
       nextCursor: null,
@@ -195,9 +198,11 @@ export function registerAssetRoutes(
           continue;
         }
         items.push(
-          await enrichAssetWithPrincipal(
-            enrichAssetWithFollow(enrichAssetWithViolations(asset, violationSummary), new Set([asset.id])),
-            principals
+          toPublicAsset(
+            await enrichAssetWithPrincipal(
+              enrichAssetWithFollow(enrichAssetWithViolations(asset, violationSummary), new Set([asset.id])),
+              principals
+            )
           )
         );
       }
@@ -213,55 +218,9 @@ export function registerAssetRoutes(
     }
   );
 
-  app.post<{ Body: Omit<Parameters<typeof service.createPending>[0], "sellerId"> }>(
-    "/api/assets",
-    { preHandler: requireActiveUser(users) },
-    async (request) => {
-      if (!request.user?.id) {
-        throw new HttpError(401, "unauthorized", "Authentication required");
-      }
-      const user = await users.findById(Number(request.user.id));
-      if (!user) {
-        throw new HttpError(401, "unauthorized", "Authentication required");
-      }
-      const defaultLimit = await readDefaultDailyPublishLimit(configs);
-      const limit = user.daily_publish_limit === null ? defaultLimit : user.daily_publish_limit;
-      const used = await assets.countCreatedBySellerSince(request.user.id, chinaDayStartIso());
-      if (used >= limit) {
-        throw badRequest("publish_limit_reached", "Daily publish limit reached", { limit, used });
-      }
-      const principalId = typeof request.body.principalId === "string" ? request.body.principalId.trim() : "";
-      const principal = principalId ? await principals.findActiveById(principalId) : null;
-      if (!principal) {
-        throw badRequest("invalid_asset_principal", "Active principal is required");
-      }
-      await contentSafety.assertImageUploadsAllowed({
-        userId: request.user.id,
-        images: request.body.images
-      });
-      await contentSafety.assertTextAllowed({
-        content: [
-          request.body.gameName,
-          request.body.serverName,
-          request.body.assetType,
-          request.body.itemCategory,
-          request.body.title,
-          request.body.description,
-          ...readDragonBallTextFields(request.body.dragonBall)
-        ]
-          .filter((value): value is string => typeof value === "string")
-          .join("\n"),
-        openid: user.openid,
-        scene: 3
-      });
-      const asset = await service.createPending({
-        ...request.body,
-        principalId: principal.id,
-        sellerId: request.user.id
-      });
-      return { asset };
-    }
-  );
+  app.post("/api/assets", async () => {
+    throw gone("user_asset_publish_disabled", "Miniapp user asset publishing is disabled");
+  });
 
   app.post<{ Params: { assetId: string } }>(
     "/api/assets/:assetId/follow",
@@ -303,7 +262,9 @@ export function registerAssetRoutes(
     const violationSummary = buildViolationSummary(await reports.listPublicViolations());
     const followedAssetIds = await readFollowedAssetIds(request, assetFollows, [asset.id]);
     return {
-      asset: await enrichAssetWithPrincipal(enrichAssetWithFollow(enrichAssetWithViolations(asset, violationSummary), followedAssetIds), principals),
+      asset: toPublicAsset(
+        await enrichAssetWithPrincipal(enrichAssetWithFollow(enrichAssetWithViolations(asset, violationSummary), followedAssetIds), principals)
+      ),
       seller: await readUserSummary(users, asset.sellerId),
       recentBids: await Promise.all(recentBids.slice(-20).reverse().map((bid) => toBidDisplayRecord(users, bid)))
     };

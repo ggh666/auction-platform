@@ -1,10 +1,12 @@
 import { describe, expect, it } from "vitest";
 import { buildApp } from "../../api/src/app";
 import { HttpError } from "../../api/src/http/errors";
-import { createInMemoryAssetsRepository } from "../../api/src/modules/assets/assets.repository";
+import {
+  createInMemoryAssetsRepository,
+  type AssetsRepository
+} from "../../api/src/modules/assets/assets.repository";
 import type { ImageStorage } from "../../api/src/modules/images/r2Storage";
 import { validateImageUpload } from "../../api/src/modules/images/images.service";
-import { createInMemoryUsersRepository } from "../../api/src/modules/users/users.repository";
 
 const futureEndAt = () => new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString();
 
@@ -41,6 +43,18 @@ async function reviewerToken(app: ReturnType<typeof buildApp>) {
   return response.json().token as string;
 }
 
+async function createPendingRepositoryAsset(assets: AssetsRepository, overrides: Record<string, unknown> = {}) {
+  return assets.createPending({
+    sellerId: "1",
+    ...validAssetPayload(overrides)
+  });
+}
+
+async function createActiveRepositoryAsset(assets: AssetsRepository, overrides: Record<string, unknown> = {}) {
+  const asset = await createPendingRepositoryAsset(assets, overrides);
+  return assets.updateStatus(asset.id, "active");
+}
+
 describe("asset workflow", () => {
   function fakeImageStorage(): ImageStorage {
     return {
@@ -56,7 +70,7 @@ describe("asset workflow", () => {
     };
   }
 
-  it("creates an asset in pending_review", async () => {
+  it("disables miniapp user asset publishing", async () => {
     const app = buildApp({ enableMockAuth: true });
 
     try {
@@ -69,55 +83,49 @@ describe("asset workflow", () => {
         payload: validAssetPayload()
       });
 
-      expect(response.statusCode).toBe(200);
-      expect(response.json().asset.status).toBe("pending_review");
+      expect(response.statusCode).toBe(410);
+      expect(response.json().error.code).toBe("user_asset_publish_disabled");
     } finally {
       await app.close();
     }
   });
 
-  it("uses a default future end time when publishing omits originalEndAt", async () => {
-    const app = buildApp({ enableMockAuth: true });
+  it("disables miniapp user image uploads", async () => {
+    const app = buildApp({ enableMockAuth: true, imageStorage: fakeImageStorage() });
 
     try {
       const token = await login(app);
-      const { originalEndAt: _originalEndAt, ...payload } = validAssetPayload();
 
       const response = await app.inject({
         method: "POST",
-        url: "/api/assets",
+        url: "/api/images",
         headers: { authorization: `Bearer ${token}` },
-        payload
+        payload: {
+          assetType: "账号",
+          mimeType: "image/jpeg",
+          base64Data: Buffer.from("image").toString("base64")
+        }
       });
 
-      expect(response.statusCode).toBe(200);
-      expect(response.json().asset).toMatchObject({
-        status: "pending_review",
-        originalEndAt: "2099-12-31T15:59:59.000Z",
-        effectiveEndAt: "2099-12-31T15:59:59.000Z"
-      });
+      expect(response.statusCode).toBe(410);
+      expect(response.json().error.code).toBe("user_image_upload_disabled");
     } finally {
       await app.close();
     }
   });
 
   it("sets the auction end time to 24 hours after admin approval", async () => {
-    const app = buildApp({ enableMockAuth: true });
+    const assets = createInMemoryAssetsRepository();
+    const asset = await createPendingRepositoryAsset(assets, { originalEndAt: "2099-12-31T15:59:59.000Z" });
+    const app = buildApp({ enableMockAuth: true, assetsRepository: assets });
 
     try {
-      const token = await login(app);
-      const createResponse = await app.inject({
-        method: "POST",
-        url: "/api/assets",
-        headers: { authorization: `Bearer ${token}` },
-        payload: validAssetPayload({ originalEndAt: "2099-12-31T15:59:59.000Z" })
-      });
       const adminToken = await reviewerToken(app);
       const beforeApprove = Date.now();
 
       const response = await app.inject({
         method: "POST",
-        url: `/admin/assets/${createResponse.json().asset.id}/approve`,
+        url: `/admin/assets/${asset.id}/approve`,
         headers: { authorization: `Bearer ${adminToken}` }
       });
       const afterApprove = Date.now();
@@ -127,507 +135,6 @@ describe("asset workflow", () => {
       expect(effectiveEndAt).toBeGreaterThanOrEqual(beforeApprove + 24 * 60 * 60 * 1000);
       expect(effectiveEndAt).toBeLessThanOrEqual(afterApprove + 24 * 60 * 60 * 1000);
       expect(response.json().asset.originalEndAt).toBe("2099-12-31T15:59:59.000Z");
-    } finally {
-      await app.close();
-    }
-  });
-
-  it("creates dragon ball item metadata for prop assets", async () => {
-    const app = buildApp({ enableMockAuth: true });
-
-    try {
-      const token = await login(app);
-
-      const response = await app.inject({
-        method: "POST",
-        url: "/api/assets",
-        headers: { authorization: `Bearer ${token}` },
-        payload: validAssetPayload({
-          assetType: "道具",
-          itemCategory: "龙珠",
-          title: "金色暗系龙珠",
-          dragonBall: {
-            profession: "战士",
-            quality: "金",
-            attributes: "附加伤害+10%，无视冰甲+5%"
-          }
-        })
-      });
-
-      expect(response.statusCode).toBe(200);
-      expect(response.json().asset).toMatchObject({
-        assetType: "道具",
-        itemCategory: "龙珠",
-        dragonBall: {
-          element: "暗",
-          profession: "战士",
-          quality: "金",
-          attributes: "附加伤害+10%，无视冰甲+5%"
-        }
-      });
-    } finally {
-      await app.close();
-    }
-  });
-
-  it("rejects invalid dragon ball metadata", async () => {
-    const app = buildApp({ enableMockAuth: true });
-
-    try {
-      const token = await login(app);
-
-      const response = await app.inject({
-        method: "POST",
-        url: "/api/assets",
-        headers: { authorization: `Bearer ${token}` },
-        payload: validAssetPayload({
-          assetType: "道具",
-          itemCategory: "龙珠",
-          title: "异常龙珠",
-          dragonBall: {
-            profession: "刺客",
-            quality: "金",
-            attributes: "附加伤害+10%，无视冰甲+5%"
-          }
-        })
-      });
-
-      expect(response.statusCode).toBe(400);
-      expect(response.json().error.code).toBe("invalid_dragon_ball");
-    } finally {
-      await app.close();
-    }
-  });
-
-  it("blocks asset publishing when text content safety rejects the payload", async () => {
-    const contentSafetyService = {
-      async assertTextAllowed() {
-        throw new HttpError(400, "content_safety_risky", "Content safety check failed");
-      },
-      async assertImageUploadsAllowed() {}
-    };
-    const app = buildApp({ enableMockAuth: true, contentSafetyService } as Parameters<typeof buildApp>[0]);
-
-    try {
-      const token = await login(app);
-
-      const response = await app.inject({
-        method: "POST",
-        url: "/api/assets",
-        headers: { authorization: `Bearer ${token}` },
-        payload: validAssetPayload({ title: "违规广告资产" })
-      });
-
-      expect(response.statusCode).toBe(400);
-      expect(response.json().error.code).toBe("content_safety_risky");
-    } finally {
-      await app.close();
-    }
-  });
-
-  it("rejects asset publishing from banned users even with an existing token", async () => {
-    const users = createInMemoryUsersRepository();
-    const app = buildApp({ enableMockAuth: true, usersRepository: users });
-
-    try {
-      const token = await login(app);
-      await users.banUser(1, "线下交易违约");
-
-      const response = await app.inject({
-        method: "POST",
-        url: "/api/assets",
-        headers: { authorization: `Bearer ${token}` },
-        payload: validAssetPayload()
-      });
-
-      expect(response.statusCode).toBe(403);
-      expect(response.json().error).toMatchObject({
-        code: "user_banned",
-        message: "User is banned",
-        details: { reason: "线下交易违约" }
-      });
-    } finally {
-      await app.close();
-    }
-  });
-
-  it("blocks asset publishing when the seller credit score is 70 or below", async () => {
-    const users = createInMemoryUsersRepository();
-    const app = buildApp({ enableMockAuth: true, usersRepository: users });
-
-    try {
-      const token = await login(app);
-      await users.deductCreditScore(1, 30);
-
-      const response = await app.inject({
-        method: "POST",
-        url: "/api/assets",
-        headers: { authorization: `Bearer ${token}` },
-        payload: validAssetPayload()
-      });
-
-      expect(response.statusCode).toBe(403);
-      expect(response.json().error).toMatchObject({
-        code: "credit_score_too_low",
-        message: "Credit score is too low for this action",
-        details: { creditScore: 70, minimumExclusive: 70 }
-      });
-    } finally {
-      await app.close();
-    }
-  });
-
-  it("limits regular users to three asset publications per China day by default", async () => {
-    const app = buildApp({ enableMockAuth: true });
-
-    try {
-      const token = await login(app);
-      for (let index = 0; index < 3; index++) {
-        const response = await app.inject({
-          method: "POST",
-          url: "/api/assets",
-          headers: { authorization: `Bearer ${token}` },
-          payload: validAssetPayload({ title: `第 ${index + 1} 条资产` })
-        });
-        expect(response.statusCode).toBe(200);
-      }
-
-      const response = await app.inject({
-        method: "POST",
-        url: "/api/assets",
-        headers: { authorization: `Bearer ${token}` },
-        payload: validAssetPayload({ title: "第 4 条资产" })
-      });
-
-      expect(response.statusCode).toBe(400);
-      expect(response.json().error).toMatchObject({
-        code: "publish_limit_reached",
-        message: "Daily publish limit reached",
-        details: { limit: 3, used: 3 }
-      });
-    } finally {
-      await app.close();
-    }
-  });
-
-  it("blocks publishing when an admin sets the user's daily publish limit to zero", async () => {
-    const app = buildApp({ enableMockAuth: true });
-
-    try {
-      const token = await login(app);
-      const adminLoginResponse = await app.inject({
-        method: "POST",
-        url: "/admin/auth/login",
-        payload: { username: "super", password: "super-pass" }
-      });
-      const adminToken = adminLoginResponse.json().token as string;
-      const limitResponse = await app.inject({
-        method: "POST",
-        url: "/admin/users/1/publish-limit",
-        headers: { authorization: `Bearer ${adminToken}` },
-        payload: { limit: 0 }
-      });
-      expect(limitResponse.statusCode).toBe(200);
-
-      const response = await app.inject({
-        method: "POST",
-        url: "/api/assets",
-        headers: { authorization: `Bearer ${token}` },
-        payload: validAssetPayload()
-      });
-
-      expect(response.statusCode).toBe(400);
-      expect(response.json().error).toMatchObject({
-        code: "publish_limit_reached",
-        message: "Daily publish limit reached",
-        details: { limit: 0, used: 0 }
-      });
-    } finally {
-      await app.close();
-    }
-  });
-
-  it("uploads images and attaches them to newly created assets", async () => {
-    const app = buildApp({ enableMockAuth: true, imageStorage: fakeImageStorage() });
-
-    try {
-      const token = await login(app);
-      const upload = await app.inject({
-        method: "POST",
-        url: "/api/images",
-        headers: { authorization: `Bearer ${token}` },
-        payload: {
-          fileName: "role.png",
-          mimeType: "image/png",
-          base64Data: Buffer.from("png-bytes").toString("base64")
-        }
-      });
-      expect(upload.statusCode).toBe(200);
-
-      const response = await app.inject({
-        method: "POST",
-        url: "/api/assets",
-        headers: { authorization: `Bearer ${token}` },
-        payload: validAssetPayload({ images: [upload.json().image] })
-      });
-
-      expect(response.statusCode).toBe(200);
-      expect(response.json().asset.imageUrls).toEqual([upload.json().image.publicUrl]);
-
-      const detail = await app.inject({
-        method: "GET",
-        url: `/api/assets/${response.json().asset.id}`,
-        headers: { authorization: `Bearer ${token}` }
-      });
-      expect(detail.statusCode).toBe(200);
-      expect(detail.json().asset.imageUrls).toEqual([upload.json().image.publicUrl]);
-    } finally {
-      await app.close();
-    }
-  });
-
-  it("checks asset images before creating an asset", async () => {
-    const image = {
-      objectKey: "uploads/accounts/1/untrusted.jpg",
-      publicUrl: "https://img.example.com/uploads/accounts/1/untrusted.jpg",
-      mimeType: "image/jpeg",
-      sizeBytes: 1024
-    };
-    let checkedImages: unknown = null;
-    const contentSafetyService = {
-      async assertTextAllowed() {},
-      async requestImageCheck() {
-        return { status: "pass" as const };
-      },
-      async assertAssetImagesAllowed() {},
-      async assertImageUploadsAllowed(input: unknown) {
-        checkedImages = input;
-        throw new HttpError(400, "invalid_asset_images", "Asset images must be uploaded by current user");
-      }
-    };
-    const app = buildApp({
-      enableMockAuth: true,
-      contentSafetyService
-    } as Parameters<typeof buildApp>[0]);
-
-    try {
-      const token = await login(app);
-      const response = await app.inject({
-        method: "POST",
-        url: "/api/assets",
-        headers: { authorization: `Bearer ${token}` },
-        payload: validAssetPayload({ images: [image] })
-      });
-
-      expect(response.statusCode).toBe(400);
-      expect(response.json().error).toMatchObject({
-        code: "invalid_asset_images",
-        message: "Asset images must be uploaded by current user"
-      });
-      expect(checkedImages).toEqual({ userId: "1", images: [image] });
-    } finally {
-      await app.close();
-    }
-  });
-
-  it("separates uploaded image object keys by asset type", async () => {
-    const app = buildApp({ enableMockAuth: true, imageStorage: fakeImageStorage() });
-
-    try {
-      const token = await login(app);
-      const accountUpload = await app.inject({
-        method: "POST",
-        url: "/api/images",
-        headers: { authorization: `Bearer ${token}` },
-        payload: {
-          assetType: "账号",
-          fileName: "account.jpg",
-          mimeType: "image/jpeg",
-          base64Data: Buffer.from("account-image").toString("base64")
-        }
-      });
-      const itemUpload = await app.inject({
-        method: "POST",
-        url: "/api/images",
-        headers: { authorization: `Bearer ${token}` },
-        payload: {
-          assetType: "道具",
-          fileName: "item.png",
-          mimeType: "image/png",
-          base64Data: Buffer.from("item-image").toString("base64")
-        }
-      });
-
-      expect(accountUpload.statusCode).toBe(200);
-      expect(itemUpload.statusCode).toBe(200);
-      expect(accountUpload.json().image.objectKey).toMatch(/^uploads\/accounts\/1\/[0-9a-f-]+\.jpg$/);
-      expect(itemUpload.json().image.objectKey).toMatch(/^uploads\/items\/1\/[0-9a-f-]+\.png$/);
-      expect(accountUpload.json().image.publicUrl).toContain("/uploads/accounts/1/");
-      expect(itemUpload.json().image.publicUrl).toContain("/uploads/items/1/");
-    } finally {
-      await app.close();
-    }
-  });
-
-  it("rejects unsupported image asset type routing hints", async () => {
-    const app = buildApp({ enableMockAuth: true, imageStorage: fakeImageStorage() });
-
-    try {
-      const token = await login(app);
-      const response = await app.inject({
-        method: "POST",
-        url: "/api/images",
-        headers: { authorization: `Bearer ${token}` },
-        payload: {
-          assetType: "材料",
-          fileName: "material.png",
-          mimeType: "image/png",
-          base64Data: Buffer.from("item-image").toString("base64")
-        }
-      });
-
-      expect(response.statusCode).toBe(400);
-      expect(response.json().error.code).toBe("invalid_image_asset_type");
-    } finally {
-      await app.close();
-    }
-  });
-
-  it("requests async image content safety after uploading to storage", async () => {
-    const checks: Array<{ mediaUrl: string; objectKey: string }> = [];
-    const contentSafetyService = {
-      async requestImageCheck(input: { mediaUrl: string; objectKey: string }) {
-        checks.push(input);
-        return { status: "pending", traceId: "trace-1" };
-      }
-    };
-    const app = buildApp({
-      enableMockAuth: true,
-      imageStorage: fakeImageStorage(),
-      contentSafetyService
-    } as Parameters<typeof buildApp>[0]);
-
-    try {
-      const token = await login(app);
-      const response = await app.inject({
-        method: "POST",
-        url: "/api/images",
-        headers: { authorization: `Bearer ${token}` },
-        payload: {
-          fileName: "role.png",
-          mimeType: "image/png",
-          base64Data: Buffer.from("png-bytes").toString("base64")
-        }
-      });
-
-      expect(response.statusCode).toBe(200);
-      expect(response.json().image.safetyStatus).toBe("pending");
-      expect(response.json().image.safetyTraceId).toBe("trace-1");
-      expect(checks).toEqual([
-        expect.objectContaining({
-          objectKey: response.json().image.objectKey,
-          mediaUrl: response.json().image.publicUrl,
-          scene: 3
-        })
-      ]);
-    } finally {
-      await app.close();
-    }
-  });
-
-  it("accepts a single image upload above the default Fastify body limit", async () => {
-    const app = buildApp({ enableMockAuth: true, imageStorage: fakeImageStorage() });
-
-    try {
-      const token = await login(app);
-      const response = await app.inject({
-        method: "POST",
-        url: "/api/images",
-        headers: { authorization: `Bearer ${token}` },
-        payload: {
-          fileName: "large-role.png",
-          mimeType: "image/png",
-          base64Data: Buffer.alloc(900 * 1024, 1).toString("base64")
-        }
-      });
-
-      expect(response.statusCode).toBe(200);
-      expect(response.json().image).toMatchObject({
-        mimeType: "image/png",
-        sizeBytes: 900 * 1024
-      });
-    } finally {
-      await app.close();
-    }
-  });
-
-  it("rejects image uploads from banned users even with an existing token", async () => {
-    const users = createInMemoryUsersRepository();
-    const app = buildApp({ enableMockAuth: true, usersRepository: users, imageStorage: fakeImageStorage() });
-
-    try {
-      const token = await login(app);
-      await users.banUser(1, "线下交易违约");
-
-      const response = await app.inject({
-        method: "POST",
-        url: "/api/images",
-        headers: { authorization: `Bearer ${token}` },
-        payload: {
-          fileName: "role.png",
-          mimeType: "image/png",
-          base64Data: Buffer.from("png-bytes").toString("base64")
-        }
-      });
-
-      expect(response.statusCode).toBe(403);
-      expect(response.json().error.code).toBe("user_banned");
-    } finally {
-      await app.close();
-    }
-  });
-
-  it("rejects image uploads when the user credit score is 70 or below", async () => {
-    const users = createInMemoryUsersRepository();
-    const app = buildApp({ enableMockAuth: true, usersRepository: users, imageStorage: fakeImageStorage() });
-
-    try {
-      const token = await login(app);
-      await users.deductCreditScore(1, 30);
-
-      const response = await app.inject({
-        method: "POST",
-        url: "/api/images",
-        headers: { authorization: `Bearer ${token}` },
-        payload: {
-          fileName: "role.png",
-          mimeType: "image/png",
-          base64Data: Buffer.from("png-bytes").toString("base64")
-        }
-      });
-
-      expect(response.statusCode).toBe(403);
-      expect(response.json().error).toMatchObject({
-        code: "credit_score_too_low",
-        message: "Credit score is too low for this action",
-        details: { creditScore: 70, minimumExclusive: 70 }
-      });
-    } finally {
-      await app.close();
-    }
-  });
-
-  it("rejects image uploads without login", async () => {
-    const app = buildApp({ enableMockAuth: true, imageStorage: fakeImageStorage() });
-
-    try {
-      const response = await app.inject({
-        method: "POST",
-        url: "/api/images",
-        payload: { fileName: "role.png", mimeType: "image/png", base64Data: "abc" }
-      });
-
-      expect(response.statusCode).toBe(401);
     } finally {
       await app.close();
     }
@@ -703,6 +210,31 @@ describe("asset workflow", () => {
           principal: { id: "1", displayName: "默认主理人" }
         })
       ]);
+    } finally {
+      await app.close();
+    }
+  });
+
+  it("does not expose seller game ids in public asset responses", async () => {
+    const assets = createInMemoryAssetsRepository();
+    const created = await assets.createPending({
+      sellerId: "1",
+      sellerGameId: "private-game-id-8899",
+      ...validAssetPayload({ title: "隐藏卖家游戏ID资产", principalId: "1" })
+    });
+    const asset = await assets.updateStatus(created.id, "active");
+    const app = buildApp({ enableMockAuth: true, assetsRepository: assets });
+
+    try {
+      const list = await app.inject({ method: "GET", url: "/api/assets" });
+      expect(list.statusCode).toBe(200);
+      expect(list.json().items[0]).toEqual(expect.objectContaining({ id: asset.id }));
+      expect(list.json().items[0]).not.toHaveProperty("sellerGameId");
+
+      const detail = await app.inject({ method: "GET", url: `/api/assets/${asset.id}` });
+      expect(detail.statusCode).toBe(200);
+      expect(detail.json().asset).toEqual(expect.objectContaining({ id: asset.id }));
+      expect(detail.json().asset).not.toHaveProperty("sellerGameId");
     } finally {
       await app.close();
     }
@@ -790,29 +322,22 @@ describe("asset workflow", () => {
   });
 
   it("returns updated current price in the public asset list after bidding", async () => {
-    const app = buildApp({ enableMockAuth: true });
+    const assets = createInMemoryAssetsRepository();
+    const asset = await createActiveRepositoryAsset(assets, {
+      sellerId: "99",
+      gameName: "塔防精灵",
+      assetType: "账号",
+      title: "最新价资产"
+    });
+    const app = buildApp({ enableMockAuth: true, assetsRepository: assets });
 
     try {
-      const sellerToken = await login(app, "卖家");
       const bidderToken = await login(app, "买家");
-      const createResponse = await app.inject({
-        method: "POST",
-        url: "/api/assets",
-        headers: { authorization: `Bearer ${sellerToken}` },
-        payload: validAssetPayload({ gameName: "塔防精灵", assetType: "账号", title: "最新价资产" })
-      });
-      const assetId = createResponse.json().asset.id;
-      const adminToken = await reviewerToken(app);
-      await app.inject({
-        method: "POST",
-        url: `/admin/assets/${assetId}/approve`,
-        headers: { authorization: `Bearer ${adminToken}` }
-      });
       await app.inject({
         method: "POST",
         url: "/api/bids",
         headers: { authorization: `Bearer ${bidderToken}` },
-        payload: { assetId, amountCents: 12300, commitmentAccepted: true }
+        payload: { assetId: asset.id, amountCents: 12300, commitmentAccepted: true }
       });
 
       const response = await app.inject({
@@ -823,7 +348,7 @@ describe("asset workflow", () => {
       expect(response.statusCode).toBe(200);
       expect(response.json().items).toEqual([
         expect.objectContaining({
-          id: assetId,
+          id: asset.id,
           startingPriceCents: 10000,
           currentPriceCents: 12300
         })
@@ -886,218 +411,16 @@ describe("asset workflow", () => {
     }
   });
 
-  it("rejects whitespace-only descriptions", async () => {
-    const app = buildApp({ enableMockAuth: true });
-
-    try {
-      const token = await login(app);
-
-      const response = await app.inject({
-        method: "POST",
-        url: "/api/assets",
-        headers: { authorization: `Bearer ${token}` },
-        payload: validAssetPayload({ description: "   " })
-      });
-
-      expect(response.statusCode).toBe(400);
-      expect(response.json().error.code).toBe("invalid_asset");
-    } finally {
-      await app.close();
-    }
-  });
-
-  it("rejects invalid original end times", async () => {
-    const app = buildApp({ enableMockAuth: true });
-
-    try {
-      const token = await login(app);
-
-      const response = await app.inject({
-        method: "POST",
-        url: "/api/assets",
-        headers: { authorization: `Bearer ${token}` },
-        payload: validAssetPayload({ originalEndAt: "not-a-date" })
-      });
-
-      expect(response.statusCode).toBe(400);
-      expect(response.json().error.code).toBe("invalid_end_time");
-    } finally {
-      await app.close();
-    }
-  });
-
-  it("rejects normalized-invalid original end times", async () => {
-    const app = buildApp({ enableMockAuth: true });
-
-    try {
-      const token = await login(app);
-
-      const response = await app.inject({
-        method: "POST",
-        url: "/api/assets",
-        headers: { authorization: `Bearer ${token}` },
-        payload: validAssetPayload({ originalEndAt: "2026-06-31T00:00:00.000Z" })
-      });
-
-      expect(response.statusCode).toBe(400);
-      expect(response.json().error.code).toBe("invalid_end_time");
-    } finally {
-      await app.close();
-    }
-  });
-
-  it("rejects past original end times", async () => {
-    const app = buildApp({ enableMockAuth: true });
-
-    try {
-      const token = await login(app);
-
-      const response = await app.inject({
-        method: "POST",
-        url: "/api/assets",
-        headers: { authorization: `Bearer ${token}` },
-        payload: validAssetPayload({ originalEndAt: "2020-01-01T00:00:00.000Z" })
-      });
-
-      expect(response.statusCode).toBe(400);
-      expect(response.json().error.code).toBe("invalid_end_time");
-    } finally {
-      await app.close();
-    }
-  });
-
-  it("rejects unsafe starting prices", async () => {
-    const app = buildApp({ enableMockAuth: true });
-
-    try {
-      const token = await login(app);
-
-      const response = await app.inject({
-        method: "POST",
-        url: "/api/assets",
-        headers: { authorization: `Bearer ${token}` },
-        payload: validAssetPayload({ startingPriceCents: Number.MAX_SAFE_INTEGER + 1 })
-      });
-
-      expect(response.statusCode).toBe(400);
-      expect(response.json().error.code).toBe("invalid_price");
-    } finally {
-      await app.close();
-    }
-  });
-
-  it("rejects starting prices with fractional yuan amounts", async () => {
-    const app = buildApp({ enableMockAuth: true });
-
-    try {
-      const token = await login(app);
-
-      const response = await app.inject({
-        method: "POST",
-        url: "/api/assets",
-        headers: { authorization: `Bearer ${token}` },
-        payload: validAssetPayload({ startingPriceCents: 1050 })
-      });
-
-      expect(response.statusCode).toBe(400);
-      expect(response.json().error.code).toBe("invalid_price");
-    } finally {
-      await app.close();
-    }
-  });
-
-  it("rejects unsafe minimum increments", async () => {
-    const app = buildApp({ enableMockAuth: true });
-
-    try {
-      const token = await login(app);
-
-      const response = await app.inject({
-        method: "POST",
-        url: "/api/assets",
-        headers: { authorization: `Bearer ${token}` },
-        payload: validAssetPayload({ minIncrementCents: Number.MAX_SAFE_INTEGER + 1 })
-      });
-
-      expect(response.statusCode).toBe(400);
-      expect(response.json().error.code).toBe("invalid_increment");
-    } finally {
-      await app.close();
-    }
-  });
-
-  it("rejects minimum increments with fractional yuan amounts", async () => {
-    const app = buildApp({ enableMockAuth: true });
-
-    try {
-      const token = await login(app);
-
-      const response = await app.inject({
-        method: "POST",
-        url: "/api/assets",
-        headers: { authorization: `Bearer ${token}` },
-        payload: validAssetPayload({ minIncrementCents: 150 })
-      });
-
-      expect(response.statusCode).toBe(400);
-      expect(response.json().error.code).toBe("invalid_increment");
-    } finally {
-      await app.close();
-    }
-  });
-
-  it("trims text fields in created assets", async () => {
-    const app = buildApp({ enableMockAuth: true });
-
-    try {
-      const token = await login(app);
-
-      const response = await app.inject({
-        method: "POST",
-        url: "/api/assets",
-        headers: { authorization: `Bearer ${token}` },
-        payload: validAssetPayload({
-          gameName: " 梦幻西游 ",
-          serverName: " 测试区 ",
-          assetType: " 角色 ",
-          title: " 69级角色 ",
-          description: " 展示用资产 "
-        })
-      });
-
-      expect(response.statusCode).toBe(200);
-      expect(response.json().asset).toMatchObject({
-        gameName: "梦幻西游",
-        serverName: "测试区",
-        assetType: "角色",
-        title: "69级角色",
-        description: "展示用资产"
-      });
-    } finally {
-      await app.close();
-    }
-  });
-
   it("returns a seller summary and recent bids in asset detail", async () => {
-    const app = buildApp({ enableMockAuth: true });
+    const assets = createInMemoryAssetsRepository();
+    const app = buildApp({ enableMockAuth: true, assetsRepository: assets });
 
     try {
       const token = await login(app);
-      const createResponse = await app.inject({
-        method: "POST",
-        url: "/api/assets",
-        headers: { authorization: `Bearer ${token}` },
-        payload: validAssetPayload()
-      });
-      const assetId = createResponse.json().asset.id;
-      const adminToken = await reviewerToken(app);
-      await app.inject({
-        method: "POST",
-        url: `/admin/assets/${assetId}/approve`,
-        headers: { authorization: `Bearer ${adminToken}` }
-      });
+      expect(token).toEqual(expect.any(String));
+      const asset = await createActiveRepositoryAsset(assets);
 
-      const response = await app.inject({ method: "GET", url: `/api/assets/${assetId}` });
+      const response = await app.inject({ method: "GET", url: `/api/assets/${asset.id}` });
 
       expect(response.statusCode).toBe(200);
       expect(response.json()).toMatchObject({
@@ -1118,18 +441,15 @@ describe("asset workflow", () => {
   });
 
   it("hides pending assets from unauthenticated detail requests", async () => {
-    const app = buildApp({ enableMockAuth: true });
+    const assets = createInMemoryAssetsRepository();
+    const app = buildApp({ enableMockAuth: true, assetsRepository: assets });
 
     try {
       const token = await login(app);
-      const createResponse = await app.inject({
-        method: "POST",
-        url: "/api/assets",
-        headers: { authorization: `Bearer ${token}` },
-        payload: validAssetPayload()
-      });
+      expect(token).toEqual(expect.any(String));
+      const asset = await createPendingRepositoryAsset(assets);
 
-      const response = await app.inject({ method: "GET", url: `/api/assets/${createResponse.json().asset.id}` });
+      const response = await app.inject({ method: "GET", url: `/api/assets/${asset.id}` });
 
       expect(response.statusCode).toBe(404);
       expect(response.json().error.code).toBe("asset_not_found");
@@ -1139,20 +459,16 @@ describe("asset workflow", () => {
   });
 
   it("allows sellers to view their own pending asset detail", async () => {
-    const app = buildApp({ enableMockAuth: true });
+    const assets = createInMemoryAssetsRepository();
+    const app = buildApp({ enableMockAuth: true, assetsRepository: assets });
 
     try {
       const token = await login(app);
-      const createResponse = await app.inject({
-        method: "POST",
-        url: "/api/assets",
-        headers: { authorization: `Bearer ${token}` },
-        payload: validAssetPayload({ title: "卖家可见待审资产" })
-      });
+      const asset = await createPendingRepositoryAsset(assets, { title: "卖家可见待审资产" });
 
       const response = await app.inject({
         method: "GET",
-        url: `/api/assets/${createResponse.json().asset.id}`,
+        url: `/api/assets/${asset.id}`,
         headers: { authorization: `Bearer ${token}` }
       });
 
@@ -1164,32 +480,22 @@ describe("asset workflow", () => {
   });
 
   it("returns bidder summaries in recent bids", async () => {
-    const app = buildApp({ enableMockAuth: true });
+    const assets = createInMemoryAssetsRepository();
+    const app = buildApp({ enableMockAuth: true, assetsRepository: assets });
 
     try {
       const sellerToken = await login(app, "卖家");
       const bidderToken = await login(app, "出价人张宁");
-      const createResponse = await app.inject({
-        method: "POST",
-        url: "/api/assets",
-        headers: { authorization: `Bearer ${sellerToken}` },
-        payload: validAssetPayload()
-      });
-      const assetId = createResponse.json().asset.id;
-      const adminToken = await reviewerToken(app);
-      await app.inject({
-        method: "POST",
-        url: `/admin/assets/${assetId}/approve`,
-        headers: { authorization: `Bearer ${adminToken}` }
-      });
+      expect(sellerToken).toEqual(expect.any(String));
+      const asset = await createActiveRepositoryAsset(assets);
       await app.inject({
         method: "POST",
         url: "/api/bids",
         headers: { authorization: `Bearer ${bidderToken}` },
-        payload: { assetId, amountCents: 10000, commitmentAccepted: true }
+        payload: { assetId: asset.id, amountCents: 10000, commitmentAccepted: true }
       });
 
-      const response = await app.inject({ method: "GET", url: `/api/assets/${assetId}` });
+      const response = await app.inject({ method: "GET", url: `/api/assets/${asset.id}` });
 
       expect(response.statusCode).toBe(200);
       expect(response.json().recentBids).toEqual([
@@ -1204,24 +510,16 @@ describe("asset workflow", () => {
   });
 
   it("keeps confirmed sold asset details visible with ended status", async () => {
-    const app = buildApp({ enableMockAuth: true });
+    const assets = createInMemoryAssetsRepository();
+    const app = buildApp({ enableMockAuth: true, assetsRepository: assets });
 
     try {
       const sellerToken = await login(app, "卖家");
       const bidderToken = await login(app, "成交买家");
-      const createResponse = await app.inject({
-        method: "POST",
-        url: "/api/assets",
-        headers: { authorization: `Bearer ${sellerToken}` },
-        payload: validAssetPayload({ title: "已确认成交资产" })
-      });
-      const assetId = createResponse.json().asset.id;
+      expect(sellerToken).toEqual(expect.any(String));
+      const asset = await createActiveRepositoryAsset(assets, { title: "已确认成交资产" });
+      const assetId = asset.id;
       const adminToken = await reviewerToken(app);
-      await app.inject({
-        method: "POST",
-        url: `/admin/assets/${assetId}/approve`,
-        headers: { authorization: `Bearer ${adminToken}` }
-      });
       await app.inject({
         method: "POST",
         url: "/api/bids",
@@ -1266,18 +564,12 @@ describe("asset workflow", () => {
     } as Parameters<typeof buildApp>[0]);
 
     try {
-      const token = await login(app);
-      const createResponse = await app.inject({
-        method: "POST",
-        url: "/api/assets",
-        headers: { authorization: `Bearer ${token}` },
-        payload: validAssetPayload()
-      });
+      const asset = await createPendingRepositoryAsset(assets);
       const adminToken = await reviewerToken(app);
 
       const response = await app.inject({
         method: "POST",
-        url: `/admin/assets/${createResponse.json().asset.id}/approve`,
+        url: `/admin/assets/${asset.id}/approve`,
         headers: { authorization: `Bearer ${adminToken}` }
       });
 
@@ -1304,18 +596,12 @@ describe("asset workflow", () => {
     } as Parameters<typeof buildApp>[0]);
 
     try {
-      const token = await login(app);
-      const createResponse = await app.inject({
-        method: "POST",
-        url: "/api/assets",
-        headers: { authorization: `Bearer ${token}` },
-        payload: validAssetPayload()
-      });
+      const asset = await createPendingRepositoryAsset(assets);
       const adminToken = await reviewerToken(app);
 
       const response = await app.inject({
         method: "POST",
-        url: `/admin/assets/${createResponse.json().asset.id}/approve`,
+        url: `/admin/assets/${asset.id}/approve`,
         headers: { authorization: `Bearer ${adminToken}` },
         payload: { imageSafetyOverride: true }
       });
@@ -1343,18 +629,12 @@ describe("asset workflow", () => {
     } as Parameters<typeof buildApp>[0]);
 
     try {
-      const token = await login(app);
-      const createResponse = await app.inject({
-        method: "POST",
-        url: "/api/assets",
-        headers: { authorization: `Bearer ${token}` },
-        payload: validAssetPayload()
-      });
+      const asset = await createPendingRepositoryAsset(assets);
       const adminToken = await reviewerToken(app);
 
       const response = await app.inject({
         method: "POST",
-        url: `/admin/assets/${createResponse.json().asset.id}/approve`,
+        url: `/admin/assets/${asset.id}/approve`,
         headers: { authorization: `Bearer ${adminToken}` },
         payload: { imageSafetyOverride: true }
       });

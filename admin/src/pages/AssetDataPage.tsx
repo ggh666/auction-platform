@@ -398,7 +398,7 @@ export function AssetDataPage({ onOpenAsset }: AssetDataPageProps) {
             { key: "images", label: "图片" },
             { key: "title", label: "资产标题" },
             { key: "game", label: "游戏与类型" },
-            { key: "sellerId", label: "卖家ID" },
+            { key: "sellerId", label: "卖家信息" },
             { key: "price", label: "当前竞拍价", align: "right" },
             { key: "status", label: "状态" },
             { key: "effectiveEndAt", label: "截止时间" },
@@ -516,7 +516,12 @@ export function AssetDataPage({ onOpenAsset }: AssetDataPageProps) {
             }
 
             if (column.key === "sellerId") {
-              return row.sellerId;
+              return (
+                <div className="stacked-cell">
+                  <strong>{row.sellerGameId || "未填写"}</strong>
+                  <span>平台用户ID {row.sellerId}</span>
+                </div>
+              );
             }
 
             return row.id;

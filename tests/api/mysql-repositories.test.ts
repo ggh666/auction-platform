@@ -31,6 +31,7 @@ type FakeUser = {
 type FakeAsset = {
   id: number;
   seller_id: number;
+  seller_game_id: string | null;
   principal_id: number | null;
   game_name: string;
   server_name: string;
@@ -508,23 +509,24 @@ class FakeMysqlPool {
       const asset: FakeAsset = {
         id: this.assets.length + 1,
         seller_id: Number(params[0]),
-        principal_id: params[1] === null ? null : Number(params[1]),
-        game_name: params[2] as string,
-        server_name: params[3] as string,
-        asset_type: params[4] as string,
-        item_category: (params[5] as string | null) ?? null,
-        dragon_ball_profession: (params[6] as string | null) ?? null,
-        dragon_ball_quality: (params[7] as string | null) ?? null,
-        dragon_ball_attributes: (params[8] as string | null) ?? null,
-        title: params[9] as string,
-        description: params[10] as string,
+        seller_game_id: (params[1] as string | null) ?? null,
+        principal_id: params[2] === null ? null : Number(params[2]),
+        game_name: params[3] as string,
+        server_name: params[4] as string,
+        asset_type: params[5] as string,
+        item_category: (params[6] as string | null) ?? null,
+        dragon_ball_profession: (params[7] as string | null) ?? null,
+        dragon_ball_quality: (params[8] as string | null) ?? null,
+        dragon_ball_attributes: (params[9] as string | null) ?? null,
+        title: params[10] as string,
+        description: params[11] as string,
         status: "pending_review",
-        starting_price_cents: Number(params[11]),
+        starting_price_cents: Number(params[12]),
         current_price_cents: null,
-        min_increment_cents: Number(params[12]),
+        min_increment_cents: Number(params[13]),
         highest_bidder_id: null,
-        original_end_at: params[13] as Date,
-        effective_end_at: params[14] as Date,
+        original_end_at: params[14] as Date,
+        effective_end_at: params[15] as Date,
         created_at: new Date("2026-05-25T00:00:00.000Z"),
         updated_at: new Date("2026-05-25T00:00:00.000Z")
       };
@@ -1004,6 +1006,23 @@ class FakeMysqlPool {
     if (sql.includes("COUNT(*) AS total") && sql.includes("FROM bids") && sql.includes("created_at >= ?")) {
       const sinceMs = new Date(params[0] as Date | string).getTime();
       return [[{ total: this.bids.filter((bid) => bid.created_at.getTime() >= sinceMs).length }] as T, []];
+    }
+
+    if (sql.includes("MAX(id) AS latest_id") && sql.includes("FROM bids")) {
+      const assetId = Number(params[0]);
+      const latestByBidderId = new Map<number, FakeBid>();
+      for (const bid of this.bids.filter((item) => item.asset_id === assetId)) {
+        const current = latestByBidderId.get(bid.bidder_id);
+        if (!current || bid.id > current.id) {
+          latestByBidderId.set(bid.bidder_id, bid);
+        }
+      }
+      return [
+        [...latestByBidderId.values()].sort(
+          (left, right) => left.created_at.getTime() - right.created_at.getTime() || left.id - right.id
+        ) as T,
+        []
+      ];
     }
 
     if (sql.includes("FROM bids") && sql.includes("bidder_id =")) {
@@ -1557,6 +1576,22 @@ describe("mysql repositories", () => {
     await expect((assets as any).countCreatedSince("2026-05-25T00:00:00.000Z")).resolves.toBe(1);
     await expect((bids as any).countCreatedSince("2026-05-25T00:00:00.000Z")).resolves.toBe(1);
     await expect((reports as any).countByStatus("pending")).resolves.toBe(1);
+  });
+
+  it("returns each asset bidder's latest bid record from MySQL rows", async () => {
+    const pool = new FakeMysqlPool();
+    pool.bids.push(
+      { id: 1, asset_id: 9, bidder_id: 2, amount_cents: 10000, created_at: new Date("2026-05-25T02:00:00.000Z") },
+      { id: 2, asset_id: 9, bidder_id: 3, amount_cents: 10100, created_at: new Date("2026-05-25T02:01:00.000Z") },
+      { id: 3, asset_id: 9, bidder_id: 2, amount_cents: 10200, created_at: new Date("2026-05-25T02:02:00.000Z") },
+      { id: 4, asset_id: 10, bidder_id: 2, amount_cents: 10300, created_at: new Date("2026-05-25T02:03:00.000Z") }
+    );
+    const bids = createMysqlBidsRepository(pool);
+
+    await expect(bids.listLatestByAssetBidders("9")).resolves.toEqual([
+      expect.objectContaining({ id: "2", bidderId: "3", amountCents: 10100 }),
+      expect.objectContaining({ id: "3", bidderId: "2", amountCents: 10200 })
+    ]);
   });
 
   it("creates Dragon Ball assets with attached image rows in MySQL", async () => {
