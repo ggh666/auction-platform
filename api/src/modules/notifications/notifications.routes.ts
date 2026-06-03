@@ -1,4 +1,4 @@
-import type { NotificationActionResponse, NotificationListResponse } from "@auction/shared";
+import type { NotificationActionResponse, NotificationBulkActionResponse, NotificationListResponse } from "@auction/shared";
 import type { FastifyInstance } from "fastify";
 import { requireActiveUser, requireUser } from "../../http/auth";
 import { notFound } from "../../http/errors";
@@ -26,6 +26,15 @@ export function registerNotificationRoutes(app: FastifyInstance, notifications: 
         throw notFound("notification_not_found", "Notification not found");
       }
       return { notification };
+    }
+  );
+
+  app.post<{ Reply: NotificationBulkActionResponse }>(
+    "/api/profile/notifications/read-all",
+    { preHandler: requireActiveUser(users) },
+    async (request) => {
+      const items = await notifications.markAllRead(request.user.id);
+      return { items, unreadCount: items.filter((notification) => notification.readAt === null).length };
     }
   );
 }

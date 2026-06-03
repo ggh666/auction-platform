@@ -73,6 +73,12 @@ describe("profile routes", () => {
         },
         async markRead() {
           return null;
+        },
+        async markAllRead() {
+          return [];
+        },
+        async deleteByBidId() {
+          return 0;
         }
       }
     } as Parameters<typeof buildApp>[0]);

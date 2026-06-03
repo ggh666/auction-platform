@@ -31,4 +31,25 @@ describe("miniapp restricted user action messages", () => {
       "内容包含敏感信息，请修改后再提交"
     );
   });
+
+  it("explains bid restrictions and points users to principals or customer service", () => {
+    expect(
+      restrictedActionFailureMessage(
+        Object.assign(new Error("User is temporarily restricted from bidding"), {
+          details: { bidRestrictedUntil: "2026-06-03T12:30:00.000Z", reason: "疑似故意抬价" }
+        }),
+        "bid",
+        "fallback"
+      )
+    ).toContain("如需申诉请联系主理人或客服");
+    expect(
+      restrictedActionFailureMessage(
+        Object.assign(new Error("User is restricted from bidding"), {
+          details: { permanent: true, reason: "疑似故意抬价" }
+        }),
+        "bid",
+        "fallback"
+      )
+    ).toBe("账号已被永久限制出价，原因：疑似故意抬价。如需申诉请联系主理人或客服。");
+  });
 });

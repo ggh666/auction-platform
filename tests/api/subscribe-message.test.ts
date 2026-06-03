@@ -50,4 +50,17 @@ describe("WeChat subscribe messages", () => {
       })
     );
   });
+
+  it("does not expose deal contact reminder sending", () => {
+    const fetchImpl = vi.fn(async () => jsonResponse({ errcode: 0 }));
+    const service = createWechatSubscribeMessageService({
+      priceChangeTemplateId: "tmpl-price-change",
+      miniprogramState: "trial",
+      tokenProvider: { getAccessToken: async () => "access-token" },
+      fetchImpl
+    });
+
+    expect("sendDealContactRequired" in service).toBe(false);
+    expect(fetchImpl).not.toHaveBeenCalled();
+  });
 });

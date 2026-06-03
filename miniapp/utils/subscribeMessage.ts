@@ -101,3 +101,48 @@ export function requestPriceChangeSubscription(input: {
     }
   });
 }
+
+export function requestBidRelatedSubscriptions(input: {
+  priceChangeTemplateId?: string;
+  requestSubscribeMessage?: SubscribeMessageRequester;
+  onDebug?: (event: PriceChangeSubscriptionDebugEvent) => void;
+} = {}): Promise<PriceChangeSubscriptionResult> {
+  const templateIds = [input.priceChangeTemplateId ?? readPriceChangeSubscribeTemplateId()]
+    .map((templateId) => templateId.trim())
+    .filter((templateId, index, all) => templateId && all.indexOf(templateId) === index);
+  if (templateIds.length === 0) {
+    input.onDebug?.({ type: "template_missing" });
+    return Promise.resolve("skipped");
+  }
+
+  const requestSubscribeMessage = input.requestSubscribeMessage ?? defaultSubscribeRequester();
+  if (!requestSubscribeMessage) {
+    const runtime = globalThis as typeof globalThis & {
+      uni?: SubscribeMessageRuntime;
+      wx?: SubscribeMessageRuntime;
+    };
+    input.onDebug?.({
+      type: "requester_unavailable",
+      templateId: templateIds.join(","),
+      hasWxRequester: typeof runtime.wx?.requestSubscribeMessage === "function",
+      hasUniRequester: typeof runtime.uni?.requestSubscribeMessage === "function"
+    });
+    return Promise.resolve("skipped");
+  }
+
+  return new Promise((resolve) => {
+    try {
+      requestSubscribeMessage({
+        tmplIds: templateIds,
+        success(response) {
+          resolve(templateIds.some((templateId) => response[templateId] === "accept") ? "accepted" : "rejected");
+        },
+        fail() {
+          resolve("failed");
+        }
+      });
+    } catch {
+      resolve("failed");
+    }
+  });
+}

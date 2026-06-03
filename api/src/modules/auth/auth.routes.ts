@@ -68,7 +68,11 @@ export function registerAuthRoutes(app: FastifyInstance, users: UsersRepository,
         creditScore: user.credit_score,
         creditResetAt: user.credit_reset_at === null ? null : new Date(user.credit_reset_at).toISOString(),
         buyerUnreachableCount: user.buyer_unreachable_count,
-        bidRestrictedUntil: user.bid_restricted_until === null ? null : new Date(user.bid_restricted_until).toISOString()
+        bidRestrictedUntil: user.bid_restricted_until === null ? null : new Date(user.bid_restricted_until).toISOString(),
+        bidRestrictionPermanent: user.bid_restricted_permanent,
+        bidRestrictionReason: user.bid_restriction_reason,
+        bidRestrictionStartedAt:
+          user.bid_restriction_started_at === null ? null : new Date(user.bid_restriction_started_at).toISOString()
       }
     };
   });

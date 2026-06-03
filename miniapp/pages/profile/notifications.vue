@@ -1,7 +1,20 @@
 <template>
   <view class="page">
-    <text class="title">消息通知</text>
-    <text v-if="unreadCount > 0" class="summary">{{ unreadCount }} 条未读价格变动提醒</text>
+    <view class="header">
+      <view class="header-copy">
+        <text class="title">消息通知</text>
+        <text v-if="unreadCount > 0" class="summary">{{ unreadCount }} 条未读通知</text>
+      </view>
+      <button
+        v-if="unreadCount > 0"
+        class="mark-all-button"
+        :loading="markingAllRead"
+        :disabled="markingAllRead"
+        @tap.stop="markAllRead"
+      >
+        全部已读
+      </button>
+    </view>
     <view v-if="loading" class="empty">正在加载通知</view>
     <view v-else-if="notifications.length === 0" class="empty">暂无通知</view>
     <view
@@ -12,9 +25,7 @@
       @tap="openNotification(notification)"
     >
       <text class="notification-title">{{ notification.assetTitle }}</text>
-      <text class="notification-content">
-        {{ notification.actorDisplayName }} 已出价 {{ formatPrice(notification.amountCents) }} 元
-      </text>
+      <text class="notification-content">{{ notificationContent(notification) }}</text>
       <text class="notification-time">{{ formatTime(notification.createdAt) }}</text>
     </view>
   </view>
@@ -24,9 +35,10 @@
 import { centsToYuanText, type NotificationItem } from "@auction/shared";
 import { onShow } from "@dcloudio/uni-app";
 import { ref } from "vue";
-import { listNotifications, markNotificationRead } from "../../api/client";
+import { listNotifications, markAllNotificationsRead, markNotificationRead } from "../../api/client";
 
 const loading = ref(false);
+const markingAllRead = ref(false);
 const notifications = ref<NotificationItem[]>([]);
 const unreadCount = ref(0);
 
@@ -49,6 +61,24 @@ async function loadNotifications() {
   }
 }
 
+async function markAllRead() {
+  if (markingAllRead.value || unreadCount.value === 0) {
+    return;
+  }
+
+  markingAllRead.value = true;
+  try {
+    const response = await markAllNotificationsRead();
+    notifications.value = response.items;
+    unreadCount.value = response.unreadCount;
+    uni.showToast({ title: "已全部标为已读", icon: "none" });
+  } catch {
+    uni.showToast({ title: "标记失败，请稍后重试", icon: "none" });
+  } finally {
+    markingAllRead.value = false;
+  }
+}
+
 async function openNotification(notification: NotificationItem) {
   if (!notification.readAt) {
     try {
@@ -60,6 +90,13 @@ async function openNotification(notification: NotificationItem) {
     }
   }
   uni.navigateTo({ url: `/pages/auctions/detail?assetId=${notification.assetId}` });
+}
+
+function notificationContent(notification: NotificationItem) {
+  if (notification.type !== "outbid") {
+    return "成交状态有更新";
+  }
+  return `${notification.actorDisplayName} 已出价 ${formatPrice(notification.amountCents ?? 0)} 元`;
 }
 
 function formatPrice(cents: number) {
@@ -85,22 +122,58 @@ function formatTime(value: string) {
 
 .title,
 .summary,
+.header-copy,
 .notification-title,
 .notification-content,
 .notification-time {
   display: block;
 }
 
-.title {
+.header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 20rpx;
   margin-bottom: 24rpx;
+}
+
+.header-copy {
+  flex: 1;
+  min-width: 0;
+}
+
+.title {
+  margin-bottom: 10rpx;
   font-size: 36rpx;
   font-weight: 700;
   color: #101828;
 }
 
 .summary {
-  margin-bottom: 16rpx;
   color: #d92d20;
+}
+
+.mark-all-button {
+  flex-shrink: 0;
+  min-width: 156rpx;
+  height: 64rpx;
+  padding: 0 22rpx;
+  margin: 0;
+  font-size: 26rpx;
+  font-weight: 700;
+  line-height: 64rpx;
+  color: #071112;
+  background: #f6c453;
+  border-radius: 6rpx;
+}
+
+.mark-all-button::after {
+  border: 0;
+}
+
+.mark-all-button[disabled] {
+  color: rgba(7, 17, 18, 0.68);
+  background: rgba(246, 196, 83, 0.68);
 }
 
 .notification-row {

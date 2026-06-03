@@ -43,4 +43,14 @@ describe("SQL performance coverage", () => {
     expect(repositorySql).not.toMatch(/CAST\((id|seller_id) AS CHAR\)/);
     expect(repositorySql).not.toMatch(/LOWER\((title|server_name|description)\)/);
   });
+
+  it("does not keep buyer contact collection schema or notification enums", () => {
+    const sql = readAllMigrations();
+
+    expect(sql).not.toMatch(/ADD COLUMN buyer_contact_/);
+    expect(sql).not.toMatch(/buyer_contact_\w+\s+TEXT NULL/);
+    expect(sql).not.toMatch(/buyer_contact_submitted_at\s+DATETIME NULL/);
+    expect(sql).not.toMatch(/contact_notice_sent_at\s+DATETIME NULL/);
+    expect(sql).not.toContain("ENUM('outbid','deal_contact_required')");
+  });
 });

@@ -27,6 +27,8 @@ export type WechatLoginRequest = {
   code: string;
   displayName?: string;
   avatarUrl?: string;
+  profileRawData?: string;
+  profileSignature?: string;
 };
 
 export type AdminLoginResponse = {
@@ -114,6 +116,19 @@ export type AdminAssetDetailResponse = {
   principal: PrincipalSummary | null;
   imageSafetyChecks: AdminImageSafetyCheck[];
   recentBids: BidDisplayRecord[];
+};
+
+export type BidRestrictionDuration = "30m" | "1d" | "permanent";
+
+export type AdminBidRestrictionRequest = {
+  duration: BidRestrictionDuration;
+  reason?: string;
+};
+
+export type AdminBidRevokeAndRestrictResponse = {
+  asset: AuctionAsset;
+  bid: BidDisplayRecord;
+  user: AdminManagedUser;
 };
 
 export type AdminDashboardMetrics = {
@@ -218,3 +233,5 @@ export type NotificationListResponse = {
 export type NotificationActionResponse = {
   notification: NotificationItem;
 };
+
+export type NotificationBulkActionResponse = NotificationListResponse;

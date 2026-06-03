@@ -7,10 +7,18 @@ export type CreateBidInput = {
   effectiveEndAt: string;
 };
 
+export type RevokeBidInput = {
+  assetId: string;
+  bidId: string;
+  adminId: number;
+  reason: string;
+};
+
 export type BidsRepository = {
   createBid(input: CreateBidInput): Promise<{ bid: BidRecord; asset: AuctionAsset }>;
+  revokeBidAndRecalculate(input: RevokeBidInput): Promise<{ bid: BidRecord; asset: AuctionAsset }>;
   countCreatedSince(since: string, input?: { principalId?: string }): Promise<number>;
-  listByAsset(assetId: string): Promise<BidRecord[]>;
+  listByAsset(assetId: string, input?: { includeRevoked?: boolean }): Promise<BidRecord[]>;
   listLatestByAssetBidders(assetId: string): Promise<BidRecord[]>;
   listByBidder(bidderId: string): Promise<BidRecord[]>;
 };
@@ -34,6 +42,9 @@ export function createInMemoryBidsRepository(
         assetId: input.asset.id,
         bidderId: input.bidderId,
         amountCents: input.amountCents,
+        revokedAt: null,
+        revokedByAdminId: null,
+        revokeReason: null,
         createdAt: now
       };
 
@@ -51,9 +62,46 @@ export function createInMemoryBidsRepository(
 
       return { bid: cloneBid(bid), asset };
     },
+    async revokeBidAndRecalculate(input) {
+      const index = bids.findIndex((bid) => bid.id === input.bidId && bid.assetId === input.assetId);
+      if (index === -1) {
+        throw new Error("Bid not found");
+      }
+      if (bids[index].revokedAt) {
+        throw new Error("Bid already revoked");
+      }
+      const revokedAt = new Date().toISOString();
+      bids[index] = {
+        ...bids[index],
+        revokedAt,
+        revokedByAdminId: String(input.adminId),
+        revokeReason: input.reason.trim()
+      };
+
+      const currentAsset = readAsset ? await readAsset(input.assetId) : null;
+      if (!currentAsset) {
+        throw new Error("Asset not found");
+      }
+      const remaining = bids
+        .filter((bid) => bid.assetId === input.assetId && !bid.revokedAt)
+        .sort(
+          (left, right) =>
+            right.amountCents - left.amountCents ||
+            new Date(right.createdAt).getTime() - new Date(left.createdAt).getTime() ||
+            Number(right.id) - Number(left.id)
+        );
+      const highest = remaining[0] ?? null;
+      const asset = await updateAsset({
+        ...currentAsset,
+        currentPriceCents: highest?.amountCents ?? null,
+        highestBidderId: highest?.bidderId ?? null,
+        updatedAt: revokedAt
+      });
+      return { bid: cloneBid(bids[index]), asset };
+    },
     async countCreatedSince(since, input = {}) {
       const sinceMs = new Date(since).getTime();
-      const recentBids = bids.filter((bid) => new Date(bid.createdAt).getTime() >= sinceMs);
+      const recentBids = bids.filter((bid) => !bid.revokedAt && new Date(bid.createdAt).getTime() >= sinceMs);
       if (!input.principalId) {
         return recentBids.length;
       }
@@ -66,12 +114,12 @@ export function createInMemoryBidsRepository(
       }
       return total;
     },
-    async listByAsset(assetId) {
-      return bids.filter((bid) => bid.assetId === assetId).map(cloneBid);
+    async listByAsset(assetId, input = {}) {
+      return bids.filter((bid) => bid.assetId === assetId && (input.includeRevoked || !bid.revokedAt)).map(cloneBid);
     },
     async listLatestByAssetBidders(assetId) {
       const latestByBidderId = new Map<string, BidRecord>();
-      for (const bid of bids.filter((item) => item.assetId === assetId)) {
+      for (const bid of bids.filter((item) => item.assetId === assetId && !item.revokedAt)) {
         const current = latestByBidderId.get(bid.bidderId);
         const bidTime = new Date(bid.createdAt).getTime();
         const currentTime = current ? new Date(current.createdAt).getTime() : Number.NEGATIVE_INFINITY;
@@ -87,7 +135,7 @@ export function createInMemoryBidsRepository(
         .map(cloneBid);
     },
     async listByBidder(bidderId) {
-      return bids.filter((bid) => bid.bidderId === bidderId).map(cloneBid);
+      return bids.filter((bid) => bid.bidderId === bidderId && !bid.revokedAt).map(cloneBid);
     }
   };
 }

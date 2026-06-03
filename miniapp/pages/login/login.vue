@@ -7,37 +7,50 @@
       <text class="privacy-text">昵称和头像仅用于平台账号展示、消息提醒和必要身份区分，不会用于无关用途。</text>
     </view>
 
-    <button class="avatar-button" open-type="chooseAvatar" @chooseavatar="chooseAvatar">
-      <image v-if="avatarUrl" class="avatar" :src="avatarUrl" mode="aspectFill" />
-      <text v-else class="avatar-placeholder">选择头像</text>
-    </button>
+    <view class="locked-profile">
+      <button class="avatar-picker" open-type="chooseAvatar" @chooseavatar="onChooseAvatar">
+        <image v-if="avatarUrl" class="avatar" :src="avatarUrl" mode="aspectFill" />
+        <view v-else class="avatar avatar-fallback">{{ displayName.slice(0, 1) || "用" }}</view>
+      </button>
+      <view class="profile-copy">
+        <text class="profile-label">昵称</text>
+        <view class="nickname-control" :class="{ 'is-selecting': !nicknameLocked }" @tap="focusNicknameInput">
+          <view v-if="!nicknameLocked" class="nickname-selector">
+            <text class="nickname-selector-text">点击选择昵称</text>
+            <input
+              class="nickname-native-input"
+              type="nickname"
+              :focus="nicknameInputFocused"
+              :value="nicknameDraft"
+              @blur="onNicknameBlur"
+              @confirm="onNicknameBlur"
+              @input="onNicknameInput"
+              @nicknamereview="onNicknameReview"
+            />
+          </view>
+          <text v-else class="nickname-display">{{ displayName }}</text>
+        </view>
+        <button v-if="nicknameLocked" class="nickname-reset" @tap.stop="resetNickname">重新选择</button>
+      </view>
+    </view>
 
-    <input v-model="displayName" class="input" type="nickname" placeholder="请输入昵称" />
     <button class="primary-action" :loading="loading" :disabled="loading" @tap="login">进入平台</button>
   </view>
 </template>
 
 <script setup lang="ts">
-import { ref } from "vue";
+import { nextTick, ref } from "vue";
 import { wechatLogin } from "../../api/client";
 import { saveSession } from "../../auth/session";
 
-type ChooseAvatarEvent = {
-  detail?: {
-    avatarUrl?: string;
-  };
-};
+type ChooseAvatarEvent = { detail?: { avatarUrl?: unknown } };
 
 const displayName = ref("");
 const avatarUrl = ref("");
+const nicknameDraft = ref("");
+const nicknameInputFocused = ref(false);
+const nicknameLocked = ref(false);
 const loading = ref(false);
-
-function chooseAvatar(event: ChooseAvatarEvent) {
-  const value = event.detail?.avatarUrl;
-  if (value) {
-    avatarUrl.value = value;
-  }
-}
 
 function getWeixinLoginCode(): Promise<string> {
   return new Promise((resolve, reject) => {
@@ -71,10 +84,83 @@ function readErrorMessage(error: unknown): string {
   return "登录失败，请稍后重试";
 }
 
+function normalizeNickname(value: unknown): string {
+  return typeof value === "string" ? value.trim().slice(0, 64) : "";
+}
+
+function readInputEventValue(event: unknown): unknown {
+  if (typeof event !== "object" || event === null) {
+    return undefined;
+  }
+  const detail = (event as { detail?: unknown }).detail;
+  if (typeof detail === "object" && detail !== null && "value" in detail) {
+    return (detail as { value?: unknown }).value;
+  }
+  if (typeof detail === "object" && detail !== null && "nickname" in detail) {
+    return (detail as { nickname?: unknown }).nickname;
+  }
+  const target = (event as { target?: unknown }).target;
+  if (typeof target === "object" && target !== null && "value" in target) {
+    return (target as { value?: unknown }).value;
+  }
+  return undefined;
+}
+
+function onNicknameInput(event: unknown) {
+  nicknameDraft.value = normalizeNickname(readInputEventValue(event));
+}
+
+function onNicknameBlur(event: unknown) {
+  nicknameInputFocused.value = false;
+  const nickname = normalizeNickname(readInputEventValue(event)) || nicknameDraft.value;
+  if (nickname) {
+    displayName.value = nickname;
+    nicknameDraft.value = nickname;
+    nicknameLocked.value = true;
+  }
+}
+
+function onNicknameReview(event: unknown) {
+  const nickname = normalizeNickname(readInputEventValue(event));
+  if (nickname) {
+    displayName.value = nickname;
+    nicknameDraft.value = nickname;
+    nicknameLocked.value = true;
+    nicknameInputFocused.value = false;
+  }
+}
+
+function focusNicknameInput() {
+  if (!nicknameLocked.value) {
+    nicknameInputFocused.value = true;
+  }
+}
+
+function resetNickname() {
+  displayName.value = "";
+  nicknameDraft.value = "";
+  nicknameLocked.value = false;
+  nicknameInputFocused.value = false;
+  void nextTick(() => {
+    nicknameInputFocused.value = true;
+  });
+}
+
+function onChooseAvatar(event: ChooseAvatarEvent) {
+  const selectedAvatarUrl = typeof event.detail?.avatarUrl === "string" ? event.detail.avatarUrl.trim() : "";
+  if (selectedAvatarUrl) {
+    avatarUrl.value = selectedAvatarUrl;
+  }
+}
+
+function persistentAvatarUrl(): string | undefined {
+  return /^https:\/\//.test(avatarUrl.value.trim()) ? avatarUrl.value.trim() : undefined;
+}
+
 async function login() {
   const nickname = displayName.value.trim();
   if (!nickname) {
-    uni.showToast({ title: "请填写昵称", icon: "none" });
+    uni.showToast({ title: "请先填写昵称", icon: "none" });
     return;
   }
 
@@ -84,7 +170,7 @@ async function login() {
     const result = await wechatLogin({
       code,
       displayName: nickname,
-      avatarUrl: avatarUrl.value || undefined
+      avatarUrl: persistentAvatarUrl()
     });
     saveSession(result);
     uni.switchTab({ url: "/pages/games/index" });
@@ -142,46 +228,121 @@ async function login() {
   color: #475467;
 }
 
-.input {
-  box-sizing: border-box;
-  width: 100%;
-  height: 88rpx;
+.locked-profile {
+  display: flex;
+  align-items: center;
+  gap: 18rpx;
+  padding: 18rpx;
   margin-bottom: 24rpx;
-  padding: 0 20rpx;
-  border: 1px solid #d0d5dd;
   border-radius: 8rpx;
 }
 
-.avatar-button {
+.avatar-picker {
   display: flex;
+  flex: 0 0 auto;
   align-items: center;
   justify-content: center;
-  width: 144rpx;
-  height: 144rpx;
+  width: 104rpx;
+  height: 104rpx;
   padding: 0;
-  margin: 0 0 24rpx;
+  margin: 0;
   overflow: hidden;
-  background: #eef4ff;
-  border: 1px solid #b2ccff;
-  border-radius: 72rpx;
+  background: transparent;
+  border-radius: 52rpx;
 }
 
-.avatar-button::after {
+.avatar-picker::after {
   border: 0;
 }
 
-.avatar,
-.avatar-placeholder {
-  width: 144rpx;
-  height: 144rpx;
+.avatar {
+  flex: 0 0 auto;
+  width: 104rpx;
+  height: 104rpx;
+  overflow: hidden;
+  border-radius: 52rpx;
 }
 
-.avatar-placeholder {
+.avatar-fallback {
   display: flex;
   align-items: center;
   justify-content: center;
+  font-size: 38rpx;
+  font-weight: 800;
+}
+
+.profile-copy {
+  flex: 1;
+  min-width: 0;
+}
+
+.profile-label {
+  display: block;
+}
+
+.profile-label {
+  margin-bottom: 6rpx;
   font-size: 24rpx;
-  color: #175cd3;
+}
+
+.nickname-control {
+  position: relative;
+  min-height: 56rpx;
+}
+
+.nickname-selector {
+  position: relative;
+  min-height: 56rpx;
+}
+
+.nickname-selector-text {
+  display: block;
+  overflow: hidden;
+  font-size: 32rpx;
+  font-weight: 800;
+  line-height: 56rpx;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.nickname-display {
+  display: block;
+  overflow: hidden;
+  font-size: 32rpx;
+  font-weight: 800;
+  line-height: 56rpx;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.nickname-native-input {
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+  display: block;
+  width: 100%;
+  height: 56rpx;
+  padding: 0;
+  overflow: hidden;
+  color: transparent;
+  caret-color: transparent;
+  opacity: 0.01;
+}
+
+.nickname-reset {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  height: 44rpx;
+  padding: 0 14rpx;
+  margin: 8rpx 0 0;
+  font-size: 22rpx;
+  line-height: 44rpx;
+  border-radius: 8rpx;
+}
+
+.nickname-reset::after {
+  border: 0;
 }
 
 .page {
@@ -215,19 +376,28 @@ async function login() {
   color: #a9c9ba;
 }
 
-.input {
-  color: #f5f0dc;
-  background: rgba(8, 24, 23, 0.94);
-  border-color: rgba(134, 239, 172, 0.24);
-}
-
-.avatar-button {
+.locked-profile {
   background: linear-gradient(145deg, rgba(16, 42, 38, 0.96), rgba(8, 19, 20, 0.98));
-  border-color: rgba(246, 196, 83, 0.42);
+  border: 1px solid rgba(246, 196, 83, 0.42);
   box-shadow: 0 14rpx 32rpx rgba(0, 0, 0, 0.30), inset 0 1rpx 0 rgba(255, 255, 255, 0.14);
 }
 
-.avatar-placeholder {
+.avatar {
+  background: rgba(8, 24, 23, 0.94);
+}
+
+.avatar-fallback,
+.nickname-display,
+.nickname-selector-text {
   color: #ffd66b;
+}
+
+.profile-label {
+  color: #9ab4a8;
+}
+
+.nickname-reset {
+  color: #071112;
+  background: #f6c453;
 }
 </style>

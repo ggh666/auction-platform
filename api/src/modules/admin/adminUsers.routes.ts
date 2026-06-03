@@ -19,6 +19,9 @@ function toManagedUser(user: UserRow): AdminManagedUser {
     dailyPublishLimit: user.daily_publish_limit,
     buyerUnreachableCount: user.buyer_unreachable_count,
     bidRestrictedUntil: user.bid_restricted_until === null ? null : toIsoString(user.bid_restricted_until),
+    bidRestrictionPermanent: user.bid_restricted_permanent,
+    bidRestrictionReason: user.bid_restriction_reason,
+    bidRestrictionStartedAt: user.bid_restriction_started_at === null ? null : toIsoString(user.bid_restriction_started_at),
     createdAt: toIsoString(user.created_at),
     updatedAt: toIsoString(user.updated_at)
   };
@@ -88,6 +91,32 @@ export function registerAdminUserRoutes(app: FastifyInstance, admins: AdminRepos
       try {
         const user = await users.setDailyPublishLimit(userId, limit);
         await logAdminOperation(admins, request.admin.id, "user.set_publish_limit", String(user.id), { limit });
+        return { user: toManagedUser(user) };
+      } catch (error) {
+        if (error instanceof Error && error.message === "User not found") {
+          throw new HttpError(404, "not_found", "User not found");
+        }
+        throw error;
+      }
+    }
+  );
+
+  app.post<{ Params: { userId: string }; Reply: AdminUserActionResponse }>(
+    "/admin/users/:userId/bid-restriction/release",
+    { preHandler: requireAdmin("user:ban", admins) },
+    async (request) => {
+      if (!request.admin) {
+        throw new HttpError(401, "unauthorized", "Authentication required");
+      }
+
+      const userId = Number(request.params.userId);
+      if (!Number.isInteger(userId) || userId <= 0) {
+        throw badRequest("invalid_user", "Invalid user id");
+      }
+
+      try {
+        const user = await users.releaseBidRestriction(userId);
+        await logAdminOperation(admins, request.admin.id, "user.release_bid_restriction", String(user.id));
         return { user: toManagedUser(user) };
       } catch (error) {
         if (error instanceof Error && error.message === "User not found") {

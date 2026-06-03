@@ -8,6 +8,8 @@ describe("miniapp build configuration", () => {
 
     expect(viteConfig).toContain("UNI_APP_PRICE_CHANGE_SUBSCRIBE_TEMPLATE_ID");
     expect(viteConfig).toContain("__PRICE_CHANGE_SUBSCRIBE_TEMPLATE_ID__");
+    expect(viteConfig).not.toContain("UNI_APP_DEAL_CONTACT_SUBSCRIBE_TEMPLATE_ID");
+    expect(viteConfig).not.toContain("__DEAL_CONTACT_SUBSCRIBE_TEMPLATE_ID__");
   });
 
   it("keeps the source project root compatible with HBuilderX and WeChat DevTools", () => {

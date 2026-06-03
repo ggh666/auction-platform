@@ -23,6 +23,13 @@ function userStatus(user: AdminManagedUser) {
   return <span className="status success">正常</span>;
 }
 
+function bidRestrictionText(user: AdminManagedUser) {
+  if (user.bidRestrictionPermanent) {
+    return "永久限制";
+  }
+  return user.bidRestrictedUntil ? formatTime(user.bidRestrictedUntil) : null;
+}
+
 export function UserManagementPage() {
   const [users, setUsers] = useState<AdminManagedUser[]>([]);
   const [total, setTotal] = useState(0);
@@ -118,6 +125,19 @@ export function UserManagementPage() {
     }
   }
 
+  async function releaseBidRestriction(user: AdminManagedUser) {
+    setActingId(user.id);
+    setError(null);
+    try {
+      const response = await adminPost<AdminUserActionResponse>(`/admin/users/${user.id}/bid-restriction/release`);
+      replaceUser(response.user);
+    } catch (releaseError) {
+      setError(releaseError instanceof Error ? releaseError.message : "解除出价限制失败");
+    } finally {
+      setActingId(null);
+    }
+  }
+
   return (
     <section className="page-section">
       <div className="panel">
@@ -184,7 +204,16 @@ export function UserManagementPage() {
             }
 
             if (column.key === "bidRestrictedUntil") {
-              return row.bidRestrictedUntil ? formatTime(row.bidRestrictedUntil) : <span className="muted">无</span>;
+              const restriction = bidRestrictionText(row);
+              if (!restriction) {
+                return <span className="muted">无</span>;
+              }
+              return (
+                <div className="stacked-cell">
+                  <span className="status warning">{restriction}</span>
+                  {row.bidRestrictionReason ? <span>{row.bidRestrictionReason}</span> : null}
+                </div>
+              );
             }
 
             if (column.key === "creditScore") {
@@ -211,6 +240,11 @@ export function UserManagementPage() {
                   <button disabled={disabled} onClick={() => void setPublishLimit(row)} type="button">
                     发布次数
                   </button>
+                  {bidRestrictionText(row) ? (
+                    <button disabled={disabled} onClick={() => void releaseBidRestriction(row)} type="button">
+                      解除出价限制
+                    </button>
+                  ) : null}
                 </div>
               );
             }

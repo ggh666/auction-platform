@@ -1,11 +1,14 @@
 import { useEffect, useState } from "react";
 import {
   centsToYuanText,
+  type AdminBidRevokeAndRestrictResponse,
   type AdminAssetDetailResponse,
   type AdminImageSafetyCheck,
+  type AdminUserActionResponse,
   type AssetStatus,
   type AuctionAsset,
   type BidDisplayRecord,
+  type BidRestrictionDuration,
   type ImageSafetyStatus,
   type PrincipalSummary,
   type UserSummary
@@ -49,6 +52,30 @@ function formatTime(value: string): string {
     hour: "2-digit",
     minute: "2-digit"
   }).format(new Date(value));
+}
+
+function bidRestrictionText(user: UserSummary): string | null {
+  if (user.bidRestrictionPermanent) {
+    return "永久限制";
+  }
+  return user.bidRestrictedUntil ? `限制至 ${formatTime(user.bidRestrictedUntil)}` : null;
+}
+
+function readRestrictionDuration(input: string | null): BidRestrictionDuration | null {
+  const normalized = input?.trim();
+  if (!normalized) {
+    return null;
+  }
+  if (normalized === "30分钟" || normalized === "30m") {
+    return "30m";
+  }
+  if (normalized === "1天" || normalized === "1d") {
+    return "1d";
+  }
+  if (normalized === "永久" || normalized === "permanent") {
+    return "permanent";
+  }
+  return null;
 }
 
 function isConfirmedDeal(asset: AuctionAsset): boolean {
@@ -109,6 +136,8 @@ export function AssetDetailPage({ assetId, onBack }: AssetDetailPageProps) {
   const [recentBids, setRecentBids] = useState<BidDisplayRecord[]>([]);
   const [loading, setLoading] = useState(true);
   const [deductingCredit, setDeductingCredit] = useState(false);
+  const [actingBidId, setActingBidId] = useState<string | null>(null);
+  const [releasingBidderId, setReleasingBidderId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
 
@@ -159,6 +188,73 @@ export function AssetDetailPage({ assetId, onBack }: AssetDetailPageProps) {
       setError(deductError instanceof Error ? deductError.message : "扣减信誉分失败");
     } finally {
       setDeductingCredit(false);
+    }
+  }
+
+  async function revokeAndRestrictBid(bid: BidDisplayRecord) {
+    if (!asset || bid.revokedAt) {
+      return;
+    }
+    const duration = readRestrictionDuration(window.prompt("请选择限制时长：30分钟 / 1天 / 永久", "30分钟"));
+    if (!duration) {
+      setError("限制时长必须是 30分钟、1天 或 永久");
+      return;
+    }
+    const reason = window.prompt("请输入撤销和限制原因", bid.revokeReason ?? "疑似故意抬价")?.trim();
+    if (reason === undefined) {
+      return;
+    }
+
+    setActingBidId(bid.id);
+    setError(null);
+    setNotice(null);
+    try {
+      const response = await adminPost<AdminBidRevokeAndRestrictResponse>(
+        `/admin/assets/${asset.id}/bids/${bid.id}/revoke-and-restrict`,
+        { duration, reason }
+      );
+      setAsset(response.asset);
+      setRecentBids((current) => current.map((item) => (item.id === response.bid.id ? response.bid : item)));
+      setNotice(`已撤销出价并限制 ${response.user.displayName} 出价`);
+    } catch (revokeError) {
+      setError(revokeError instanceof Error ? revokeError.message : "撤销并限制失败");
+    } finally {
+      setActingBidId(null);
+    }
+  }
+
+  async function releaseBidRestriction(bid: BidDisplayRecord) {
+    if (!asset) {
+      return;
+    }
+    setReleasingBidderId(bid.bidderId);
+    setError(null);
+    setNotice(null);
+    try {
+      const response = await adminPost<AdminUserActionResponse>(
+        `/admin/assets/${asset.id}/bidders/${bid.bidderId}/bid-restriction/release`
+      );
+      setRecentBids((current) =>
+        current.map((item) =>
+          item.bidderId === response.user.id
+            ? {
+                ...item,
+                bidder: {
+                  ...item.bidder,
+                  bidRestrictedUntil: response.user.bidRestrictedUntil,
+                  bidRestrictionPermanent: response.user.bidRestrictionPermanent,
+                  bidRestrictionReason: response.user.bidRestrictionReason,
+                  bidRestrictionStartedAt: response.user.bidRestrictionStartedAt
+                }
+              }
+            : item
+        )
+      );
+      setNotice(`已解除 ${response.user.displayName} 的出价限制`);
+    } catch (releaseError) {
+      setError(releaseError instanceof Error ? releaseError.message : "解除出价限制失败");
+    } finally {
+      setReleasingBidderId(null);
     }
   }
 
@@ -278,7 +374,9 @@ export function AssetDetailPage({ assetId, onBack }: AssetDetailPageProps) {
                 columns={[
                   { key: "createdAt", label: "出价时间" },
                   { key: "bidder", label: "出价用户" },
-                  { key: "amountCents", label: "出价金额", align: "right" }
+                  { key: "amountCents", label: "出价金额", align: "right" },
+                  { key: "risk", label: "风控状态" },
+                  { key: "actions", label: "操作", align: "center" }
                 ]}
                 emptyText="暂无竞拍记录"
                 getRowKey={(row) => row.id}
@@ -297,6 +395,31 @@ export function AssetDetailPage({ assetId, onBack }: AssetDetailPageProps) {
                   }
                   if (column.key === "amountCents") {
                     return <strong>{formatMoney(row.amountCents)}</strong>;
+                  }
+                  if (column.key === "risk") {
+                    const restriction = bidRestrictionText(row.bidder);
+                    return (
+                      <div className="stacked-cell">
+                        {row.revokedAt ? <span className="status danger">已撤销</span> : <span className="muted">有效</span>}
+                        {restriction ? <span className="status warning">{restriction}</span> : null}
+                      </div>
+                    );
+                  }
+                  if (column.key === "actions") {
+                    const restriction = bidRestrictionText(row.bidder);
+                    const disabled = actingBidId === row.id || releasingBidderId === row.bidderId;
+                    return (
+                      <div className="inline-actions">
+                        <button disabled={disabled || Boolean(row.revokedAt)} onClick={() => void revokeAndRestrictBid(row)} type="button">
+                          {row.revokedAt ? "已撤销" : "撤销并限制"}
+                        </button>
+                        {restriction ? (
+                          <button disabled={disabled} onClick={() => void releaseBidRestriction(row)} type="button">
+                            解除出价限制
+                          </button>
+                        ) : null}
+                      </div>
+                    );
                   }
                   return row.id;
                 }}

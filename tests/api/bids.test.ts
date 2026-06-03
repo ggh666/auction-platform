@@ -434,6 +434,65 @@ describe("bidding", () => {
     }
   });
 
+  it("marks all unread notifications read for the current user", async () => {
+    const app = buildApp({ enableMockAuth: true });
+
+    try {
+      const sellerToken = await login(app, "卖家");
+      const firstBidderToken = await login(app, "买家一");
+      const secondBidderToken = await login(app, "买家二");
+      const thirdBidderToken = await login(app, "买家三");
+      const assetId = await createActiveAsset(app, sellerToken);
+
+      await app.inject({
+        method: "POST",
+        url: "/api/bids",
+        headers: { authorization: `Bearer ${firstBidderToken}` },
+        payload: { assetId, amountCents: 10000, commitmentAccepted: true }
+      });
+      await app.inject({
+        method: "POST",
+        url: "/api/bids",
+        headers: { authorization: `Bearer ${secondBidderToken}` },
+        payload: { assetId, amountCents: 10100, commitmentAccepted: true }
+      });
+      await app.inject({
+        method: "POST",
+        url: "/api/bids",
+        headers: { authorization: `Bearer ${thirdBidderToken}` },
+        payload: { assetId, amountCents: 10200, commitmentAccepted: true }
+      });
+
+      const before = await app.inject({
+        method: "GET",
+        url: "/api/profile/notifications",
+        headers: { authorization: `Bearer ${firstBidderToken}` }
+      });
+      expect(before.statusCode).toBe(200);
+      expect(before.json().unreadCount).toBe(2);
+
+      const readAll = await app.inject({
+        method: "POST",
+        url: "/api/profile/notifications/read-all",
+        headers: { authorization: `Bearer ${firstBidderToken}` }
+      });
+
+      expect(readAll.statusCode).toBe(200);
+      expect(readAll.json().unreadCount).toBe(0);
+      expect(readAll.json().items).toHaveLength(2);
+      expect(readAll.json().items.every((item: { readAt: string | null }) => typeof item.readAt === "string")).toBe(true);
+
+      const secondBidderNotifications = await app.inject({
+        method: "GET",
+        url: "/api/profile/notifications",
+        headers: { authorization: `Bearer ${secondBidderToken}` }
+      });
+      expect(secondBidderNotifications.json().unreadCount).toBe(1);
+    } finally {
+      await app.close();
+    }
+  });
+
   it("sends a WeChat subscribe message to prior bidders when they are outbid", async () => {
     const sentMessages: unknown[] = [];
     const app = buildApp({
@@ -655,6 +714,12 @@ describe("bidding", () => {
         },
         async markRead() {
           return null;
+        },
+        async markAllRead() {
+          return [];
+        },
+        async deleteByBidId() {
+          return 0;
         }
       }
     } as Parameters<typeof buildApp>[0]);

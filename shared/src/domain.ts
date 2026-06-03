@@ -24,6 +24,9 @@ export type UserSummary = {
   creditResetAt?: string | null;
   buyerUnreachableCount?: number;
   bidRestrictedUntil?: string | null;
+  bidRestrictionPermanent?: boolean;
+  bidRestrictionReason?: string | null;
+  bidRestrictionStartedAt?: string | null;
 };
 
 export type AdminManagedUser = UserSummary & {
@@ -32,6 +35,9 @@ export type AdminManagedUser = UserSummary & {
   creditResetAt: string | null;
   buyerUnreachableCount: number;
   bidRestrictedUntil: string | null;
+  bidRestrictionPermanent: boolean;
+  bidRestrictionReason: string | null;
+  bidRestrictionStartedAt: string | null;
   createdAt: string;
   updatedAt: string;
 };
@@ -110,6 +116,9 @@ export type BidRecord = {
   assetId: string;
   bidderId: string;
   amountCents: number;
+  revokedAt?: string | null;
+  revokedByAdminId?: string | null;
+  revokeReason?: string | null;
   createdAt: string;
 };
 
@@ -124,11 +133,11 @@ export type NotificationItem = {
   userId: string;
   type: NotificationType;
   assetId: string;
-  bidId: string;
-  actorUserId: string;
+  bidId: string | null;
+  actorUserId: string | null;
   actorDisplayName: string;
   assetTitle: string;
-  amountCents: number;
+  amountCents: number | null;
   readAt: string | null;
   createdAt: string;
 };

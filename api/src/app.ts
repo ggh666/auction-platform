@@ -152,7 +152,7 @@ export function buildApp(options: AppOptions = {}) {
   const subscribeMessages =
     options.subscribeMessageService ??
     createWechatSubscribeMessageService({
-      templateId: env.wechatPriceChangeSubscribeTemplateId,
+      priceChangeTemplateId: env.wechatPriceChangeSubscribeTemplateId,
       miniprogramState: env.wechatSubscribeMessageMiniprogramState,
       tokenProvider: wechatTokenProvider
     });
@@ -173,11 +173,17 @@ export function buildApp(options: AppOptions = {}) {
   registerWechatMediaProxyRoutes(app, imageStorage, env);
   registerProfileRoutes(app, { assets, bids });
   registerNotificationRoutes(app, notifications, users);
-  registerDealFollowupRoutes(app, { admins, assets, followups: dealFollowups, principals, users });
+  registerDealFollowupRoutes(app, {
+    admins,
+    assets,
+    followups: dealFollowups,
+    principals,
+    users
+  });
   registerImageRoutes(app, imageStorage, users, contentSafety);
   registerAssetRoutes(app, assets, users, bids, configs, reports, contentSafety, principals, assetFollows);
   registerAdminDashboardRoutes(app, admins, { assets, bids, reports, users, principals });
-  registerAdminRoutes(app, admins, assets, bids, users, contentSafety, principals, dealFollowups, imageSafety, imageStorage);
+  registerAdminRoutes(app, admins, assets, bids, users, contentSafety, principals, dealFollowups, imageSafety, imageStorage, notifications, hub);
   registerAdminUserRoutes(app, admins, users);
   registerAdminConfigRoutes(app, admins, configs);
   registerBidRoutes(app, { assets, bids, hub, users, notifications, subscribeMessages });

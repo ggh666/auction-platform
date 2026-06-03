@@ -2,9 +2,9 @@ import type {
   AssetDetailResponse,
   AssetListResponse,
   AuctionAsset,
-  DealFollowupListResponse,
   LoginResponse,
   NotificationActionResponse,
+  NotificationBulkActionResponse,
   NotificationListResponse,
   PlaceBidRequest,
   PlaceBidResponse,
@@ -43,25 +43,25 @@ export function readApiBase(): string {
   return DEFAULT_API_BASE;
 }
 
-function readErrorMessage(data: unknown): string {
+function readErrorPayload(data: unknown): { message: string; details?: unknown } {
   if (typeof data === "object" && data !== null && "error" in data) {
     const error = (data as { error?: { message?: unknown } }).error;
     if (typeof error?.message === "string" && error.message.trim()) {
-      return error.message;
+      return { message: error.message, details: (error as { details?: unknown }).details };
     }
   }
 
   if (typeof data === "object" && data !== null && "message" in data) {
     const message = (data as { message?: unknown }).message;
     if (typeof message === "string" && message.includes("/api/auth/wechat-login")) {
-      return "后端微信登录接口未部署";
+      return { message: "后端微信登录接口未部署" };
     }
     if (typeof message === "string" && message.trim()) {
-      return message;
+      return { message };
     }
   }
 
-  return "请求失败";
+  return { message: "请求失败" };
 }
 
 export function request<T>(path: string, options: RequestOptionsWithoutUrl = {}): Promise<T> {
@@ -82,7 +82,8 @@ export function request<T>(path: string, options: RequestOptionsWithoutUrl = {})
           return;
         }
 
-        reject(new Error(readErrorMessage(response.data)));
+        const errorPayload = readErrorPayload(response.data);
+        reject(Object.assign(new Error(errorPayload.message), { details: errorPayload.details }));
       },
       fail(error) {
         reject(error);
@@ -123,14 +124,9 @@ export function listMyBids(): Promise<{ items: ProfileBidItem[] }> {
 }
 
 export type ProfileResultItem = ProfileResultsResponse["items"][number];
-export type DealFollowupItem = DealFollowupListResponse["items"][number];
 
 export function listMyResults(query: Pick<AssetListQuery, "page" | "pageSize"> = {}): Promise<ProfileResultsResponse> {
   return request<ProfileResultsResponse>(`/api/profile/results${queryString(query)}`);
-}
-
-export function listMyDealFollowups(query: Pick<AssetListQuery, "page" | "pageSize"> = {}): Promise<DealFollowupListResponse> {
-  return request<DealFollowupListResponse>(`/api/profile/deal-followups${queryString(query)}`);
 }
 
 export function listNotifications(): Promise<NotificationListResponse> {
@@ -139,6 +135,12 @@ export function listNotifications(): Promise<NotificationListResponse> {
 
 export function markNotificationRead(notificationId: string): Promise<NotificationActionResponse> {
   return request<NotificationActionResponse>(`/api/profile/notifications/${notificationId}/read`, {
+    method: "POST"
+  });
+}
+
+export function markAllNotificationsRead(): Promise<NotificationBulkActionResponse> {
+  return request<NotificationBulkActionResponse>("/api/profile/notifications/read-all", {
     method: "POST"
   });
 }

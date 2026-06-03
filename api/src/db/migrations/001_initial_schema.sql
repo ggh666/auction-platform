@@ -34,6 +34,10 @@ CREATE TABLE users (
   daily_publish_limit INT UNSIGNED NULL,
   buyer_unreachable_count INT UNSIGNED NOT NULL DEFAULT 0,
   bid_restricted_until DATETIME NULL,
+  bid_restricted_permanent TINYINT(1) NOT NULL DEFAULT 0,
+  bid_restriction_reason VARCHAR(255) NULL,
+  bid_restriction_started_at DATETIME NULL,
+  bid_restriction_admin_id BIGINT UNSIGNED NULL,
   created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
   updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
 );
@@ -145,11 +149,16 @@ CREATE TABLE bids (
   asset_id BIGINT UNSIGNED NOT NULL,
   bidder_id BIGINT UNSIGNED NOT NULL,
   amount_cents BIGINT UNSIGNED NOT NULL,
+  revoked_at DATETIME NULL,
+  revoked_by_admin_id BIGINT UNSIGNED NULL,
+  revoke_reason VARCHAR(255) NULL,
   created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
   INDEX idx_bids_asset (asset_id, created_at),
+  INDEX idx_bids_asset_active_amount (asset_id, revoked_at, amount_cents, created_at, id),
   INDEX idx_bids_bidder (bidder_id, created_at),
   CONSTRAINT fk_bids_asset FOREIGN KEY (asset_id) REFERENCES auction_assets(id),
-  CONSTRAINT fk_bids_bidder FOREIGN KEY (bidder_id) REFERENCES users(id)
+  CONSTRAINT fk_bids_bidder FOREIGN KEY (bidder_id) REFERENCES users(id),
+  CONSTRAINT fk_bids_revoked_by_admin FOREIGN KEY (revoked_by_admin_id) REFERENCES admin_users(id)
 );
 
 CREATE TABLE station_notifications (

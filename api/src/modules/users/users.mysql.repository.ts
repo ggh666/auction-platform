@@ -15,6 +15,10 @@ type UserDbRow = {
   daily_publish_limit: number | null;
   buyer_unreachable_count: number;
   bid_restricted_until: Date | string | null;
+  bid_restricted_permanent: number | boolean;
+  bid_restriction_reason: string | null;
+  bid_restriction_started_at: Date | string | null;
+  bid_restriction_admin_id: number | null;
   created_at: Date | string;
   updated_at: Date | string;
 };
@@ -33,6 +37,10 @@ function toUserRow(row: UserDbRow): UserRow {
     daily_publish_limit: row.daily_publish_limit === null ? null : Number(row.daily_publish_limit),
     buyer_unreachable_count: Number(row.buyer_unreachable_count),
     bid_restricted_until: row.bid_restricted_until,
+    bid_restricted_permanent: Boolean(row.bid_restricted_permanent),
+    bid_restriction_reason: row.bid_restriction_reason ?? null,
+    bid_restriction_started_at: row.bid_restriction_started_at ?? null,
+    bid_restriction_admin_id: row.bid_restriction_admin_id === null || row.bid_restriction_admin_id === undefined ? null : Number(row.bid_restriction_admin_id),
     created_at: row.created_at,
     updated_at: row.updated_at
   };
@@ -52,6 +60,10 @@ const userSelect = `
     daily_publish_limit,
     buyer_unreachable_count,
     bid_restricted_until,
+    bid_restricted_permanent,
+    bid_restriction_reason,
+    bid_restriction_started_at,
+    bid_restriction_admin_id,
     created_at,
     updated_at
   FROM users
@@ -288,10 +300,69 @@ export function createMysqlUsersRepository(db: MysqlExecutor): UsersRepository {
          SET
            buyer_unreachable_count = buyer_unreachable_count + 1,
            bid_restricted_until = CASE
+             WHEN bid_restricted_permanent = 1 THEN bid_restricted_until
              WHEN buyer_unreachable_count + 1 >= 3 THEN GREATEST(COALESCE(bid_restricted_until, '1970-01-01 00:00:00'), DATE_ADD(CURRENT_TIMESTAMP, INTERVAL 30 DAY))
              WHEN buyer_unreachable_count + 1 >= 2 THEN GREATEST(COALESCE(bid_restricted_until, '1970-01-01 00:00:00'), DATE_ADD(CURRENT_TIMESTAMP, INTERVAL 7 DAY))
              ELSE bid_restricted_until
            END,
+           bid_restriction_reason = CASE
+             WHEN bid_restricted_permanent = 0 AND buyer_unreachable_count + 1 >= 2 THEN '买家失联'
+             ELSE bid_restriction_reason
+           END,
+           bid_restriction_started_at = CASE
+             WHEN bid_restricted_permanent = 0 AND buyer_unreachable_count + 1 >= 2 THEN CURRENT_TIMESTAMP
+             ELSE bid_restriction_started_at
+           END,
+           bid_restriction_admin_id = CASE
+             WHEN bid_restricted_permanent = 0 AND buyer_unreachable_count + 1 >= 2 THEN NULL
+             ELSE bid_restriction_admin_id
+           END,
+           updated_at = CURRENT_TIMESTAMP
+         WHERE id = ?`,
+        [id]
+      );
+      if (result.affectedRows === 0) {
+        throw new Error("User not found");
+      }
+      const user = await findById(id);
+      if (!user) {
+        throw new Error("User not found");
+      }
+      return user;
+    },
+
+    async restrictBidding(id, input) {
+      const [result] = await db.execute<MysqlResultHeader>(
+        `UPDATE users
+         SET
+           bid_restricted_until = ?,
+           bid_restricted_permanent = ?,
+           bid_restriction_reason = ?,
+           bid_restriction_started_at = CURRENT_TIMESTAMP,
+           bid_restriction_admin_id = ?,
+           updated_at = CURRENT_TIMESTAMP
+         WHERE id = ?`,
+        [input.permanent ? null : input.restrictedUntil, input.permanent ? 1 : 0, input.reason.trim(), input.adminId, id]
+      );
+      if (result.affectedRows === 0) {
+        throw new Error("User not found");
+      }
+      const user = await findById(id);
+      if (!user) {
+        throw new Error("User not found");
+      }
+      return user;
+    },
+
+    async releaseBidRestriction(id) {
+      const [result] = await db.execute<MysqlResultHeader>(
+        `UPDATE users
+         SET
+           bid_restricted_until = NULL,
+           bid_restricted_permanent = 0,
+           bid_restriction_reason = NULL,
+           bid_restriction_started_at = NULL,
+           bid_restriction_admin_id = NULL,
            updated_at = CURRENT_TIMESTAMP
          WHERE id = ?`,
         [id]

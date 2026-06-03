@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { createHash } from "node:crypto";
 import { buildApp } from "../../api/src/app";
 import { createInMemoryAdminRepository } from "../../api/src/modules/admin/admin.repository";
 import { createInMemoryAssetFollowsRepository } from "../../api/src/modules/assetFollows/assetFollows.repository";
@@ -28,6 +29,10 @@ const productionEnv = {
   WECHAT_APP_SECRET: "wx-test-secret",
   WECHAT_EVENT_TOKEN: "event-token"
 };
+
+function wechatProfileSignature(rawData: string, sessionKey: string) {
+  return createHash("sha1").update(`${rawData}${sessionKey}`).digest("hex");
+}
 
 function buildProductionTestApp() {
   const assetsRepository = createInMemoryAssetsRepository();
@@ -117,7 +122,10 @@ describe("auth routes", () => {
           creditScore: 100,
           creditResetAt: null,
           buyerUnreachableCount: 0,
-          bidRestrictedUntil: null
+          bidRestrictedUntil: null,
+          bidRestrictionPermanent: false,
+          bidRestrictionReason: null,
+          bidRestrictionStartedAt: null
         }
       });
     } finally {
@@ -198,6 +206,69 @@ describe("auth routes", () => {
 
       expect(profile.statusCode).toBe(200);
       expect(profile.json().user).toMatchObject(body.user);
+    } finally {
+      await app.close();
+    }
+  });
+
+  it("uses signed WeChat profile data for the display name instead of mutable request fields", async () => {
+    const sessionKey = "session-key-1";
+    const profileRawData = JSON.stringify({
+      nickName: "微信原始昵称",
+      avatarUrl: "https://example.com/wechat-avatar.png"
+    });
+    const app = buildApp({
+      enableMockAuth: false,
+      wechatCodeSessionExchanger: async (code: string) => {
+        expect(code).toBe("wx-code-2");
+        return { openid: "openid-verified", sessionKey };
+      }
+    } as Parameters<typeof buildApp>[0]);
+
+    try {
+      const response = await app.inject({
+        method: "POST",
+        url: "/api/auth/wechat-login",
+        payload: {
+          code: "wx-code-2",
+          displayName: "客户端伪造昵称",
+          avatarUrl: "https://example.com/fake-avatar.png",
+          profileRawData,
+          profileSignature: wechatProfileSignature(profileRawData, sessionKey)
+        }
+      });
+
+      expect(response.statusCode).toBe(200);
+      expect(response.json().user).toMatchObject({
+        displayName: "微信原始昵称",
+        avatarUrl: "https://example.com/wechat-avatar.png"
+      });
+    } finally {
+      await app.close();
+    }
+  });
+
+  it("rejects tampered WeChat profile data", async () => {
+    const app = buildApp({
+      enableMockAuth: false,
+      wechatCodeSessionExchanger: async () => ({ openid: "openid-tampered", sessionKey: "session-key-2" })
+    } as Parameters<typeof buildApp>[0]);
+
+    try {
+      const response = await app.inject({
+        method: "POST",
+        url: "/api/auth/wechat-login",
+        payload: {
+          code: "wx-code-3",
+          profileRawData: JSON.stringify({ nickName: "篡改昵称" }),
+          profileSignature: "bad-signature"
+        }
+      });
+
+      expect(response.statusCode).toBe(400);
+      expect(response.json()).toEqual({
+        error: { code: "invalid_wechat_profile", message: "WeChat profile signature is invalid" }
+      });
     } finally {
       await app.close();
     }

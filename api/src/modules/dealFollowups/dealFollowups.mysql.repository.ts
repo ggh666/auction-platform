@@ -242,6 +242,7 @@ export function createMysqlDealFollowupsRepository(db: MysqlExecutor): DealFollo
 
     async updateAdminStatus(id, status: AdminDealFollowupStatus, note) {
       return updateStatus(id, status, { note });
-    }
+    },
+
   };
 }

@@ -42,7 +42,18 @@ function parsePlaceBidRequest(body: unknown): PlaceBidRequest {
 }
 
 function bidRestrictionDetails(user: Awaited<ReturnType<UsersRepository["findById"]>>) {
-  if (!user?.bid_restricted_until) {
+  if (!user) {
+    return null;
+  }
+  if (user.bid_restricted_permanent) {
+    return {
+      buyerUnreachableCount: user.buyer_unreachable_count,
+      bidRestrictedUntil: null,
+      permanent: true,
+      reason: user.bid_restriction_reason
+    };
+  }
+  if (!user.bid_restricted_until) {
     return null;
   }
   const restrictedUntil = new Date(user.bid_restricted_until);
@@ -51,7 +62,9 @@ function bidRestrictionDetails(user: Awaited<ReturnType<UsersRepository["findByI
   }
   return {
     buyerUnreachableCount: user.buyer_unreachable_count,
-    bidRestrictedUntil: restrictedUntil.toISOString()
+    bidRestrictedUntil: restrictedUntil.toISOString(),
+    permanent: false,
+    reason: user.bid_restriction_reason
   };
 }
 
@@ -87,7 +100,12 @@ export function registerBidRoutes(
     const user = await deps.users.findById(Number(request.user.id));
     const restriction = bidRestrictionDetails(user);
     if (restriction) {
-      throw new HttpError(403, "bid_restricted", "User is temporarily restricted from bidding", restriction);
+      throw new HttpError(
+        403,
+        "bid_restricted",
+        restriction.permanent ? "User is restricted from bidding" : "User is temporarily restricted from bidding",
+        restriction
+      );
     }
     const result = await service.placeBid(request.user.id, body.assetId, body.amountCents);
     const bid = await toBidDisplayRecord(deps.users, result.bid);
@@ -132,6 +150,9 @@ export function registerBidRoutes(
     }
 
     for (const notification of createdNotifications) {
+      if (notification.amountCents === null) {
+        continue;
+      }
       priceChangeQueue.enqueue({
         notificationId: notification.id,
         userId: notification.userId,

@@ -8,11 +8,11 @@ type NotificationDbRow = {
   user_id: number;
   type: NotificationType;
   asset_id: number;
-  bid_id: number;
-  actor_user_id: number;
+  bid_id: number | null;
+  actor_user_id: number | null;
   actor_display_name: string;
   asset_title: string;
-  amount_cents: number;
+  amount_cents: number | null;
   read_at: Date | string | null;
   created_at: Date | string;
 };
@@ -28,11 +28,11 @@ function toNotificationItem(row: NotificationDbRow): NotificationItem {
     userId: String(row.user_id),
     type: row.type,
     assetId: String(row.asset_id),
-    bidId: String(row.bid_id),
-    actorUserId: String(row.actor_user_id),
+    bidId: row.bid_id === null ? null : String(row.bid_id),
+    actorUserId: row.actor_user_id === null ? null : String(row.actor_user_id),
     actorDisplayName: row.actor_display_name,
     assetTitle: row.asset_title,
-    amountCents: Number(row.amount_cents),
+    amountCents: row.amount_cents === null ? null : Number(row.amount_cents),
     readAt: row.read_at === null ? null : toIsoString(row.read_at),
     createdAt: toIsoString(row.created_at)
   };
@@ -48,6 +48,17 @@ async function readNotification(db: MysqlExecutor, id: number): Promise<Notifica
 }
 
 export function createMysqlNotificationsRepository(db: MysqlExecutor): NotificationsRepository {
+  async function listByUser(userId: string, limit = 50) {
+    const [rows] = await db.execute<NotificationDbRow[]>(
+      `${notificationSelect}
+       WHERE user_id = ?
+       ORDER BY created_at DESC, id DESC
+       LIMIT ?`,
+      [Number(userId), limit]
+    );
+    return allRows<NotificationDbRow>(rows).map(toNotificationItem);
+  }
+
   return {
     async createMany(input: CreateNotificationInput[]) {
       const created: NotificationItem[] = [];
@@ -61,11 +72,11 @@ export function createMysqlNotificationsRepository(db: MysqlExecutor): Notificat
             Number(item.userId),
             item.type,
             Number(item.assetId),
-            Number(item.bidId),
-            Number(item.actorUserId),
+            item.bidId === null || item.bidId === undefined ? null : Number(item.bidId),
+            item.actorUserId === null || item.actorUserId === undefined ? null : Number(item.actorUserId),
             item.actorDisplayName,
             item.assetTitle,
-            item.amountCents
+            item.amountCents ?? null
           ]
         );
         created.push(await readNotification(db, result.insertId));
@@ -74,14 +85,7 @@ export function createMysqlNotificationsRepository(db: MysqlExecutor): Notificat
     },
 
     async listByUser(userId, limit = 50) {
-      const [rows] = await db.execute<NotificationDbRow[]>(
-        `${notificationSelect}
-         WHERE user_id = ?
-         ORDER BY created_at DESC, id DESC
-         LIMIT ?`,
-        [Number(userId), limit]
-      );
-      return allRows<NotificationDbRow>(rows).map(toNotificationItem);
+      return listByUser(userId, limit);
     },
 
     async markRead(userId, notificationId) {
@@ -96,6 +100,26 @@ export function createMysqlNotificationsRepository(db: MysqlExecutor): Notificat
       }
 
       return readNotification(db, Number(notificationId));
+    },
+
+    async markAllRead(userId) {
+      await db.execute<MysqlResultHeader>(
+        `UPDATE station_notifications
+         SET read_at = COALESCE(read_at, CURRENT_TIMESTAMP)
+         WHERE user_id = ? AND read_at IS NULL`,
+        [Number(userId)]
+      );
+
+      return listByUser(userId);
+    },
+
+    async deleteByBidId(bidId) {
+      const [result] = await db.execute<MysqlResultHeader>(
+        `DELETE FROM station_notifications
+         WHERE bid_id = ?`,
+        [Number(bidId)]
+      );
+      return result.affectedRows;
     }
   };
 }

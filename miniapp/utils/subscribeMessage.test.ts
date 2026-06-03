@@ -1,5 +1,9 @@
 import { describe, expect, it } from "vitest";
-import { requestPriceChangeSubscription, readPriceChangeSubscribeTemplateId } from "./subscribeMessage";
+import {
+  requestBidRelatedSubscriptions,
+  requestPriceChangeSubscription,
+  readPriceChangeSubscribeTemplateId
+} from "./subscribeMessage";
 
 type SubscribeRuntime = {
   requestSubscribeMessage(options: {
@@ -51,6 +55,20 @@ describe("miniapp subscribe message helpers", () => {
       { type: "request_start", templateId: "tmpl-1" },
       { type: "request_success", templateId: "tmpl-1", result: "accepted", response: { "tmpl-1": "accept" } }
     ]);
+  });
+
+  it("requests only the price change template for bid related subscriptions", async () => {
+    const requestedTemplateIds: string[][] = [];
+    const result = await requestBidRelatedSubscriptions({
+      priceChangeTemplateId: "tmpl-price",
+      requestSubscribeMessage(options) {
+        requestedTemplateIds.push(options.tmplIds);
+        options.success({ "tmpl-price": "accept" });
+      }
+    });
+
+    expect(requestedTemplateIds).toEqual([["tmpl-price"]]);
+    expect(result).toBe("accepted");
   });
 
   it("reports when the platform subscription requester is unavailable", async () => {

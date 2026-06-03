@@ -35,6 +35,23 @@
       <text class="menu-title">成交记录</text>
       <text class="menu-desc">查看成交、流拍和取消记录</text>
     </view>
+    <button
+      v-if="user"
+      class="menu-item customer-service-menu"
+      open-type="contact"
+      :session-from="profileCustomerServiceContact.sessionFrom"
+      :send-message-title="profileCustomerServiceContact.sendMessageTitle"
+      :send-message-path="profileCustomerServiceContact.sendMessagePath"
+      :send-message-img="profileCustomerServiceContact.sendMessageImg"
+      :show-message-card="profileCustomerServiceContact.showMessageCard"
+    >
+      <text class="menu-title">联系客服</text>
+      <text class="menu-desc">咨询交换规则与成交沟通</text>
+    </button>
+    <button v-else class="menu-item customer-service-menu" @tap="ensureCustomerServiceLogin">
+      <text class="menu-title">联系客服</text>
+      <text class="menu-desc">咨询交换规则与成交沟通</text>
+    </button>
     <button class="logout" @tap="logout">退出登录</button>
   </view>
 </template>
@@ -45,11 +62,13 @@ import { onShow } from "@dcloudio/uni-app";
 import { computed, ref } from "vue";
 import { getProfile, listNotifications } from "../../api/client";
 import { clearSession, readSessionUser } from "../../auth/session";
+import { buildProfileCustomerServiceContact } from "../../utils/customerService";
 
 const user = ref<UserSummary | null>(readSessionUser());
 const unreadNotifications = ref(0);
 
 const avatarText = computed(() => user.value?.displayName?.slice(0, 1) || "微");
+const profileCustomerServiceContact = computed(() => buildProfileCustomerServiceContact({ userId: user.value?.id }));
 
 onShow(async () => {
   try {
@@ -77,6 +96,14 @@ function go(url: string) {
 
 function goHome() {
   uni.switchTab({ url: "/pages/games/index" });
+}
+
+function ensureCustomerServiceLogin() {
+  if (user.value?.id) {
+    return;
+  }
+  uni.showToast({ title: "请先登录后联系客服", icon: "none" });
+  uni.navigateTo({ url: "/pages/login/login" });
 }
 
 function showCreditRules() {
@@ -218,6 +245,18 @@ function logout() {
 .menu-item {
   padding: 24rpx 0;
   border-bottom: 1px solid #eaecf0;
+}
+
+.customer-service-menu {
+  width: 100%;
+  margin-right: 0;
+  margin-left: 0;
+  line-height: normal;
+  text-align: left;
+}
+
+.customer-service-menu::after {
+  border: 0;
 }
 
 .menu-title {

@@ -96,7 +96,7 @@ import {
 import { confirmTradingDisclaimer } from "../../utils/disclaimer";
 import { connectAuctionSocket, type AuctionSocketTask } from "../../utils/realtime";
 import { buildAssetDetailShare, toTimelineShare } from "../../utils/share";
-import { requestPriceChangeSubscription } from "../../utils/subscribeMessage";
+import { requestBidRelatedSubscriptions } from "../../utils/subscribeMessage";
 
 const submitting = ref(false);
 const loading = ref(false);
@@ -107,6 +107,10 @@ const bidCommitmentAccepted = ref(false);
 const now = ref(new Date());
 let nowTimer: ReturnType<typeof setInterval> | null = null;
 let auctionSocket: AuctionSocketTask | null = null;
+
+type LoadDetailOptions = {
+  silent?: boolean;
+};
 
 const imageUrls = computed(() => detail.value?.asset.imageUrls.map((imageUrl) => imageUrl.trim()).filter(Boolean) ?? []);
 const unavailableMessage = computed(() =>
@@ -145,21 +149,32 @@ function currentShareTarget() {
   });
 }
 
-async function loadDetail() {
+async function loadDetail(options: LoadDetailOptions = {}) {
   if (!assetId.value) {
     return;
   }
 
-  loading.value = true;
+  const silent = options.silent ?? false;
+  if (!silent) {
+    loading.value = true;
+  }
   try {
     detail.value = await getAssetDetail(assetId.value);
     bidAmountYuan.value = formatPrice(requiredBidCentsForDetail());
   } catch {
-    detail.value = null;
-    uni.showToast({ title: "交换详情加载失败", icon: "none" });
+    if (!silent) {
+      detail.value = null;
+      uni.showToast({ title: "交换详情加载失败", icon: "none" });
+    }
   } finally {
-    loading.value = false;
+    if (!silent) {
+      loading.value = false;
+    }
   }
+}
+
+async function refreshDetailAfterBid() {
+  await loadDetail({ silent: true });
 }
 
 function requiredBidCentsForDetail() {
@@ -239,6 +254,16 @@ function applyAuctionEvent(event: AuctionWsEvent) {
     }
     return;
   }
+  if (event.type === "bid_revoked") {
+    detail.value = {
+      ...detail.value,
+      asset: mergeAuctionAssetUpdate(detail.value.asset, event.asset),
+      recentBids: detail.value.recentBids.filter((bid) => bid.id !== event.bid.id)
+    };
+    bidAmountYuan.value = formatPrice(requiredBidCentsForDetail());
+    uni.showToast({ title: "一条出价已撤销，当前价已更新", icon: "none" });
+    return;
+  }
   if (event.type === "auction_extended") {
     detail.value = {
       ...detail.value,
@@ -292,7 +317,7 @@ async function submitBid() {
     }
 
     // 微信订阅授权需要绑定在用户交互链路内，跨过网络请求后可能无法弹窗。
-    const subscriptionResult = await requestPriceChangeSubscription({
+    const subscriptionResult = await requestBidRelatedSubscriptions({
       onDebug(event) {
         console.info("[price-change-subscribe]", event);
       }
@@ -307,6 +332,7 @@ async function submitBid() {
       };
       prependRecentBid(response.bid);
       bidAmountYuan.value = formatPrice(requiredBidCentsForDetail());
+      await refreshDetailAfterBid();
     }
     uni.showToast({ title: "出价已提交", icon: "none" });
   } catch (error) {

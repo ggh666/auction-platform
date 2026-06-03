@@ -24,6 +24,10 @@ type FakeUser = {
   daily_publish_limit: number | null;
   buyer_unreachable_count: number;
   bid_restricted_until: Date | null;
+  bid_restricted_permanent?: number;
+  bid_restriction_reason?: string | null;
+  bid_restriction_started_at?: Date | null;
+  bid_restriction_admin_id?: number | null;
   created_at: Date;
   updated_at: Date;
 };
@@ -58,6 +62,9 @@ type FakeBid = {
   asset_id: number;
   bidder_id: number;
   amount_cents: number;
+  revoked_at?: Date | null;
+  revoked_by_admin_id?: number | null;
+  revoke_reason?: string | null;
   created_at: Date;
 };
 
@@ -89,11 +96,11 @@ type FakeNotification = {
   user_id: number;
   type: "outbid";
   asset_id: number;
-  bid_id: number;
-  actor_user_id: number;
+  bid_id: number | null;
+  actor_user_id: number | null;
   actor_display_name: string;
   asset_title: string;
-  amount_cents: number;
+  amount_cents: number | null;
   read_at: Date | null;
   created_at: Date;
 };
@@ -324,6 +331,10 @@ class FakeMysqlPool {
         daily_publish_limit: null,
         buyer_unreachable_count: 0,
         bid_restricted_until: null,
+        bid_restricted_permanent: 0,
+        bid_restriction_reason: null,
+        bid_restriction_started_at: null,
+        bid_restriction_admin_id: null,
         created_at: new Date("2026-05-25T00:00:00.000Z"),
         updated_at: new Date("2026-05-25T00:00:00.000Z")
       };
@@ -382,11 +393,47 @@ class FakeMysqlPool {
       if (user) {
         user.buyer_unreachable_count += 1;
         if (user.buyer_unreachable_count >= 3) {
-          user.bid_restricted_until = new Date("2026-06-24T14:30:00.000Z");
+          user.bid_restricted_until = user.bid_restricted_permanent
+            ? user.bid_restricted_until
+            : new Date("2026-06-24T14:30:00.000Z");
         } else if (user.buyer_unreachable_count >= 2) {
-          user.bid_restricted_until = new Date("2026-06-01T14:30:00.000Z");
+          user.bid_restricted_until = user.bid_restricted_permanent
+            ? user.bid_restricted_until
+            : new Date("2026-06-01T14:30:00.000Z");
+        }
+        if (user.bid_restricted_until && !user.bid_restricted_permanent) {
+          user.bid_restricted_permanent = 0;
+          user.bid_restriction_reason = "买家失联";
+          user.bid_restriction_started_at = new Date("2026-05-25T14:30:00.000Z");
+          user.bid_restriction_admin_id = null;
         }
         user.updated_at = new Date("2026-05-25T14:30:00.000Z");
+      }
+      return [{ affectedRows: user ? 1 : 0, insertId: 0 } as T, []];
+    }
+
+    if (sql.includes("UPDATE users") && sql.includes("bid_restricted_permanent = ?")) {
+      const user = this.users.find((candidate) => candidate.id === Number(params[4]));
+      if (user) {
+        user.bid_restricted_until = params[0] === null ? null : new Date(params[0] as Date);
+        user.bid_restricted_permanent = Number(params[1]);
+        user.bid_restriction_reason = params[2] as string;
+        user.bid_restriction_started_at = new Date("2026-05-25T16:40:00.000Z");
+        user.bid_restriction_admin_id = Number(params[3]);
+        user.updated_at = new Date("2026-05-25T16:40:00.000Z");
+      }
+      return [{ affectedRows: user ? 1 : 0, insertId: 0 } as T, []];
+    }
+
+    if (sql.includes("UPDATE users") && sql.includes("bid_restricted_until = NULL") && sql.includes("bid_restriction_reason = NULL")) {
+      const user = this.users.find((candidate) => candidate.id === Number(params[0]));
+      if (user) {
+        user.bid_restricted_until = null;
+        user.bid_restricted_permanent = 0;
+        user.bid_restriction_reason = null;
+        user.bid_restriction_started_at = null;
+        user.bid_restriction_admin_id = null;
+        user.updated_at = new Date("2026-05-25T16:41:00.000Z");
       }
       return [{ affectedRows: user ? 1 : 0, insertId: 0 } as T, []];
     }
@@ -665,18 +712,28 @@ class FakeMysqlPool {
       const notification: FakeNotification = {
         id: this.notifications.length + 1,
         user_id: Number(params[0]),
-        type: params[1] as "outbid",
+        type: params[1] as FakeNotification["type"],
         asset_id: Number(params[2]),
-        bid_id: Number(params[3]),
-        actor_user_id: Number(params[4]),
+        bid_id: params[3] === null ? null : Number(params[3]),
+        actor_user_id: params[4] === null ? null : Number(params[4]),
         actor_display_name: params[5] as string,
         asset_title: params[6] as string,
-        amount_cents: Number(params[7]),
+        amount_cents: params[7] === null ? null : Number(params[7]),
         read_at: null,
         created_at: new Date("2026-05-25T15:55:00.000Z")
       };
       this.notifications.push(notification);
       return [{ insertId: notification.id, affectedRows: 1 } as T, []];
+    }
+
+    if (sql.includes("UPDATE station_notifications") && sql.includes("WHERE user_id = ? AND read_at IS NULL")) {
+      const userNotifications = this.notifications.filter(
+        (candidate) => candidate.user_id === Number(params[0]) && candidate.read_at === null
+      );
+      for (const notification of userNotifications) {
+        notification.read_at = new Date("2026-05-25T16:00:00.000Z");
+      }
+      return [{ insertId: 0, affectedRows: userNotifications.length } as T, []];
     }
 
     if (sql.includes("UPDATE station_notifications")) {
@@ -987,31 +1044,49 @@ class FakeMysqlPool {
         asset_id: Number(params[0]),
         bidder_id: Number(params[1]),
         amount_cents: Number(params[2]),
+        revoked_at: null,
+        revoked_by_admin_id: null,
+        revoke_reason: null,
         created_at: new Date("2026-05-25T12:00:00.000Z")
       };
       this.bids.push(bid);
       return [{ insertId: bid.id, affectedRows: 1 } as T, []];
     }
 
+    if (sql.includes("UPDATE bids") && sql.includes("revoked_at = CURRENT_TIMESTAMP")) {
+      const bid = this.bids.find(
+        (candidate) => candidate.id === Number(params[2]) && candidate.asset_id === Number(params[3]) && candidate.revoked_at == null
+      );
+      if (bid) {
+        bid.revoked_at = new Date("2026-05-25T16:45:00.000Z");
+        bid.revoked_by_admin_id = Number(params[0]);
+        bid.revoke_reason = params[1] as string;
+      }
+      return [{ insertId: 0, affectedRows: bid ? 1 : 0 } as T, []];
+    }
+
     if (sql.includes("UPDATE auction_assets")) {
-      const asset = this.assets.find((candidate) => candidate.id === Number(params[3]));
+      const assetIdParam = params.length >= 4 ? params[3] : params[2];
+      const asset = this.assets.find((candidate) => candidate.id === Number(assetIdParam));
       if (asset) {
-        asset.current_price_cents = Number(params[0]);
-        asset.highest_bidder_id = Number(params[1]);
-        asset.effective_end_at = params[2] as Date;
+        asset.current_price_cents = params[0] === null ? null : Number(params[0]);
+        asset.highest_bidder_id = params[1] === null ? null : Number(params[1]);
+        if (params.length >= 4) {
+          asset.effective_end_at = params[2] as Date;
+        }
       }
       return [{ affectedRows: asset ? 1 : 0, insertId: 0 } as T, []];
     }
 
     if (sql.includes("COUNT(*) AS total") && sql.includes("FROM bids") && sql.includes("created_at >= ?")) {
       const sinceMs = new Date(params[0] as Date | string).getTime();
-      return [[{ total: this.bids.filter((bid) => bid.created_at.getTime() >= sinceMs).length }] as T, []];
+      return [[{ total: this.bids.filter((bid) => !bid.revoked_at && bid.created_at.getTime() >= sinceMs).length }] as T, []];
     }
 
     if (sql.includes("MAX(id) AS latest_id") && sql.includes("FROM bids")) {
       const assetId = Number(params[0]);
       const latestByBidderId = new Map<number, FakeBid>();
-      for (const bid of this.bids.filter((item) => item.asset_id === assetId)) {
+      for (const bid of this.bids.filter((item) => item.asset_id === assetId && !item.revoked_at)) {
         const current = latestByBidderId.get(bid.bidder_id);
         if (!current || bid.id > current.id) {
           latestByBidderId.set(bid.bidder_id, bid);
@@ -1025,12 +1100,35 @@ class FakeMysqlPool {
       ];
     }
 
+    if (sql.includes("FROM bids") && sql.includes("WHERE id = ? AND asset_id =")) {
+      return [
+        [
+          this.bids.find((bid) => bid.id === Number(params[0]) && bid.asset_id === Number(params[1]))
+        ].filter(Boolean) as T,
+        []
+      ];
+    }
+
+    if (sql.includes("FROM bids") && sql.includes("revoked_at IS NULL") && sql.includes("ORDER BY amount_cents DESC")) {
+      const assetId = Number(params[0]);
+      return [
+        this.bids
+          .filter((bid) => bid.asset_id === assetId && !bid.revoked_at)
+          .sort(
+            (left, right) =>
+              right.amount_cents - left.amount_cents || right.created_at.getTime() - left.created_at.getTime() || right.id - left.id
+          )
+          .slice(0, 1) as T,
+        []
+      ];
+    }
+
     if (sql.includes("FROM bids") && sql.includes("bidder_id =")) {
-      return [this.bids.filter((bid) => bid.bidder_id === Number(params[0])) as T, []];
+      return [this.bids.filter((bid) => bid.bidder_id === Number(params[0]) && (!sql.includes("revoked_at IS NULL") || !bid.revoked_at)) as T, []];
     }
 
     if (sql.includes("FROM bids") && sql.includes("asset_id =")) {
-      return [this.bids.filter((bid) => bid.asset_id === Number(params[0])) as T, []];
+      return [this.bids.filter((bid) => bid.asset_id === Number(params[0]) && (!sql.includes("revoked_at IS NULL") || !bid.revoked_at)) as T, []];
     }
 
     if (sql.includes("FROM bids") && sql.includes("id =")) {
@@ -1218,6 +1316,42 @@ describe("mysql repositories", () => {
     expect(first).toMatchObject({ id: user.id, buyer_unreachable_count: 1, bid_restricted_until: null });
     expect(second).toMatchObject({ id: user.id, buyer_unreachable_count: 2 });
     expect(second.bid_restricted_until).toBeInstanceOf(Date);
+  });
+
+  it("sets and releases MySQL bid restrictions without resetting buyer unreachable counts", async () => {
+    const pool = new FakeMysqlPool();
+    const users = createMysqlUsersRepository(pool);
+    const user = await users.findOrCreateWechatUser({ openid: "openid-1", displayName: "风控买家" });
+    await users.recordBuyerUnreachable(user.id);
+
+    const permanent = await users.restrictBidding(user.id, {
+      permanent: true,
+      restrictedUntil: null,
+      reason: "疑似故意抬价",
+      adminId: 1
+    });
+    expect(permanent).toMatchObject({
+      buyer_unreachable_count: 1,
+      bid_restricted_until: null,
+      bid_restricted_permanent: true,
+      bid_restriction_reason: "疑似故意抬价"
+    });
+
+    const unreachable = await users.recordBuyerUnreachable(user.id);
+    expect(unreachable).toMatchObject({
+      buyer_unreachable_count: 2,
+      bid_restricted_until: null,
+      bid_restricted_permanent: true,
+      bid_restriction_reason: "疑似故意抬价"
+    });
+
+    const released = await users.releaseBidRestriction(user.id);
+    expect(released).toMatchObject({
+      buyer_unreachable_count: 2,
+      bid_restricted_until: null,
+      bid_restricted_permanent: false,
+      bid_restriction_reason: null
+    });
   });
 
   it("counts user dashboard metrics from MySQL rows", async () => {
@@ -1893,6 +2027,30 @@ describe("mysql repositories", () => {
     ]);
   });
 
+  it("soft-revokes one MySQL bid and recalculates the asset from remaining active bids", async () => {
+    const pool = new FakeMysqlPool();
+    pool.assets.push({ ...activeAssetRow(), current_price_cents: 10200, highest_bidder_id: 2 });
+    pool.bids.push(
+      { id: 1, asset_id: 1, bidder_id: 2, amount_cents: 10000, created_at: new Date("2026-05-25T12:00:00.000Z") },
+      { id: 2, asset_id: 1, bidder_id: 3, amount_cents: 10100, created_at: new Date("2026-05-25T12:10:00.000Z") },
+      { id: 3, asset_id: 1, bidder_id: 2, amount_cents: 10200, created_at: new Date("2026-05-25T12:20:00.000Z") }
+    );
+    const bids = createMysqlBidsRepository(pool);
+
+    const result = await bids.revokeBidAndRecalculate({
+      assetId: "1",
+      bidId: "3",
+      adminId: 1,
+      reason: "疑似故意抬价"
+    });
+
+    expect(result.bid).toMatchObject({ id: "3", revokedAt: "2026-05-25T16:45:00.000Z", revokeReason: "疑似故意抬价" });
+    expect(result.asset).toMatchObject({ currentPriceCents: 10100, highestBidderId: "3" });
+    await expect(bids.listByBidder("2")).resolves.toEqual([
+      expect.objectContaining({ id: "1", bidderId: "2", amountCents: 10000 })
+    ]);
+  });
+
   it("rejects a bid if a locked asset row already has a higher current price", async () => {
     const pool = new FakeMysqlPool();
     pool.assets.push({ ...activeAssetRow(), current_price_cents: 10000, highest_bidder_id: 3 });
@@ -2009,5 +2167,50 @@ describe("mysql repositories", () => {
       })
     ]);
     expect(read?.readAt).toBe("2026-05-25T16:00:00.000Z");
+  });
+
+  it("marks every unread MySQL notification read for one user", async () => {
+    const pool = new FakeMysqlPool();
+    const notifications = createMysqlNotificationsRepository(pool);
+
+    await notifications.createMany([
+      {
+        userId: "2",
+        type: "outbid",
+        assetId: "1",
+        bidId: "5",
+        actorUserId: "3",
+        actorDisplayName: "买家二",
+        assetTitle: "69级角色",
+        amountCents: 10100
+      },
+      {
+        userId: "2",
+        type: "outbid",
+        assetId: "1",
+        bidId: "6",
+        actorUserId: "4",
+        actorDisplayName: "买家三",
+        assetTitle: "69级角色",
+        amountCents: 10200
+      },
+      {
+        userId: "3",
+        type: "outbid",
+        assetId: "1",
+        bidId: "6",
+        actorUserId: "4",
+        actorDisplayName: "买家三",
+        assetTitle: "69级角色",
+        amountCents: 10200
+      }
+    ]);
+
+    const marked = await notifications.markAllRead("2");
+    const otherUserNotifications = await notifications.listByUser("3");
+
+    expect(marked).toHaveLength(2);
+    expect(marked.every((notification) => notification.readAt === "2026-05-25T16:00:00.000Z")).toBe(true);
+    expect(otherUserNotifications).toEqual([expect.objectContaining({ userId: "3", readAt: null })]);
   });
 });

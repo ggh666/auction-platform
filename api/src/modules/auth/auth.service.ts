@@ -1,4 +1,5 @@
 import type { FastifyInstance } from "fastify";
+import { createHash, timingSafeEqual } from "node:crypto";
 import type { LoginResponse, UserSummary, WechatLoginRequest } from "@auction/shared";
 import type { Env } from "../../config/env";
 import { HttpError, badRequest } from "../../http/errors";
@@ -32,6 +33,15 @@ type WechatCode2SessionResponse = {
 
 const userTokenExpiresIn = "30d";
 
+type VerifiedWechatProfile = {
+  displayName: string;
+  avatarUrl?: string;
+};
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
 function normalizeDisplayName(value: unknown): string {
   if (typeof value !== "string") {
     return "微信用户";
@@ -50,6 +60,59 @@ function normalizeAvatarUrl(value: unknown): string | undefined {
   return normalized || undefined;
 }
 
+function normalizeProfileText(value: unknown): string {
+  return typeof value === "string" ? value.trim() : "";
+}
+
+function verifySignature(rawData: string, signature: string, sessionKey: string): boolean {
+  const expected = createHash("sha1").update(`${rawData}${sessionKey}`).digest("hex");
+  const expectedBuffer = Buffer.from(expected);
+  const actualBuffer = Buffer.from(signature.trim());
+  return expectedBuffer.length === actualBuffer.length && timingSafeEqual(expectedBuffer, actualBuffer);
+}
+
+function parseProfileRawData(rawData: string): VerifiedWechatProfile {
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(rawData);
+  } catch {
+    throw badRequest("invalid_wechat_profile", "WeChat profile data is invalid");
+  }
+  if (!isRecord(parsed)) {
+    throw badRequest("invalid_wechat_profile", "WeChat profile data is invalid");
+  }
+
+  return {
+    displayName: normalizeDisplayName(parsed.nickName),
+    avatarUrl: normalizeAvatarUrl(parsed.avatarUrl)
+  };
+}
+
+function verifiedWechatProfile(
+  body: WechatLoginRequest,
+  session: WechatCodeSession,
+  env: Pick<Env, "nodeEnv">
+): VerifiedWechatProfile | null {
+  const profileRawData = normalizeProfileText(body.profileRawData);
+  const profileSignature = normalizeProfileText(body.profileSignature);
+  if (!profileRawData && !profileSignature) {
+    return null;
+  }
+  if (!profileRawData || !profileSignature) {
+    throw badRequest("invalid_wechat_profile", "WeChat profile data is invalid");
+  }
+  if (!session.sessionKey) {
+    if (env.nodeEnv === "production") {
+      throw badRequest("invalid_wechat_profile", "WeChat profile signature is invalid");
+    }
+    return parseProfileRawData(profileRawData);
+  }
+  if (!verifySignature(profileRawData, profileSignature, session.sessionKey)) {
+    throw badRequest("invalid_wechat_profile", "WeChat profile signature is invalid");
+  }
+  return parseProfileRawData(profileRawData);
+}
+
 function assertWechatLoginRequest(input: unknown): WechatLoginRequest {
   if (typeof input !== "object" || input === null || Array.isArray(input)) {
     throw badRequest("invalid_wechat_login", "WeChat login payload is invalid");
@@ -63,7 +126,9 @@ function assertWechatLoginRequest(input: unknown): WechatLoginRequest {
   return {
     code: code.trim(),
     displayName: normalizeDisplayName((input as { displayName?: unknown }).displayName),
-    avatarUrl: normalizeAvatarUrl((input as { avatarUrl?: unknown }).avatarUrl)
+    avatarUrl: normalizeAvatarUrl((input as { avatarUrl?: unknown }).avatarUrl),
+    profileRawData: normalizeProfileText((input as { profileRawData?: unknown }).profileRawData) || undefined,
+    profileSignature: normalizeProfileText((input as { profileSignature?: unknown }).profileSignature) || undefined
   };
 }
 
@@ -75,7 +140,13 @@ function toUserSummary(user: Awaited<ReturnType<UsersRepository["findOrCreateMoc
     banned: user.banned_at !== null,
     violationCount: user.violation_count,
     creditScore: user.credit_score,
-    creditResetAt: user.credit_reset_at === null ? null : new Date(user.credit_reset_at).toISOString()
+    creditResetAt: user.credit_reset_at === null ? null : new Date(user.credit_reset_at).toISOString(),
+    buyerUnreachableCount: user.buyer_unreachable_count,
+    bidRestrictedUntil: user.bid_restricted_until === null ? null : new Date(user.bid_restricted_until).toISOString(),
+    bidRestrictionPermanent: user.bid_restricted_permanent,
+    bidRestrictionReason: user.bid_restriction_reason,
+    bidRestrictionStartedAt:
+      user.bid_restriction_started_at === null ? null : new Date(user.bid_restriction_started_at).toISOString()
   };
 }
 
@@ -145,10 +216,11 @@ export function createAuthService(app: FastifyInstance, users: UsersRepository, 
     async wechatLogin(input) {
       const body = assertWechatLoginRequest(input);
       const session = await exchangeWechatCode(body.code);
+      const profile = verifiedWechatProfile(body, session, options.env);
       const user = await users.findOrCreateWechatUser({
         openid: session.openid,
-        displayName: body.displayName ?? "微信用户",
-        avatarUrl: body.avatarUrl
+        displayName: profile?.displayName ?? body.displayName ?? "微信用户",
+        avatarUrl: profile?.avatarUrl ?? body.avatarUrl
       });
       const token = app.jwt.sign({ userId: String(user.id), kind: "user" }, { expiresIn: userTokenExpiresIn });
       return {

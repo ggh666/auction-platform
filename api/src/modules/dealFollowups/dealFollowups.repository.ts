@@ -210,6 +210,6 @@ export function createInMemoryDealFollowupsRepository(options: { now?: () => Dat
       const updated = applyStatusTimestamp({ ...followup, note }, status, timestamp);
       followups.set(id, updated);
       return cloneFollowup(updated);
-    }
+    },
   };
 }

@@ -4,11 +4,14 @@ import type {
   AdminImageSafetyCheck,
   AdminAssetDetailResponse,
   AdminAssetListResponse,
+  AdminBidRestrictionRequest,
+  AdminBidRevokeAndRestrictResponse,
   AdminUserActionResponse,
   AdminPrincipal,
   AdminRole,
   AuctionAsset,
   AssetStatus,
+  BidRestrictionDuration,
   UserSummary
 } from "@auction/shared";
 import { randomBytes, randomUUID } from "node:crypto";
@@ -23,9 +26,11 @@ import type { ImageSafetyRecord, ImageSafetyRepository } from "../contentSafety/
 import type { DealFollowupsRepository } from "../dealFollowups/dealFollowups.repository";
 import { extensionForMimeType, uploadDirectoryForAssetType, validateImageUpload } from "../images/images.service";
 import type { ImageStorage } from "../images/r2Storage";
+import type { NotificationsRepository } from "../notifications/notifications.repository";
 import type { PrincipalRecord, PrincipalsRepository } from "../principals/principals.repository";
+import type { AuctionHub } from "../../realtime/auctionHub";
 import { readUserSummary, toBidDisplayRecord } from "../users/userSummary";
-import type { UsersRepository } from "../users/users.repository";
+import type { UserRow, UsersRepository } from "../users/users.repository";
 import { buildAdminAssetExcelWorkbook, type AdminAssetExportRow } from "./adminAssetExport";
 import { emptyAdminAssetList, readAdminDataScope, type AdminDataScope } from "./adminPrincipalScope";
 import { createAdminAuthService } from "./adminAuth.service";
@@ -88,6 +93,9 @@ type AdminPrincipalBody = {
   displayName?: unknown;
   disabled?: unknown;
 };
+
+const bidRestrictionDurations = new Set<BidRestrictionDuration>(["30m", "1d", "permanent"]);
+const defaultBidRestrictionReason = "疑似故意抬价";
 type AdminUserBody = {
   username?: unknown;
   password?: unknown;
@@ -213,6 +221,31 @@ function readReviewNote(value: unknown): string {
 function readCreditDeductionReason(value: unknown): string {
   const reason = typeof value === "string" ? value.trim() : "";
   return reason || "审核发现违规信息";
+}
+
+function readBidRestrictionReason(value: unknown): string {
+  const reason = typeof value === "string" ? value.trim() : "";
+  return reason || defaultBidRestrictionReason;
+}
+
+function readBidRestrictionDuration(value: unknown): BidRestrictionDuration {
+  if (typeof value === "string" && bidRestrictionDurations.has(value as BidRestrictionDuration)) {
+    return value as BidRestrictionDuration;
+  }
+  throw badRequest("invalid_bid_restriction_duration", "Bid restriction duration is invalid");
+}
+
+function bidRestrictionUntil(duration: BidRestrictionDuration, now = new Date()): Date | null {
+  if (duration === "permanent") {
+    return null;
+  }
+  const restrictedUntil = new Date(now);
+  if (duration === "30m") {
+    restrictedUntil.setMinutes(restrictedUntil.getMinutes() + 30);
+    return restrictedUntil;
+  }
+  restrictedUntil.setDate(restrictedUntil.getDate() + 1);
+  return restrictedUntil;
 }
 
 function readImageSafetyOverride(value: AdminApproveAssetBody | undefined): boolean {
@@ -434,6 +467,28 @@ function toAdminAccount(admin: AdminUserRow, principal: PrincipalRecord | null =
   };
 }
 
+function toManagedUser(user: UserRow) {
+  return {
+    id: String(user.id),
+    displayName: user.display_name,
+    avatarUrl: user.avatar_url ?? undefined,
+    banned: user.banned_at !== null,
+    violationCount: user.violation_count,
+    creditScore: user.credit_score,
+    creditResetAt: user.credit_reset_at === null ? null : new Date(user.credit_reset_at).toISOString(),
+    banReason: user.ban_reason,
+    dailyPublishLimit: user.daily_publish_limit,
+    buyerUnreachableCount: user.buyer_unreachable_count,
+    bidRestrictedUntil: user.bid_restricted_until === null ? null : new Date(user.bid_restricted_until).toISOString(),
+    bidRestrictionPermanent: user.bid_restricted_permanent,
+    bidRestrictionReason: user.bid_restriction_reason,
+    bidRestrictionStartedAt:
+      user.bid_restriction_started_at === null ? null : new Date(user.bid_restriction_started_at).toISOString(),
+    createdAt: new Date(user.created_at).toISOString(),
+    updatedAt: new Date(user.updated_at).toISOString()
+  };
+}
+
 async function readPrincipalByAdminId(principals: PrincipalsRepository, adminId: number): Promise<PrincipalRecord | null> {
   return (await principals.listForAdmin()).find((principal) => principal.adminId === String(adminId)) ?? null;
 }
@@ -513,7 +568,9 @@ export function registerAdminRoutes(
   principals: PrincipalsRepository,
   followups: DealFollowupsRepository,
   imageSafety: ImageSafetyRepository,
-  imageStorage: ImageStorage
+  imageStorage: ImageStorage,
+  notifications: NotificationsRepository,
+  hub: Pick<AuctionHub, "publish">
 ): void {
   const auth = createAdminAuthService(app, admins);
   const assetService = createAssetsService(assets);
@@ -890,7 +947,7 @@ export function registerAdminRoutes(
       if (!asset) {
         throw new HttpError(404, "not_found", "Asset not found");
       }
-      const recentBids = await bids.listByAsset(asset.id);
+      const recentBids = await bids.listByAsset(asset.id, { includeRevoked: true });
       const principal = asset.principalId ? await principals.findById(asset.principalId) : null;
       return {
         asset,
@@ -899,6 +956,113 @@ export function registerAdminRoutes(
         imageSafetyChecks: await readAssetImageSafetyChecks(asset, imageSafety),
         recentBids: await Promise.all(recentBids.slice(-20).reverse().map((bid) => toBidDisplayRecord(users, bid)))
       };
+    }
+  );
+
+  app.post<{
+    Params: { assetId: string; bidId: string };
+    Body: AdminBidRestrictionRequest;
+    Reply: AdminBidRevokeAndRestrictResponse;
+  }>(
+    "/admin/assets/:assetId/bids/:bidId/revoke-and-restrict",
+    { preHandler: requireAdmin("asset:review", admins) },
+    async (request) => {
+      if (!request.admin) {
+        throw new HttpError(401, "unauthorized", "Authentication required");
+      }
+      const scope = await readAdminDataScope(request, principals);
+      const asset = scope ? await assets.findById(request.params.assetId, scope) : null;
+      if (!asset) {
+        throw new HttpError(404, "not_found", "Asset not found");
+      }
+
+      const duration = readBidRestrictionDuration(request.body?.duration);
+      const reason = readBidRestrictionReason(request.body?.reason);
+      let revoked;
+      try {
+        revoked = await bids.revokeBidAndRecalculate({
+          assetId: asset.id,
+          bidId: request.params.bidId,
+          adminId: request.admin.id,
+          reason
+        });
+      } catch (error) {
+        if (error instanceof Error && error.message === "Bid not found") {
+          throw new HttpError(404, "not_found", "Bid not found");
+        }
+        if (error instanceof Error && error.message === "Bid already revoked") {
+          throw badRequest("bid_already_revoked", "Bid already revoked");
+        }
+        throw error;
+      }
+
+      await notifications.deleteByBidId(revoked.bid.id);
+      const restrictedUser = await users.restrictBidding(Number(revoked.bid.bidderId), {
+        permanent: duration === "permanent",
+        restrictedUntil: bidRestrictionUntil(duration),
+        reason,
+        adminId: request.admin.id
+      });
+      const displayBid = await toBidDisplayRecord(users, revoked.bid);
+      const serverTime = new Date().toISOString();
+      hub.publish(asset.id, {
+        type: "bid_revoked",
+        asset: revoked.asset,
+        bid: displayBid,
+        serverTime
+      });
+      await admins.logOperation({
+        adminId: request.admin.id,
+        action: "bid.revoke_and_restrict",
+        targetType: "bid",
+        targetId: revoked.bid.id,
+        detail: {
+          assetId: asset.id,
+          bidderId: revoked.bid.bidderId,
+          duration,
+          reason,
+          bidRestrictedUntil: restrictedUser.bid_restricted_until,
+          permanent: restrictedUser.bid_restricted_permanent
+        }
+      });
+
+      return {
+        asset: revoked.asset,
+        bid: displayBid,
+        user: toManagedUser(restrictedUser)
+      };
+    }
+  );
+
+  app.post<{ Params: { assetId: string; userId: string }; Reply: AdminUserActionResponse }>(
+    "/admin/assets/:assetId/bidders/:userId/bid-restriction/release",
+    { preHandler: requireAdmin("asset:review", admins) },
+    async (request) => {
+      if (!request.admin) {
+        throw new HttpError(401, "unauthorized", "Authentication required");
+      }
+      const scope = await readAdminDataScope(request, principals);
+      const asset = scope ? await assets.findById(request.params.assetId, scope) : null;
+      if (!asset) {
+        throw new HttpError(404, "not_found", "Asset not found");
+      }
+      const assetBids = await bids.listByAsset(asset.id, { includeRevoked: true });
+      if (!assetBids.some((bid) => bid.bidderId === request.params.userId)) {
+        throw new HttpError(404, "not_found", "Bidder not found for asset");
+      }
+      const userId = Number(request.params.userId);
+      if (!Number.isInteger(userId) || userId <= 0) {
+        throw badRequest("invalid_user", "Invalid user id");
+      }
+      const user = await users.releaseBidRestriction(userId);
+      await admins.logOperation({
+        adminId: request.admin.id,
+        action: "user.release_bid_restriction",
+        targetType: "user",
+        targetId: String(user.id),
+        detail: { assetId: asset.id }
+      });
+      return { user: toManagedUser(user) };
     }
   );
 
@@ -924,23 +1088,7 @@ export function registerAdminRoutes(
         targetId: asset.sellerId,
         detail: { assetId: asset.id, points: 5, reason, creditScore: user.credit_score }
       });
-      return {
-        user: {
-          id: String(user.id),
-          displayName: user.display_name,
-          avatarUrl: user.avatar_url ?? undefined,
-          banned: user.banned_at !== null,
-          violationCount: user.violation_count,
-          creditScore: user.credit_score,
-          creditResetAt: user.credit_reset_at === null ? null : new Date(user.credit_reset_at).toISOString(),
-          banReason: user.ban_reason,
-          dailyPublishLimit: user.daily_publish_limit,
-          buyerUnreachableCount: user.buyer_unreachable_count,
-          bidRestrictedUntil: user.bid_restricted_until === null ? null : new Date(user.bid_restricted_until).toISOString(),
-          createdAt: new Date(user.created_at).toISOString(),
-          updatedAt: new Date(user.updated_at).toISOString()
-        }
-      };
+      return { user: toManagedUser(user) };
     }
   );
 

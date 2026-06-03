@@ -83,6 +83,52 @@ async function createExpiredSoldActiveAsset(
 }
 
 describe("deal followups", () => {
+  it("keeps buyer deal followups free of contact collection and contact reminders", async () => {
+    const assets = createInMemoryAssetsRepository();
+    const app = buildApp({ enableMockAuth: true, assetsRepository: assets });
+
+    try {
+      const seller = await login(app, "卖家");
+      const buyer = await login(app, "买家");
+      const assetId = await createEndedSoldAsset(app, assets, seller.token, buyer.token, { principalId: "1", title: "成交跟进资产" });
+      const buyerList = await app.inject({
+        method: "GET",
+        url: "/api/profile/deal-followups",
+        headers: { authorization: `Bearer ${buyer.token}` }
+      });
+      const followupId = buyerList.json().items[0].id as string;
+      const contactSubmission = await app.inject({
+        method: "POST",
+        url: `/api/profile/deal-followups/${followupId}/contact`,
+        headers: { authorization: `Bearer ${buyer.token}` },
+        payload: { gameContact: "17区-买家角色A", wechatId: "buyer-wx", privacyAccepted: true }
+      });
+      const reviewer = await adminLogin(app);
+      const adminList = await app.inject({
+        method: "GET",
+        url: "/admin/deal-followups",
+        headers: { authorization: `Bearer ${reviewer}` }
+      });
+      const notifications = await app.inject({
+        method: "GET",
+        url: "/api/profile/notifications",
+        headers: { authorization: `Bearer ${buyer.token}` }
+      });
+
+      expect(contactSubmission.statusCode).toBe(404);
+      expect(buyerList.statusCode).toBe(200);
+      expect(buyerList.json().items[0]).toMatchObject({ id: followupId, assetId });
+      expect(buyerList.json().items[0]).not.toHaveProperty("buyerContactStatus");
+      expect(buyerList.json().items[0]).not.toHaveProperty("buyerContact");
+      expect(adminList.statusCode).toBe(200);
+      expect(adminList.json().items[0]).not.toHaveProperty("buyerContactStatus");
+      expect(adminList.json().items[0]).not.toHaveProperty("buyerContact");
+      expect(notifications.json().items.filter((item: { type: string }) => item.type === "deal_contact_required")).toEqual([]);
+    } finally {
+      await app.close();
+    }
+  });
+
   it("keeps buyer deal followups read-only and rejects buyer status changes", async () => {
     const assets = createInMemoryAssetsRepository();
     const app = buildApp({ enableMockAuth: true, assetsRepository: assets });

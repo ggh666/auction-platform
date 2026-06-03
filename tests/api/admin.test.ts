@@ -1420,6 +1420,182 @@ describe("admin routes", () => {
     }
   });
 
+  it("lets a principal reviewer revoke one suspicious bid, restrict the bidder, and release the restriction", async () => {
+    const admins = createInMemoryAdminRepository();
+    const assets = createInMemoryAssetsRepository();
+    const app = buildApp({ enableMockAuth: true, adminRepository: admins, assetsRepository: assets });
+
+    async function login(displayName: string) {
+      const response = await app.inject({
+        method: "POST",
+        url: "/api/auth/mock-login",
+        payload: { displayName }
+      });
+      return { token: response.json().token as string, userId: response.json().user.id as string };
+    }
+
+    try {
+      const seller = await login("卖家");
+      const firstBidder = await login("正常买家");
+      const suspiciousBidder = await login("疑似抬价买家");
+      const asset = await assets.createPending({ ...pendingAssetInput(), sellerId: seller.userId, principalId: "1" });
+      await assets.updateStatus(asset.id, "active");
+      const reviewer = await adminLogin(app, "reviewer", "reviewer-pass");
+
+      await app.inject({
+        method: "POST",
+        url: "/api/bids",
+        headers: { authorization: `Bearer ${firstBidder.token}` },
+        payload: { assetId: asset.id, amountCents: 10000, commitmentAccepted: true }
+      });
+      const suspiciousBid = await app.inject({
+        method: "POST",
+        url: "/api/bids",
+        headers: { authorization: `Bearer ${suspiciousBidder.token}` },
+        payload: { assetId: asset.id, amountCents: 10100, commitmentAccepted: true }
+      });
+      expect(suspiciousBid.statusCode).toBe(200);
+
+      const revoked = await app.inject({
+        method: "POST",
+        url: `/admin/assets/${asset.id}/bids/${suspiciousBid.json().bid.id}/revoke-and-restrict`,
+        headers: { authorization: `Bearer ${reviewer}` },
+        payload: { duration: "30m", reason: "疑似故意抬价" }
+      });
+
+      expect(revoked.statusCode).toBe(200);
+      expect(revoked.json().asset).toMatchObject({
+        id: asset.id,
+        currentPriceCents: 10000,
+        highestBidderId: firstBidder.userId
+      });
+      expect(revoked.json().bid).toMatchObject({
+        id: suspiciousBid.json().bid.id,
+        bidderId: suspiciousBidder.userId,
+        revokedAt: expect.any(String),
+        revokeReason: "疑似故意抬价"
+      });
+      expect(revoked.json().user).toMatchObject({
+        id: suspiciousBidder.userId,
+        bidRestrictedUntil: expect.any(String),
+        bidRestrictionPermanent: false,
+        bidRestrictionReason: "疑似故意抬价"
+      });
+
+      const rejectedBid = await app.inject({
+        method: "POST",
+        url: "/api/bids",
+        headers: { authorization: `Bearer ${suspiciousBidder.token}` },
+        payload: { assetId: asset.id, amountCents: 10100, commitmentAccepted: true }
+      });
+      expect(rejectedBid.statusCode).toBe(403);
+      expect(rejectedBid.json().error).toMatchObject({
+        code: "bid_restricted",
+        details: {
+          bidRestrictedUntil: expect.any(String),
+          permanent: false,
+          reason: "疑似故意抬价"
+        }
+      });
+
+      const released = await app.inject({
+        method: "POST",
+        url: `/admin/assets/${asset.id}/bidders/${suspiciousBidder.userId}/bid-restriction/release`,
+        headers: { authorization: `Bearer ${reviewer}` }
+      });
+      expect(released.statusCode).toBe(200);
+      expect(released.json().user).toMatchObject({
+        id: suspiciousBidder.userId,
+        bidRestrictedUntil: null,
+        bidRestrictionPermanent: false,
+        bidRestrictionReason: null
+      });
+
+      const nextBid = await app.inject({
+        method: "POST",
+        url: "/api/bids",
+        headers: { authorization: `Bearer ${suspiciousBidder.token}` },
+        payload: { assetId: asset.id, amountCents: 10100, commitmentAccepted: true }
+      });
+      expect(nextBid.statusCode).toBe(200);
+      expect(nextBid.json().asset).toMatchObject({ currentPriceCents: 10100, highestBidderId: suspiciousBidder.userId });
+      await expect(admins.listOperations()).resolves.toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({ action: "bid.revoke_and_restrict", targetType: "bid", targetId: suspiciousBid.json().bid.id }),
+          expect.objectContaining({ action: "user.release_bid_restriction", targetType: "user", targetId: suspiciousBidder.userId })
+        ])
+      );
+    } finally {
+      await app.close();
+    }
+  });
+
+  it("blocks operator bid revocation and supports super admin release from the user list", async () => {
+    const assets = createInMemoryAssetsRepository();
+    const app = buildApp({ enableMockAuth: true, assetsRepository: assets });
+
+    async function login(displayName: string) {
+      const response = await app.inject({
+        method: "POST",
+        url: "/api/auth/mock-login",
+        payload: { displayName }
+      });
+      return { token: response.json().token as string, userId: response.json().user.id as string };
+    }
+
+    try {
+      const seller = await login("卖家");
+      const bidder = await login("永久限制买家");
+      const asset = await assets.createPending({ ...pendingAssetInput(), sellerId: seller.userId, principalId: "1" });
+      await assets.updateStatus(asset.id, "active");
+      const bid = await app.inject({
+        method: "POST",
+        url: "/api/bids",
+        headers: { authorization: `Bearer ${bidder.token}` },
+        payload: { assetId: asset.id, amountCents: 10000, commitmentAccepted: true }
+      });
+      const operator = await adminLogin(app, "operator", "operator-pass");
+      const reviewer = await adminLogin(app, "reviewer", "reviewer-pass");
+      const superAdmin = await adminLogin(app, "super", "super-pass");
+
+      const rejected = await app.inject({
+        method: "POST",
+        url: `/admin/assets/${asset.id}/bids/${bid.json().bid.id}/revoke-and-restrict`,
+        headers: { authorization: `Bearer ${operator}` },
+        payload: { duration: "permanent", reason: "疑似故意抬价" }
+      });
+      expect(rejected.statusCode).toBe(403);
+
+      const restricted = await app.inject({
+        method: "POST",
+        url: `/admin/assets/${asset.id}/bids/${bid.json().bid.id}/revoke-and-restrict`,
+        headers: { authorization: `Bearer ${reviewer}` },
+        payload: { duration: "permanent", reason: "疑似故意抬价" }
+      });
+      expect(restricted.statusCode).toBe(200);
+      expect(restricted.json().user).toMatchObject({ bidRestrictionPermanent: true, bidRestrictedUntil: null });
+
+      const blocked = await app.inject({
+        method: "POST",
+        url: "/api/bids",
+        headers: { authorization: `Bearer ${bidder.token}` },
+        payload: { assetId: asset.id, amountCents: 10000, commitmentAccepted: true }
+      });
+      expect(blocked.statusCode).toBe(403);
+      expect(blocked.json().error.details).toMatchObject({ permanent: true, reason: "疑似故意抬价" });
+
+      const released = await app.inject({
+        method: "POST",
+        url: `/admin/users/${bidder.userId}/bid-restriction/release`,
+        headers: { authorization: `Bearer ${superAdmin}` }
+      });
+      expect(released.statusCode).toBe(200);
+      expect(released.json().user).toMatchObject({ bidRestrictionPermanent: false, bidRestrictionReason: null });
+    } finally {
+      await app.close();
+    }
+  });
+
   it("keeps a completed asset ended when deal followup synchronization fails", async () => {
     const admins = createInMemoryAdminRepository();
     const assets = createInMemoryAssetsRepository();

@@ -11,7 +11,11 @@ export function toUserSummary(user: UserRow): UserSummary {
     creditScore: user.credit_score,
     creditResetAt: user.credit_reset_at === null ? null : new Date(user.credit_reset_at).toISOString(),
     buyerUnreachableCount: user.buyer_unreachable_count,
-    bidRestrictedUntil: user.bid_restricted_until === null ? null : new Date(user.bid_restricted_until).toISOString()
+    bidRestrictedUntil: user.bid_restricted_until === null ? null : new Date(user.bid_restricted_until).toISOString(),
+    bidRestrictionPermanent: user.bid_restricted_permanent,
+    bidRestrictionReason: user.bid_restriction_reason,
+    bidRestrictionStartedAt:
+      user.bid_restriction_started_at === null ? null : new Date(user.bid_restriction_started_at).toISOString()
   };
 }
 
@@ -32,7 +36,10 @@ export async function readUserSummary(users: UsersRepository, userId: string): P
     creditScore: 100,
     creditResetAt: null,
     buyerUnreachableCount: 0,
-    bidRestrictedUntil: null
+    bidRestrictedUntil: null,
+    bidRestrictionPermanent: false,
+    bidRestrictionReason: null,
+    bidRestrictionStartedAt: null
   };
 }
 
