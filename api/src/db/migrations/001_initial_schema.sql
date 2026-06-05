@@ -92,6 +92,7 @@ CREATE TABLE auction_assets (
   updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
   INDEX idx_asset_list (status, game_name, server_name, asset_type, effective_end_at, created_at),
   INDEX idx_asset_principal (principal_id, status, created_at),
+  INDEX idx_assets_public_dragon_filters (status, game_name, asset_type, principal_id, dragon_ball_profession, dragon_ball_quality, effective_end_at, created_at, id),
   INDEX idx_asset_seller (seller_id, created_at),
   CONSTRAINT fk_assets_seller FOREIGN KEY (seller_id) REFERENCES users(id),
   CONSTRAINT fk_assets_principal FOREIGN KEY (principal_id) REFERENCES principals(id),

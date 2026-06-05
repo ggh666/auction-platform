@@ -38,7 +38,51 @@
       <button class="search-button" @tap="submitSearch">搜索</button>
       <button v-if="searchKeyword" class="clear-button" @tap="clearSearch">清除</button>
     </view>
-    <text class="search-privacy">隐私说明：搜索词仅用于本次列表查询；关注操作仅用于生成个人关注记录，不会公开展示。</text>
+
+    <view class="filter-panel">
+      <view class="filter-row">
+        <picker
+          class="filter-picker"
+          mode="selector"
+          :range="principalFilterLabels"
+          :value="selectedPrincipalIndex"
+          @change="onPrincipalFilterChange"
+        >
+          <view class="filter-chip">
+            <text class="filter-label">筛选主理人</text>
+            <text class="filter-value">{{ principalFilterText }}</text>
+          </view>
+        </picker>
+        <picker
+          v-if="selectedAssetType === '道具'"
+          class="filter-picker"
+          mode="selector"
+          :range="dragonBallProfessionFilterLabels"
+          :value="selectedDragonBallProfessionIndex"
+          @change="onDragonBallProfessionChange"
+        >
+          <view class="filter-chip">
+            <text class="filter-label">龙珠职业</text>
+            <text class="filter-value">{{ dragonBallProfessionFilterText }}</text>
+          </view>
+        </picker>
+        <picker
+          v-if="selectedAssetType === '道具'"
+          class="filter-picker"
+          mode="selector"
+          :range="dragonBallQualityFilterLabels"
+          :value="selectedDragonBallQualityIndex"
+          @change="onDragonBallQualityChange"
+        >
+          <view class="filter-chip">
+            <text class="filter-label">龙珠品质</text>
+            <text class="filter-value">{{ dragonBallQualityFilterText }}</text>
+          </view>
+        </picker>
+      </view>
+      <button v-if="hasActiveFilters" class="filter-reset" @tap="clearFilters">重置筛选</button>
+    </view>
+    <text class="search-privacy">隐私说明：搜索词和筛选条件仅用于本次列表查询；关注操作仅用于生成个人关注记录，不会公开展示。</text>
 
     <view v-if="loading && assets.length === 0" class="empty">正在加载交换宝贝</view>
     <view v-else-if="assets.length === 0" class="empty">暂无匹配的进行中交换</view>
@@ -75,10 +119,16 @@
 </template>
 
 <script setup lang="ts">
-import { centsToYuanText, type AuctionAsset } from "@auction/shared";
+import {
+  centsToYuanText,
+  dragonBallProfessionOptions,
+  dragonBallQualityOptions,
+  type AuctionAsset,
+  type PrincipalSummary
+} from "@auction/shared";
 import { onLoad, onPullDownRefresh, onReachBottom, onShareAppMessage, onShareTimeline, onShow } from "@dcloudio/uni-app";
-import { ref } from "vue";
-import { followAsset, listAssets, listNotifications, unfollowAsset } from "../../api/client";
+import { computed, ref } from "vue";
+import { followAsset, listAssets, listNotifications, listPrincipals, unfollowAsset } from "../../api/client";
 import { readToken } from "../../auth/session";
 import { assetTypes, normalizeAssetType, type AssetType } from "../../utils/assetType";
 import { isSoldAsset } from "../../utils/assetStatusText";
@@ -98,9 +148,37 @@ const loadingMore = ref(false);
 const hasMore = ref(true);
 const nextPage = ref(1);
 const assets = ref<AuctionAsset[]>([]);
+const principalOptions = ref<PrincipalSummary[]>([]);
+const selectedPrincipalId = ref("");
+const selectedDragonBallProfession = ref("");
+const selectedDragonBallQuality = ref("");
 const followUpdatingIds = ref<string[]>([]);
 const unreadNotifications = ref(0);
 const pageSize = 20;
+const dragonBallProfessionFilterLabels = ["全部职业", ...dragonBallProfessionOptions];
+const dragonBallQualityFilterLabels = ["全部品质", ...dragonBallQualityOptions.map((quality) => `${quality}品质`)];
+
+const principalFilterLabels = computed(() => ["全部主理人", ...principalOptions.value.map((principal) => principal.displayName)]);
+const selectedPrincipalIndex = computed(() => {
+  const index = principalOptions.value.findIndex((principal) => principal.id === selectedPrincipalId.value);
+  return index >= 0 ? index + 1 : 0;
+});
+const selectedDragonBallProfessionIndex = computed(() => {
+  const index = dragonBallProfessionOptions.findIndex((profession) => profession === selectedDragonBallProfession.value);
+  return index >= 0 ? index + 1 : 0;
+});
+const selectedDragonBallQualityIndex = computed(() => {
+  const index = dragonBallQualityOptions.findIndex((quality) => quality === selectedDragonBallQuality.value);
+  return index >= 0 ? index + 1 : 0;
+});
+const principalFilterText = computed(() => principalOptions.value[selectedPrincipalIndex.value - 1]?.displayName ?? "全部主理人");
+const dragonBallProfessionFilterText = computed(() => selectedDragonBallProfession.value || "全部职业");
+const dragonBallQualityFilterText = computed(() =>
+  selectedDragonBallQuality.value ? `${selectedDragonBallQuality.value}品质` : "全部品质"
+);
+const hasActiveFilters = computed(
+  () => Boolean(selectedPrincipalId.value) || Boolean(selectedDragonBallProfession.value) || Boolean(selectedDragonBallQuality.value)
+);
 
 onLoad((query) => {
   if (typeof query?.gameName === "string" && query.gameName.trim()) {
@@ -119,6 +197,7 @@ onLoad((query) => {
 
 onShow(() => {
   uni.showShareMenu({ withShareTicket: true, menus: ["shareAppMessage", "shareTimeline"] });
+  void loadPrincipalOptions();
   void loadAssets({ reset: true });
   void refreshUnreadNotifications();
 });
@@ -170,6 +249,9 @@ async function loadAssets(options: LoadAssetsOptions = {}) {
     const response = await listAssets({
       gameName: gameName.value,
       assetType: selectedAssetType.value,
+      principalId: selectedPrincipalId.value || undefined,
+      dragonBallProfession: selectedAssetType.value === "道具" ? selectedDragonBallProfession.value || undefined : undefined,
+      dragonBallQuality: selectedAssetType.value === "道具" ? selectedDragonBallQuality.value || undefined : undefined,
       keyword: keyword || undefined,
       createdWithinDays: keyword ? 60 : 7,
       page: requestedPage,
@@ -187,6 +269,53 @@ async function loadAssets(options: LoadAssetsOptions = {}) {
     loadingMore.value = false;
     uni.stopPullDownRefresh();
   }
+}
+
+async function loadPrincipalOptions() {
+  try {
+    const response = await listPrincipals();
+    principalOptions.value = response.items;
+    if (selectedPrincipalId.value && !response.items.some((principal) => principal.id === selectedPrincipalId.value)) {
+      selectedPrincipalId.value = "";
+    }
+  } catch {
+    principalOptions.value = [];
+  }
+}
+
+function readPickerIndex(event: { detail?: { value?: unknown } }): number {
+  const value = event.detail?.value;
+  const index = typeof value === "number" ? value : Number(value);
+  return Number.isInteger(index) && index >= 0 ? index : 0;
+}
+
+function onPrincipalFilterChange(event: { detail?: { value?: unknown } }) {
+  const index = readPickerIndex(event);
+  selectedPrincipalId.value = index === 0 ? "" : principalOptions.value[index - 1]?.id ?? "";
+  void loadAssets({ reset: true });
+}
+
+function onDragonBallProfessionChange(event: { detail?: { value?: unknown } }) {
+  const index = readPickerIndex(event);
+  selectedDragonBallProfession.value = index === 0 ? "" : dragonBallProfessionOptions[index - 1] ?? "";
+  void loadAssets({ reset: true });
+}
+
+function onDragonBallQualityChange(event: { detail?: { value?: unknown } }) {
+  const index = readPickerIndex(event);
+  selectedDragonBallQuality.value = index === 0 ? "" : dragonBallQualityOptions[index - 1] ?? "";
+  void loadAssets({ reset: true });
+}
+
+function resetDragonBallFilters() {
+  selectedDragonBallProfession.value = "";
+  selectedDragonBallQuality.value = "";
+}
+
+function clearFilters() {
+  selectedPrincipalId.value = "";
+  resetDragonBallFilters();
+  void loadAssets({ reset: true });
 }
 
 function isFollowUpdating(assetId: string) {
@@ -252,6 +381,9 @@ function selectAssetType(type: AssetType) {
   selectedAssetType.value = type;
   keywordInput.value = "";
   searchKeyword.value = "";
+  if (type !== "道具") {
+    resetDragonBallFilters();
+  }
   void loadAssets({ reset: true });
 }
 
@@ -482,6 +614,74 @@ function goHome() {
   background: #e4e7ec;
 }
 
+.filter-panel {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12rpx;
+  align-items: center;
+  margin: -6rpx 0 24rpx;
+}
+
+.filter-row {
+  display: flex;
+  flex: 1 1 100%;
+  flex-wrap: wrap;
+  gap: 12rpx;
+  min-width: 0;
+}
+
+.filter-picker {
+  flex: 1 1 210rpx;
+  min-width: 0;
+}
+
+.filter-chip {
+  box-sizing: border-box;
+  min-height: 72rpx;
+  padding: 10rpx 18rpx;
+  background: #fff;
+  border: 1px solid #d0d5dd;
+  border-radius: 8rpx;
+}
+
+.filter-label,
+.filter-value {
+  display: block;
+}
+
+.filter-label {
+  font-size: 22rpx;
+  line-height: 1.2;
+  color: #667085;
+}
+
+.filter-value {
+  margin-top: 4rpx;
+  overflow: hidden;
+  font-size: 26rpx;
+  font-weight: 800;
+  line-height: 1.25;
+  color: #101828;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.filter-reset {
+  flex: 0 0 auto;
+  height: 56rpx;
+  margin: 0;
+  padding: 0 18rpx;
+  font-size: 24rpx;
+  line-height: 56rpx;
+  color: #344054;
+  background: #e4e7ec;
+  border-radius: 8rpx;
+}
+
+.filter-reset::after {
+  border: 0;
+}
+
 .search-privacy {
   display: block;
   margin: -12rpx 0 24rpx;
@@ -682,6 +882,25 @@ function goHome() {
 
 .search-privacy {
   color: #9ab4a8;
+}
+
+.filter-chip {
+  background: rgba(8, 24, 23, 0.94);
+  border-color: rgba(134, 239, 172, 0.24);
+}
+
+.filter-label {
+  color: #9ab4a8;
+}
+
+.filter-value {
+  color: #f7e8b6;
+}
+
+.filter-reset {
+  color: #d6e6dc;
+  background: rgba(22, 47, 43, 0.92);
+  border: 1px solid rgba(154, 180, 168, 0.24);
 }
 
 .asset {

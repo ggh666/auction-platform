@@ -282,6 +282,21 @@ class FakeMysqlPool {
       const assetType = params[cursor++];
       filtered = filtered.filter((asset) => asset.asset_type === assetType);
     }
+    if (sql.includes("principal_id = ?")) {
+      const principalId = Number(params[cursor++]);
+      filtered = filtered.filter((asset) => asset.principal_id === principalId);
+    }
+    if (sql.includes("item_category = '龙珠'")) {
+      filtered = filtered.filter((asset) => asset.item_category === "龙珠");
+    }
+    if (sql.includes("dragon_ball_profession = ?")) {
+      const profession = params[cursor++];
+      filtered = filtered.filter((asset) => asset.dragon_ball_profession === profession);
+    }
+    if (sql.includes("dragon_ball_quality = ?")) {
+      const quality = params[cursor++];
+      filtered = filtered.filter((asset) => asset.dragon_ball_quality === quality);
+    }
     if (sql.includes("title LIKE")) {
       const titleKeyword = String(params[cursor++]).replaceAll("%", "");
       const serverKeyword = String(params[cursor++]).replaceAll("%", "");
@@ -596,13 +611,18 @@ class FakeMysqlPool {
     }
 
     if (sql.includes("FROM asset_images")) {
-      return [
-        this.images
-          .filter((image) => image.asset_id === Number(params[0]))
-          .sort((left, right) => left.sort_order - right.sort_order || left.id - right.id)
-          .map((image) => ({ public_url: image.public_url })) as T,
-        []
-      ];
+      const images = this.images
+        .filter((image) => image.asset_id === Number(params[0]))
+        .sort((left, right) => left.sort_order - right.sort_order || left.id - right.id);
+      const rows = sql.includes("object_key")
+        ? images.map((image) => ({
+            object_key: image.object_key,
+            public_url: image.public_url,
+            mime_type: image.mime_type,
+            size_bytes: image.size_bytes
+          }))
+        : images.map((image) => ({ public_url: image.public_url }));
+      return [rows as T, []];
     }
 
     if (sql.includes("INSERT INTO asset_follows")) {
@@ -1674,6 +1694,90 @@ describe("mysql repositories", () => {
     });
   });
 
+  it("filters public MySQL asset rows by principal and Dragon Ball metadata", async () => {
+    const pool = new FakeMysqlPool();
+    pool.assets.push(
+      {
+        ...activeAssetRow(),
+        id: 1,
+        seller_id: 1,
+        game_name: "塔防精灵",
+        asset_type: "道具",
+        principal_id: 2,
+        item_category: "龙珠",
+        dragon_ball_profession: "法师",
+        dragon_ball_quality: "绿",
+        dragon_ball_attributes: "附加伤害+1%",
+        title: "目标法师绿龙珠",
+        effective_end_at: new Date("2026-05-30T00:00:00.000Z")
+      },
+      {
+        ...activeAssetRow(),
+        id: 2,
+        seller_id: 2,
+        game_name: "塔防精灵",
+        asset_type: "道具",
+        principal_id: 1,
+        item_category: "龙珠",
+        dragon_ball_profession: "法师",
+        dragon_ball_quality: "绿",
+        dragon_ball_attributes: "附加伤害+2%",
+        title: "其他主理人绿龙珠",
+        effective_end_at: new Date("2026-05-30T00:00:00.000Z")
+      },
+      {
+        ...activeAssetRow(),
+        id: 3,
+        seller_id: 3,
+        game_name: "塔防精灵",
+        asset_type: "道具",
+        principal_id: 2,
+        item_category: "龙珠",
+        dragon_ball_profession: "猎人",
+        dragon_ball_quality: "绿",
+        dragon_ball_attributes: "附加伤害+3%",
+        title: "猎人绿龙珠",
+        effective_end_at: new Date("2026-05-30T00:00:00.000Z")
+      },
+      {
+        ...activeAssetRow(),
+        id: 4,
+        seller_id: 4,
+        game_name: "塔防精灵",
+        asset_type: "道具",
+        principal_id: 2,
+        item_category: "龙珠",
+        dragon_ball_profession: "法师",
+        dragon_ball_quality: "红",
+        dragon_ball_attributes: "附加伤害+4%",
+        title: "法师红龙珠",
+        effective_end_at: new Date("2026-05-30T00:00:00.000Z")
+      }
+    );
+    const assets = createMysqlAssetsRepository(pool);
+
+    const result = await assets.listActive({
+      gameName: "塔防精灵",
+      assetType: "道具",
+      principalId: "2",
+      dragonBallProfession: "法师",
+      dragonBallQuality: "绿",
+      nowIso: "2026-05-27T00:00:00.000Z"
+    });
+
+    expect(result).toMatchObject({
+      total: 1,
+      items: [
+        expect.objectContaining({
+          id: "1",
+          title: "目标法师绿龙珠",
+          principalId: "2",
+          dragonBall: expect.objectContaining({ profession: "法师", quality: "绿" })
+        })
+      ]
+    });
+  });
+
   it("counts assets created by a seller since a timestamp", async () => {
     const pool = new FakeMysqlPool();
     pool.assets.push(
@@ -1760,6 +1864,14 @@ describe("mysql repositories", () => {
     });
 
     expect(asset.imageUrls).toEqual(["https://img.example.com/uploads/1/a.png"]);
+    await expect(assets.listImagesByAssetId(asset.id)).resolves.toEqual([
+      {
+        objectKey: "uploads/1/a.png",
+        publicUrl: "https://img.example.com/uploads/1/a.png",
+        mimeType: "image/png",
+        sizeBytes: 8
+      }
+    ]);
     expect(asset).toMatchObject({
       assetType: "道具",
       itemCategory: "龙珠",

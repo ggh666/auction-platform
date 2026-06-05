@@ -27,4 +27,30 @@ describe("login page copy compliance", () => {
     expect(loginPage).not.toContain("profileSignature");
     expect(loginPage).toContain("locked-profile");
   });
+
+  it("locks the nickname from picker change and blur events", () => {
+    const loginPage = readFileSync(loginPagePath, "utf8");
+
+    expect(loginPage).toContain('name="nickname"');
+    expect(loginPage).toContain('@blur="tryLockNicknameFromPicker"');
+    expect(loginPage).toContain('@change="tryLockNicknameFromPicker"');
+    expect(loginPage).toContain('@confirm="tryLockNicknameFromPicker"');
+    expect(loginPage).toContain("function tryLockNicknameFromPicker(event: unknown)");
+    expect(loginPage).toContain("displayName.value = nickname;");
+    expect(loginPage).toContain("nicknameLocked.value = true;");
+    expect(loginPage).not.toContain('@blur="onNicknameBlur"');
+    expect(loginPage).not.toContain('@confirm="onNicknameBlur"');
+  });
+
+  it("does not accept manually typed nickname input as the locked nickname", () => {
+    const loginPage = readFileSync(loginPagePath, "utf8");
+
+    expect(loginPage).toContain("function onNicknameInput");
+    expect(loginPage).toContain("function onNicknameReview");
+    expect(loginPage).toContain("function onNicknameInput(): string");
+    expect(loginPage).toContain('return "";');
+    expect(loginPage).not.toContain("nicknameDraft.value = normalizeNickname(readInputEventValue(event));");
+    expect(loginPage).not.toContain("const nickname = normalizeNickname(readInputEventValue(event)) || nicknameDraft.value;");
+    expect(loginPage).toContain("请先选择昵称");
+  });
 });

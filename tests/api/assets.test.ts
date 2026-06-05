@@ -191,6 +191,76 @@ describe("asset workflow", () => {
     }
   });
 
+  it("filters public prop assets by principal and Dragon Ball metadata", async () => {
+    const assets = createInMemoryAssetsRepository();
+    const matching = await assets.createPending({
+      sellerId: "1",
+      ...validAssetPayload({
+        gameName: "塔防精灵",
+        assetType: "道具",
+        principalId: "2",
+        itemCategory: "龙珠",
+        dragonBall: { element: "冰", profession: "法师", quality: "绿", attributes: "附加伤害+1%" },
+        title: "目标法师绿龙珠"
+      })
+    });
+    const otherPrincipal = await assets.createPending({
+      sellerId: "1",
+      ...validAssetPayload({
+        gameName: "塔防精灵",
+        assetType: "道具",
+        principalId: "1",
+        itemCategory: "龙珠",
+        dragonBall: { element: "冰", profession: "法师", quality: "绿", attributes: "附加伤害+2%" },
+        title: "其他主理人绿龙珠"
+      })
+    });
+    const otherProfession = await assets.createPending({
+      sellerId: "1",
+      ...validAssetPayload({
+        gameName: "塔防精灵",
+        assetType: "道具",
+        principalId: "2",
+        itemCategory: "龙珠",
+        dragonBall: { element: "雷", profession: "猎人", quality: "绿", attributes: "附加伤害+3%" },
+        title: "猎人绿龙珠"
+      })
+    });
+    const otherQuality = await assets.createPending({
+      sellerId: "1",
+      ...validAssetPayload({
+        gameName: "塔防精灵",
+        assetType: "道具",
+        principalId: "2",
+        itemCategory: "龙珠",
+        dragonBall: { element: "冰", profession: "法师", quality: "红", attributes: "附加伤害+4%" },
+        title: "法师红龙珠"
+      })
+    });
+    await Promise.all([matching, otherPrincipal, otherProfession, otherQuality].map((asset) => assets.updateStatus(asset.id, "active")));
+    const app = buildApp({ enableMockAuth: true, assetsRepository: assets });
+
+    try {
+      const response = await app.inject({
+        method: "GET",
+        url:
+          "/api/assets?gameName=%E5%A1%94%E9%98%B2%E7%B2%BE%E7%81%B5&assetType=%E9%81%93%E5%85%B7&principalId=2&dragonBallProfession=%E6%B3%95%E5%B8%88&dragonBallQuality=%E7%BB%BF"
+      });
+
+      expect(response.statusCode).toBe(200);
+      expect(response.json().items).toEqual([
+        expect.objectContaining({
+          id: matching.id,
+          title: "目标法师绿龙珠",
+          principal: { id: "2", displayName: "备用主理人" },
+          dragonBall: expect.objectContaining({ profession: "法师", quality: "绿" })
+        })
+      ]);
+    } finally {
+      await app.close();
+    }
+  });
+
   it("includes principal summaries in the public asset list", async () => {
     const assets = createInMemoryAssetsRepository();
     const asset = await assets.createPending({

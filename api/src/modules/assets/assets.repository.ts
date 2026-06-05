@@ -53,6 +53,9 @@ export type SoldFollowupCandidateInput = {
 export type PublicAssetListInput = {
   gameName?: string;
   assetType?: string;
+  principalId?: string;
+  dragonBallProfession?: string;
+  dragonBallQuality?: string;
   keyword?: string;
   createdSince?: string;
   nowIso?: string;
@@ -76,6 +79,7 @@ export type PublicAssetListResult = {
 
 export type AssetsRepository = {
   createPending(input: CreateAssetInput): Promise<AuctionAsset>;
+  listImagesByAssetId(assetId: string): Promise<UploadedAssetImageInput[]>;
   countCreatedBySellerSince(sellerId: string, since: string): Promise<number>;
   countCreatedSince(since: string, input?: Pick<AdminAssetListInput, "principalId">): Promise<number>;
   countByStatus(status: AssetStatus, input?: Pick<AdminAssetListInput, "principalId">): Promise<number>;
@@ -185,6 +189,15 @@ function matchesPublicAssetFilter(asset: AuctionAsset, input: PublicAssetListInp
   if (assetTypes.length > 0 && !assetTypes.includes(asset.assetType)) {
     return false;
   }
+  if (input.principalId?.trim() && asset.principalId !== input.principalId.trim()) {
+    return false;
+  }
+  if (input.dragonBallProfession?.trim() && asset.dragonBall?.profession !== input.dragonBallProfession.trim()) {
+    return false;
+  }
+  if (input.dragonBallQuality?.trim() && asset.dragonBall?.quality !== input.dragonBallQuality.trim()) {
+    return false;
+  }
   const keyword = input.keyword?.trim().toLowerCase();
   if (keyword) {
     return [asset.title, asset.serverName, asset.description].some((value) => value.toLowerCase().includes(keyword));
@@ -194,11 +207,13 @@ function matchesPublicAssetFilter(asset: AuctionAsset, input: PublicAssetListInp
 
 export function createInMemoryAssetsRepository(): AssetsRepository {
   const assets = new Map<string, AuctionAsset>();
+  const assetImages = new Map<string, UploadedAssetImageInput[]>();
   let nextId = 1;
 
   return {
     async createPending(input) {
       const now = new Date().toISOString();
+      const images = (input.images ?? []).map((image) => ({ ...image }));
       const asset: AuctionAsset = {
         id: String(nextId++),
         sellerId: input.sellerId,
@@ -222,9 +237,13 @@ export function createInMemoryAssetsRepository(): AssetsRepository {
         createdAt: now,
         updatedAt: now
       };
-      asset.imageUrls = (input.images ?? []).map((image) => image.publicUrl);
+      asset.imageUrls = images.map((image) => image.publicUrl);
       assets.set(asset.id, cloneAsset(asset));
+      assetImages.set(asset.id, images);
       return cloneAsset(asset);
+    },
+    async listImagesByAssetId(assetId) {
+      return (assetImages.get(assetId) ?? []).map((image) => ({ ...image }));
     },
     async countCreatedBySellerSince(sellerId, since) {
       const sinceMs = new Date(since).getTime();

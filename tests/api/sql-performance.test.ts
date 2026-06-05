@@ -18,6 +18,7 @@ describe("SQL performance coverage", () => {
 
     expect(sql).toContain("idx_assets_active_end");
     expect(sql).toContain("idx_assets_public_filters");
+    expect(sql).toContain("idx_assets_public_dragon_filters");
     expect(sql).toContain("idx_assets_status_created");
     expect(sql).toContain("idx_assets_created");
     expect(sql).toContain("idx_assets_principal_created");
@@ -52,5 +53,14 @@ describe("SQL performance coverage", () => {
     expect(sql).not.toMatch(/buyer_contact_submitted_at\s+DATETIME NULL/);
     expect(sql).not.toMatch(/contact_notice_sent_at\s+DATETIME NULL/);
     expect(sql).not.toContain("ENUM('outbid','deal_contact_required')");
+  });
+
+  it("does not alter notification foreign key columns while removing contact reminders", () => {
+    const migration = readFileSync(join(migrationsDir.pathname, "016_remove_deal_followup_contact_info.sql"), "utf8");
+
+    expect(migration).toContain("DELETE FROM station_notifications WHERE type = 'deal_contact_required'");
+    expect(migration).toContain("MODIFY COLUMN type ENUM('outbid') NOT NULL");
+    expect(migration).not.toMatch(/MODIFY COLUMN\s+(bid_id|actor_user_id)\b/);
+    expect(migration).not.toMatch(/MODIFY COLUMN\s+amount_cents\b/);
   });
 });

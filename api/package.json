@@ -17,12 +17,12 @@
     "@fastify/jwt": "10.1.0",
     "fastify": "5.8.5",
     "mysql2": "3.22.3",
+    "tsx": "4.22.3",
     "ws": "8.20.1"
   },
   "devDependencies": {
     "@types/node": "25.9.1",
     "@types/ws": "8.18.1",
-    "tsx": "4.22.3",
     "typescript": "6.0.3",
     "vitest": "2.1.9"
   }

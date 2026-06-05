@@ -19,11 +19,13 @@
             <text class="nickname-selector-text">点击选择昵称</text>
             <input
               class="nickname-native-input"
+              name="nickname"
               type="nickname"
               :focus="nicknameInputFocused"
               :value="nicknameDraft"
-              @blur="onNicknameBlur"
-              @confirm="onNicknameBlur"
+              @blur="tryLockNicknameFromPicker"
+              @change="tryLockNicknameFromPicker"
+              @confirm="tryLockNicknameFromPicker"
               @input="onNicknameInput"
               @nicknamereview="onNicknameReview"
             />
@@ -106,27 +108,35 @@ function readInputEventValue(event: unknown): unknown {
   return undefined;
 }
 
-function onNicknameInput(event: unknown) {
-  nicknameDraft.value = normalizeNickname(readInputEventValue(event));
+function lockNickname(nickname: string) {
+  displayName.value = nickname;
+  nicknameDraft.value = nickname;
+  nicknameLocked.value = true;
+  nicknameInputFocused.value = false;
 }
 
-function onNicknameBlur(event: unknown) {
+function onNicknameInput(): string {
+  nicknameDraft.value = "";
+  return "";
+}
+
+function tryLockNicknameFromPicker(event: unknown) {
   nicknameInputFocused.value = false;
-  const nickname = normalizeNickname(readInputEventValue(event)) || nicknameDraft.value;
+  const nickname = normalizeNickname(readInputEventValue(event));
   if (nickname) {
-    displayName.value = nickname;
-    nicknameDraft.value = nickname;
-    nicknameLocked.value = true;
+    lockNickname(nickname);
+    return;
+  }
+
+  if (!nicknameLocked.value) {
+    nicknameDraft.value = "";
   }
 }
 
 function onNicknameReview(event: unknown) {
   const nickname = normalizeNickname(readInputEventValue(event));
   if (nickname) {
-    displayName.value = nickname;
-    nicknameDraft.value = nickname;
-    nicknameLocked.value = true;
-    nicknameInputFocused.value = false;
+    lockNickname(nickname);
   }
 }
 
@@ -159,8 +169,8 @@ function persistentAvatarUrl(): string | undefined {
 
 async function login() {
   const nickname = displayName.value.trim();
-  if (!nickname) {
-    uni.showToast({ title: "请先填写昵称", icon: "none" });
+  if (!nicknameLocked.value || !nickname) {
+    uni.showToast({ title: "请先选择昵称", icon: "none" });
     return;
   }
 

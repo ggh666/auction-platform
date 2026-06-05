@@ -2,16 +2,13 @@ import { useEffect, useMemo, useState, type FormEvent } from "react";
 import {
   dragonBallProfessionOptions,
   dragonBallQualityOptions,
+  type AdminAssetCopyDraft,
   type AuctionAsset,
   type PrincipalSummary
 } from "@auction/shared";
 import { adminGet, adminPost } from "../api/client";
 
-type UploadedAdminImage = {
-  objectKey: string;
-  publicUrl: string;
-  mimeType: string;
-  sizeBytes: number;
+type UploadedAdminImage = AdminAssetCopyDraft["images"][number] & {
   safetyStatus?: string;
   safetyTraceId?: string | null;
 };
@@ -43,6 +40,7 @@ type PublishFormState = {
 };
 
 type AssetPublishPageProps = {
+  copyDraft?: AdminAssetCopyDraft | null;
   onOpenAsset: (assetId: string) => void;
 };
 
@@ -93,6 +91,39 @@ function createEmptyPublishForm(defaultEndAt = defaultEndAtIso(), principalId = 
   };
 }
 
+function normalizeDraftAssetType(assetType: string): PublishFormState["assetType"] {
+  return assetType === "道具" || assetType === "装备" ? "道具" : "账号";
+}
+
+function centsToWholeYuanInput(cents: number): string {
+  return String(Math.floor(cents / 100));
+}
+
+function createPublishFormFromCopyDraft(
+  copyDraft: AdminAssetCopyDraft,
+  defaultEndAt: string,
+  fallbackPrincipalId: string
+): PublishFormState {
+  const assetType = normalizeDraftAssetType(copyDraft.assetType);
+  const dragonBall = copyDraft.dragonBall;
+  return {
+    principalId: copyDraft.principalId ?? fallbackPrincipalId,
+    gameName: copyDraft.gameName,
+    sellerGameId: copyDraft.sellerGameId,
+    serverName: copyDraft.serverName,
+    assetType,
+    itemCategory: assetType === "道具" && copyDraft.itemCategory === "龙珠" ? "龙珠" : "",
+    title: copyDraft.title,
+    description: copyDraft.description,
+    startingPriceYuan: centsToWholeYuanInput(copyDraft.startingPriceCents),
+    minIncrementYuan: centsToWholeYuanInput(copyDraft.minIncrementCents),
+    endAt: toDatetimeLocalValue(defaultEndAt),
+    dragonBallProfession: dragonBall?.profession ?? dragonBallProfessionOptions[0],
+    dragonBallQuality: dragonBall?.quality ?? dragonBallQualityOptions[3],
+    dragonBallAttributes: dragonBall?.attributes ?? "附加伤害+0%，无视冰甲+0%"
+  };
+}
+
 function wholeYuanInputToCents(value: string): number {
   const trimmed = value.trim();
   if (!/^\d+$/.test(trimmed)) {
@@ -120,11 +151,12 @@ function formatImageSize(bytes: number): string {
   return `${(bytes / 1024 / 1024).toFixed(1)} MB`;
 }
 
-export function AssetPublishPage({ onOpenAsset }: AssetPublishPageProps) {
+export function AssetPublishPage({ copyDraft = null, onOpenAsset }: AssetPublishPageProps) {
   const [publishContext, setPublishContext] = useState<AssetPublishContextResponse | null>(null);
   const [publishForm, setPublishForm] = useState<PublishFormState>(() => createEmptyPublishForm());
   const [publishImages, setPublishImages] = useState<UploadedAdminImage[]>([]);
   const [publishedAsset, setPublishedAsset] = useState<AuctionAsset | null>(null);
+  const [copySourceAssetId, setCopySourceAssetId] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
   const [imageUploading, setImageUploading] = useState(false);
@@ -143,8 +175,20 @@ export function AssetPublishPage({ onOpenAsset }: AssetPublishPageProps) {
       const context = await adminGet<AssetPublishContextResponse>("/admin/asset-publish-context");
       const principalId = context.principals[0]?.id ?? "";
       setPublishContext(context);
-      setPublishForm(createEmptyPublishForm(context.defaultEndAt, principalId));
-      setPublishImages([]);
+      if (copyDraft) {
+        const copyPrincipalId = context.principals.some((principal) => principal.id === copyDraft.principalId)
+          ? copyDraft.principalId
+          : principalId;
+        setPublishForm(createPublishFormFromCopyDraft({ ...copyDraft, principalId: copyPrincipalId }, context.defaultEndAt, principalId));
+        setPublishImages(copyDraft.images.map((image) => ({ ...image })));
+        setCopySourceAssetId(copyDraft.sourceAssetId);
+        setMessage(`已复制资产 ${copyDraft.sourceAssetId}，请确认截止时间后发布为新资产。`);
+      } else {
+        setPublishForm(createEmptyPublishForm(context.defaultEndAt, principalId));
+        setPublishImages([]);
+        setCopySourceAssetId(null);
+      }
+      setPublishedAsset(null);
     } catch (contextError) {
       setError(contextError instanceof Error ? contextError.message : "加载发布配置失败");
     } finally {
@@ -154,7 +198,7 @@ export function AssetPublishPage({ onOpenAsset }: AssetPublishPageProps) {
 
   useEffect(() => {
     void loadPublishContext();
-  }, []);
+  }, [copyDraft?.sourceAssetId]);
 
   function updatePublishForm<K extends keyof PublishFormState>(key: K, value: PublishFormState[K]) {
     setPublishForm((current) => {
@@ -203,6 +247,7 @@ export function AssetPublishPage({ onOpenAsset }: AssetPublishPageProps) {
     setPublishForm(createEmptyPublishForm(defaultEndAtIso(), principalId));
     setPublishImages([]);
     setPublishedAsset(null);
+    setCopySourceAssetId(null);
     setMessage(null);
     setError(null);
   }
@@ -244,6 +289,7 @@ export function AssetPublishPage({ onOpenAsset }: AssetPublishPageProps) {
       setMessage(`发布成功，资产编号 ${response.asset.id}`);
       setPublishForm(createEmptyPublishForm(defaultEndAtIso(), publishForm.principalId));
       setPublishImages([]);
+      setCopySourceAssetId(null);
     } catch (publishError) {
       setError(publishError instanceof Error ? publishError.message : "发布资产失败");
     } finally {
@@ -255,8 +301,8 @@ export function AssetPublishPage({ onOpenAsset }: AssetPublishPageProps) {
     <section className="page-section asset-publish-page">
       <div className="panel publish-page-heading">
         <div>
-          <h3>发布资产</h3>
-          <p>主理人受控发布，发布后直接进入前台交换列表。</p>
+          <h3>{copySourceAssetId ? "复制资产" : "发布资产"}</h3>
+          <p>{copySourceAssetId ? `已复制资产 ${copySourceAssetId}，可编辑后发布为新资产。` : "主理人受控发布，发布后直接进入前台交换列表。"}</p>
         </div>
         <div className="inline-actions">
           <button disabled={loading || submitting} onClick={() => void loadPublishContext()} type="button">

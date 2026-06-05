@@ -1017,6 +1017,29 @@ button:disabled {
   overflow-wrap: anywhere;
 }
 
+.deadline-form {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 8px;
+  align-items: center;
+}
+
+.deadline-form input {
+  width: 100%;
+  min-width: 0;
+  border: 1px solid #d8e0ec;
+  border-radius: 7px;
+  padding: 8px 9px;
+  background: #fff;
+  color: #18202f;
+}
+
+.deadline-form button {
+  min-height: 36px;
+  padding-inline: 10px;
+  white-space: nowrap;
+}
+
 .detail-section p {
   margin: 0;
   color: #27334a;

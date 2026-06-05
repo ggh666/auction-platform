@@ -3,10 +3,7 @@
 DELETE FROM station_notifications WHERE type = 'deal_contact_required';
 
 ALTER TABLE station_notifications
-  MODIFY COLUMN type ENUM('outbid') NOT NULL,
-  MODIFY COLUMN bid_id BIGINT UNSIGNED NOT NULL,
-  MODIFY COLUMN actor_user_id BIGINT UNSIGNED NOT NULL,
-  MODIFY COLUMN amount_cents BIGINT UNSIGNED NOT NULL;
+  MODIFY COLUMN type ENUM('outbid') NOT NULL;
 
 SET @buyer_contact_game_exists := (
   SELECT COUNT(*)

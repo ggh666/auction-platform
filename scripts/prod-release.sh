@@ -37,6 +37,18 @@ required_release_files=(
   "api/src/modules/contentSafety/wechatMediaProxy.ts"
   "api/src/modules/contentSafety/wechatMediaProxy.routes.ts"
   "api/src/scripts/retryFailedImageChecks.ts"
+  "api/src/db/migrations/017_public_asset_dragon_filters_index.sql"
+  "api/src/modules/assets/assets.routes.ts"
+  "api/src/modules/assets/assets.repository.ts"
+  "api/src/modules/assets/assets.mysql.repository.ts"
+  "api/src/modules/admin/admin.routes.ts"
+  "shared/src/api-contracts.ts"
+  "miniapp/api/client.ts"
+  "miniapp/pages/auctions/list.vue"
+  "admin/src/App.tsx"
+  "admin/src/pages/AssetDataPage.tsx"
+  "admin/src/pages/AssetPublishPage.tsx"
+  "admin/src/pages/AssetDetailPage.tsx"
   "scripts/prod-release.sh"
 )
 
@@ -51,6 +63,30 @@ required_release_markers=(
   "api/src/scripts/retryFailedImageChecks.ts::manual_wechat_media_download_retry"
   "api/src/scripts/retryFailedImageChecks.ts::wechatMediaCheckUrlForImageCheck"
   "api/src/scripts/retryFailedImageChecks.ts::mediaCheckDetailForImageCheck"
+  "api/src/db/migrations/017_public_asset_dragon_filters_index.sql::idx_assets_public_dragon_filters"
+  "api/src/modules/assets/assets.routes.ts::dragonBallProfessionQuery"
+  "api/src/modules/assets/assets.routes.ts::principalId: principalIdQuery"
+  "api/src/modules/assets/assets.mysql.repository.ts::dragon_ball_profession = ?"
+  "api/src/modules/assets/assets.repository.ts::dragonBallQuality"
+  "miniapp/api/client.ts::listPrincipals"
+  "miniapp/pages/auctions/list.vue::filter-panel"
+  "miniapp/pages/auctions/list.vue::筛选主理人"
+  "miniapp/pages/auctions/list.vue::dragonBallProfession"
+  "api/src/modules/admin/admin.routes.ts::/admin/assets/:assetId/copy-draft"
+  "api/src/modules/admin/admin.routes.ts::/admin/assets/:assetId/end-time"
+  "shared/src/api-contracts.ts::AdminAssetCopyDraft"
+  "admin/src/App.tsx::copy-draft"
+  "admin/src/pages/AssetDataPage.tsx::onCopyAsset"
+  "admin/src/pages/AssetDataPage.tsx::复制中"
+  "admin/src/pages/AssetPublishPage.tsx::copyDraft"
+  "admin/src/pages/AssetPublishPage.tsx::复制资产"
+  "admin/src/pages/AssetDetailPage.tsx::修改截止时间"
+)
+
+admin_static_markers=(
+  "copy-draft"
+  "复制资产"
+  "修改截止时间"
 )
 
 usage() {
@@ -137,6 +173,23 @@ run_admin_build() {
     return 0
   fi
   (cd "$APP_DIR" && VITE_API_BASE="$ADMIN_API_BASE" npm run build --workspace @auction/admin)
+}
+
+verify_admin_static_contents() {
+  log "Verifying deployed admin static assets: $ADMIN_WEB_DIR"
+  if [ "$DRY_RUN" = true ]; then
+    return 0
+  fi
+
+  local marker
+  for marker in "${admin_static_markers[@]}"; do
+    grep -R -q -- "$marker" "$ADMIN_WEB_DIR" || die "Admin static deployment is missing marker '$marker' in $ADMIN_WEB_DIR"
+  done
+}
+
+verify_admin_static_or_fail() {
+  log "DEPLOY_ADMIN=false; verifying existing admin static deployment before skipping rebuild."
+  verify_admin_static_contents
 }
 
 require_command() {
@@ -378,6 +431,30 @@ install_and_verify() {
   run_in_staging npm test
 }
 
+verify_api_runtime_executable() {
+  local root_dir="$1"
+  local tsx_bin="$root_dir/node_modules/.bin/tsx"
+  local tsx_cli="$root_dir/node_modules/tsx/dist/cli.mjs"
+
+  if [ "$DRY_RUN" = true ]; then
+    log "Would verify API runtime executable in $root_dir"
+    return 0
+  fi
+
+  [ -x "$tsx_bin" ] || die "API runtime executable is missing or not executable: $tsx_bin"
+  [ -f "$tsx_cli" ] || die "API runtime tsx CLI is missing: $tsx_cli"
+  command -v node >/dev/null 2>&1 || die "node is not available in the release shell PATH"
+
+  run_in_dir "$root_dir" node "$tsx_cli" --version
+
+  if id "$SERVICE_USER" >/dev/null 2>&1 && command -v runuser >/dev/null 2>&1; then
+    log "+ runuser -u $SERVICE_USER -- env -i PATH=/usr/local/bin:/usr/bin:/bin HOME=/var/lib/$SERVICE_USER $tsx_bin --version"
+    (cd "$root_dir" && runuser -u "$SERVICE_USER" -- env -i PATH=/usr/local/bin:/usr/bin:/bin HOME="/var/lib/$SERVICE_USER" "$tsx_bin" --version)
+  else
+    log "Skipping service-user executable preflight; runuser or service user is unavailable."
+  fi
+}
+
 run_migrations() {
   if [ -n "$MIGRATION_COMMAND" ]; then
     run_shell "$MIGRATION_COMMAND"
@@ -453,6 +530,7 @@ deploy_admin() {
 
   run mkdir -p "$ADMIN_WEB_DIR"
   run cp -a "$APP_DIR/admin/dist/." "$ADMIN_WEB_DIR/"
+  verify_admin_static_contents
 }
 
 rollback() {
@@ -528,6 +606,7 @@ main() {
   prepare_release
   install_and_verify
   fix_permissions "$staging_app_dir"
+  verify_api_runtime_executable "$staging_app_dir"
   switch_release
   verify_active_release_contents
   run_migrations
@@ -536,7 +615,7 @@ main() {
   if [ "$DEPLOY_ADMIN" = "true" ]; then
     deploy_admin
   else
-    log "DEPLOY_ADMIN=false; skipping admin build and static deployment."
+    verify_admin_static_or_fail
   fi
 
   log "Production release completed."

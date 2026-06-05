@@ -8,6 +8,7 @@ import type {
   NotificationListResponse,
   PlaceBidRequest,
   PlaceBidResponse,
+  PrincipalListResponse,
   ProfileResultsResponse,
   UserSummary,
   WechatLoginRequest
@@ -148,6 +149,9 @@ export function markAllNotificationsRead(): Promise<NotificationBulkActionRespon
 export type AssetListQuery = {
   gameName?: string;
   assetType?: string;
+  principalId?: string;
+  dragonBallProfession?: string;
+  dragonBallQuality?: string;
   keyword?: string;
   page?: number;
   pageSize?: number;
@@ -168,6 +172,10 @@ function queryString(input: Record<string, string | number | undefined>): string
 
 export function listAssets(query: AssetListQuery = {}): Promise<AssetListResponse> {
   return request<AssetListResponse>(`/api/assets${queryString(query)}`);
+}
+
+export function listPrincipals(): Promise<PrincipalListResponse> {
+  return request<PrincipalListResponse>("/api/principals");
 }
 
 export function listFollowedAssets(query: Pick<AssetListQuery, "page" | "pageSize"> = {}): Promise<AssetListResponse> {

@@ -10,7 +10,8 @@ import {
   type AssetsRepository,
   type CreateAssetInput,
   type PublicAssetListInput,
-  type SoldFollowupCandidateInput
+  type SoldFollowupCandidateInput,
+  type UploadedAssetImageInput
 } from "./assets.repository";
 
 export type AssetDbRow = {
@@ -179,6 +180,23 @@ export function createMysqlAssetsRepository(db: MysqlExecutor): AssetsRepository
       where.push("asset_type = ?");
       params.push(assetType);
     }
+    if (input.principalId?.trim()) {
+      where.push("principal_id = ?");
+      params.push(Number(input.principalId.trim()));
+    }
+    const dragonBallProfession = input.dragonBallProfession?.trim();
+    const dragonBallQuality = input.dragonBallQuality?.trim();
+    if (dragonBallProfession || dragonBallQuality) {
+      where.push("item_category = '龙珠'");
+    }
+    if (dragonBallProfession) {
+      where.push("dragon_ball_profession = ?");
+      params.push(dragonBallProfession);
+    }
+    if (dragonBallQuality) {
+      where.push("dragon_ball_quality = ?");
+      params.push(dragonBallQuality);
+    }
     const keyword = input.keyword?.trim();
     if (keyword) {
       where.push("(title LIKE ? OR server_name LIKE ? OR description LIKE ?)");
@@ -225,14 +243,23 @@ export function createMysqlAssetsRepository(db: MysqlExecutor): AssetsRepository
   }
 
   async function readImageUrls(assetId: string): Promise<string[]> {
-    const [rows] = await db.execute<Array<{ public_url: string }>>(
-      `SELECT public_url
+    return (await readImageInputs(assetId)).map((image) => image.publicUrl);
+  }
+
+  async function readImageInputs(assetId: string): Promise<UploadedAssetImageInput[]> {
+    const [rows] = await db.execute<Array<{ object_key: string; public_url: string; mime_type: string; size_bytes: number | string }>>(
+      `SELECT object_key, public_url, mime_type, size_bytes
        FROM asset_images
        WHERE asset_id = ?
        ORDER BY sort_order ASC, id ASC`,
       [Number(assetId)]
     );
-    return allRows<{ public_url: string }>(rows).map((row) => row.public_url);
+    return allRows<{ object_key: string; public_url: string; mime_type: string; size_bytes: number | string }>(rows).map((row) => ({
+      objectKey: row.object_key,
+      publicUrl: row.public_url,
+      mimeType: row.mime_type,
+      sizeBytes: Number(row.size_bytes)
+    }));
   }
 
   return {
@@ -303,6 +330,10 @@ export function createMysqlAssetsRepository(db: MysqlExecutor): AssetsRepository
         throw new Error("Created asset could not be read");
       }
       return asset;
+    },
+
+    async listImagesByAssetId(assetId) {
+      return readImageInputs(assetId);
     },
 
     async countCreatedBySellerSince(sellerId, since) {

@@ -67,4 +67,50 @@ describe("miniapp realtime helpers", () => {
     onMessage?.({ data: JSON.stringify({ type: "auction_extended", asset: { id: "42" } }) });
     expect(events).toEqual([{ type: "auction_extended" }]);
   });
+
+  it("registers optional websocket lifecycle handlers", () => {
+    let onOpen: (() => void) | null = null;
+    let onClose: (() => void) | null = null;
+    let onError: (() => void) | null = null;
+    const lifecycleEvents: string[] = [];
+
+    const socket = connectAuctionSocket({
+      apiBase: "https://api-auction.toolmatrix.top",
+      assetId: "42",
+      connectSocket() {
+        return {
+          onMessage() {
+            // no-op
+          },
+          onOpen(handler) {
+            onOpen = handler;
+          },
+          onClose(handler) {
+            onClose = handler;
+          },
+          onError(handler) {
+            onError = handler;
+          }
+        };
+      },
+      onEvent() {
+        throw new Error("should not receive events");
+      },
+      onOpen() {
+        lifecycleEvents.push("open");
+      },
+      onClose() {
+        lifecycleEvents.push("close");
+      },
+      onError() {
+        lifecycleEvents.push("error");
+      }
+    });
+
+    expect(socket).not.toBeNull();
+    onOpen?.();
+    onError?.();
+    onClose?.();
+    expect(lifecycleEvents).toEqual(["open", "error", "close"]);
+  });
 });

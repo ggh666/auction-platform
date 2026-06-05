@@ -17,6 +17,9 @@ export type AuctionSocketMessage = {
 
 export type AuctionSocketTask = {
   close?: (options?: object) => void;
+  onClose?: (handler: () => void) => void;
+  onError?: (handler: () => void) => void;
+  onOpen?: (handler: () => void) => void;
   onMessage?: (handler: (message: AuctionSocketMessage) => void) => void;
 };
 
@@ -25,6 +28,9 @@ type ConnectAuctionSocketInput = {
   assetId: string;
   connectSocket: (input: { url: string }) => AuctionSocketTask | null | undefined;
   onEvent: (event: AuctionWsEvent) => void;
+  onClose?: () => void;
+  onError?: () => void;
+  onOpen?: () => void;
 };
 
 export function connectAuctionSocket(input: ConnectAuctionSocketInput): AuctionSocketTask | null {
@@ -45,6 +51,15 @@ export function connectAuctionSocket(input: ConnectAuctionSocketInput): AuctionS
     return null;
   }
 
+  socket.onOpen?.(() => {
+    input.onOpen?.();
+  });
+  socket.onClose?.(() => {
+    input.onClose?.();
+  });
+  socket.onError?.(() => {
+    input.onError?.();
+  });
   socket.onMessage((message) => {
     if (typeof message.data !== "string") {
       return;

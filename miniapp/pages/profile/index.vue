@@ -124,7 +124,8 @@ function logout() {
 
 <style scoped>
 .page {
-  padding: 24rpx;
+  box-sizing: border-box;
+  padding: 24rpx 24rpx calc(180rpx + env(safe-area-inset-bottom));
 }
 
 .page-header {

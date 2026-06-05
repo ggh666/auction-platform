@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useState, type FormEvent } from "react";
 import {
   centsToYuanText,
   type AdminBidRevokeAndRestrictResponse,
@@ -54,6 +54,25 @@ function formatTime(value: string): string {
   }).format(new Date(value));
 }
 
+function padTimePart(value: number): string {
+  return String(value).padStart(2, "0");
+}
+
+function toDatetimeLocalValue(value: string): string {
+  const date = new Date(value);
+  if (!Number.isFinite(date.getTime())) {
+    return "";
+  }
+  return `${date.getFullYear()}-${padTimePart(date.getMonth() + 1)}-${padTimePart(date.getDate())}T${padTimePart(
+    date.getHours()
+  )}:${padTimePart(date.getMinutes())}`;
+}
+
+function datetimeLocalToIso(value: string): string | null {
+  const date = new Date(value);
+  return Number.isFinite(date.getTime()) ? date.toISOString() : null;
+}
+
 function bidRestrictionText(user: UserSummary): string | null {
   if (user.bidRestrictionPermanent) {
     return "永久限制";
@@ -89,6 +108,10 @@ function renderStatus(asset: AuctionAsset) {
   const status = asset.status;
   const meta = statusMeta[status];
   return <span className={`status ${meta.tone}`}>{meta.label}</span>;
+}
+
+function canEditDeadline(asset: AuctionAsset): boolean {
+  return asset.status === "active" || asset.status === "pending_review" || asset.status === "draft";
 }
 
 function usableImageUrls(asset: AuctionAsset): string[] {
@@ -136,6 +159,8 @@ export function AssetDetailPage({ assetId, onBack }: AssetDetailPageProps) {
   const [recentBids, setRecentBids] = useState<BidDisplayRecord[]>([]);
   const [loading, setLoading] = useState(true);
   const [deductingCredit, setDeductingCredit] = useState(false);
+  const [updatingDeadline, setUpdatingDeadline] = useState(false);
+  const [deadlineForm, setDeadlineForm] = useState("");
   const [actingBidId, setActingBidId] = useState<string | null>(null);
   const [releasingBidderId, setReleasingBidderId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -152,12 +177,14 @@ export function AssetDetailPage({ assetId, onBack }: AssetDetailPageProps) {
       setPrincipal(response.principal);
       setImageSafetyChecks(response.imageSafetyChecks);
       setRecentBids(response.recentBids);
+      setDeadlineForm(toDatetimeLocalValue(response.asset.effectiveEndAt));
     } catch (loadError) {
       setAsset(null);
       setSeller(null);
       setPrincipal(null);
       setImageSafetyChecks([]);
       setRecentBids([]);
+      setDeadlineForm("");
       setError(loadError instanceof Error ? loadError.message : "加载资产详情失败");
     } finally {
       setLoading(false);
@@ -169,6 +196,32 @@ export function AssetDetailPage({ assetId, onBack }: AssetDetailPageProps) {
   }, [assetId]);
 
   const images = asset ? usableImageUrls(asset) : [];
+
+  async function updateDeadline(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    if (!asset) {
+      return;
+    }
+    const endAt = datetimeLocalToIso(deadlineForm);
+    if (!endAt) {
+      setError("请选择有效截止时间");
+      return;
+    }
+
+    setUpdatingDeadline(true);
+    setError(null);
+    setNotice(null);
+    try {
+      const response = await adminPost<{ asset: AuctionAsset }>(`/admin/assets/${asset.id}/end-time`, { endAt });
+      setAsset(response.asset);
+      setDeadlineForm(toDatetimeLocalValue(response.asset.effectiveEndAt));
+      setNotice("已修改资产截止时间");
+    } catch (deadlineError) {
+      setError(deadlineError instanceof Error ? deadlineError.message : "修改截止时间失败");
+    } finally {
+      setUpdatingDeadline(false);
+    }
+  }
 
   async function deductCredit() {
     if (!asset) {
@@ -344,6 +397,23 @@ export function AssetDetailPage({ assetId, onBack }: AssetDetailPageProps) {
               <div>
                 <span>截止时间</span>
                 <strong>{formatTime(asset.effectiveEndAt)}</strong>
+                {canEditDeadline(asset) ? (
+                  <form className="deadline-form" onSubmit={updateDeadline}>
+                    <input
+                      aria-label="修改截止时间"
+                      disabled={updatingDeadline}
+                      onChange={(event) => setDeadlineForm(event.target.value)}
+                      required
+                      type="datetime-local"
+                      value={deadlineForm}
+                    />
+                    <button disabled={updatingDeadline} type="submit">
+                      {updatingDeadline ? "保存中" : "修改截止时间"}
+                    </button>
+                  </form>
+                ) : (
+                  <span className="muted">当前状态不可修改</span>
+                )}
               </div>
               <div>
                 <span>创建时间</span>

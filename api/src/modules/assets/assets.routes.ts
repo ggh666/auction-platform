@@ -1,4 +1,5 @@
 import type { FastifyInstance } from "fastify";
+import { isDragonBallProfession, isDragonBallQuality } from "@auction/shared";
 import { readOptionalUserId, requireActiveUser, requireUser } from "../../http/auth";
 import { HttpError, badRequest, gone, notFound } from "../../http/errors";
 import type { AssetFollowsRepository } from "../assetFollows/assetFollows.repository";
@@ -20,6 +21,9 @@ const CHINA_TIME_OFFSET_MS = 8 * 60 * 60 * 1000;
 type AssetListQuery = {
   gameName?: unknown;
   assetType?: unknown;
+  principalId?: unknown;
+  dragonBallProfession?: unknown;
+  dragonBallQuality?: unknown;
   keyword?: unknown;
   page?: unknown;
   pageSize?: unknown;
@@ -28,6 +32,39 @@ type AssetListQuery = {
 
 function stringQuery(value: unknown): string | undefined {
   return typeof value === "string" && value.trim() ? value.trim() : undefined;
+}
+
+function principalIdQuery(value: unknown): string | undefined {
+  const raw = stringQuery(value);
+  if (!raw) {
+    return undefined;
+  }
+  if (!/^\d+$/.test(raw) || !Number.isSafeInteger(Number(raw)) || Number(raw) <= 0) {
+    throw badRequest("invalid_principal_filter", "principalId filter is invalid");
+  }
+  return raw;
+}
+
+function dragonBallProfessionQuery(value: unknown): string | undefined {
+  const raw = stringQuery(value);
+  if (!raw) {
+    return undefined;
+  }
+  if (!isDragonBallProfession(raw)) {
+    throw badRequest("invalid_dragon_ball_profession", "Dragon Ball profession filter is invalid");
+  }
+  return raw;
+}
+
+function dragonBallQualityQuery(value: unknown): string | undefined {
+  const raw = stringQuery(value);
+  if (!raw) {
+    return undefined;
+  }
+  if (!isDragonBallQuality(raw)) {
+    throw badRequest("invalid_dragon_ball_quality", "Dragon Ball quality filter is invalid");
+  }
+  return raw;
 }
 
 function numberQuery(value: unknown, fallback: number, max: number): number {
@@ -154,6 +191,9 @@ export function registerAssetRoutes(
     const result = await service.listActive({
       gameName: stringQuery(request.query.gameName),
       assetType: stringQuery(request.query.assetType),
+      principalId: principalIdQuery(request.query.principalId),
+      dragonBallProfession: dragonBallProfessionQuery(request.query.dragonBallProfession),
+      dragonBallQuality: dragonBallQualityQuery(request.query.dragonBallQuality),
       keyword,
       createdSince: daysAgoIso(createdWithinDays),
       page,

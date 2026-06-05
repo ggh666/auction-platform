@@ -1,6 +1,7 @@
 import type {
   AdminAccountActionResponse,
   AdminAccountSummary,
+  AdminAssetCopyDraftResponse,
   AdminImageSafetyCheck,
   AdminAssetDetailResponse,
   AdminAssetListResponse,
@@ -84,6 +85,9 @@ type AdminPublishAssetBody = {
   minIncrementCents?: unknown;
   endAt?: unknown;
   images?: unknown;
+};
+type AdminAssetEndTimeBody = {
+  endAt?: unknown;
 };
 
 type AdminBatchAssetReviewAction = "approve" | "reject";
@@ -182,6 +186,17 @@ function readAdminAssetEndAt(value: unknown): string {
     throw badRequest("invalid_asset_end_at", "Asset end time must be a valid future ISO time");
   }
   return endAtIso;
+}
+
+function readRequiredAdminAssetEndAt(value: unknown): string {
+  if (typeof value !== "string" || !value.trim()) {
+    throw badRequest("invalid_asset_end_at", "Asset end time is required");
+  }
+  return readAdminAssetEndAt(value);
+}
+
+function canUpdateAssetEndTime(asset: AuctionAsset): boolean {
+  return asset.status === "active" || asset.status === "pending_review" || asset.status === "draft";
 }
 
 function readSellerGameId(value: unknown): string {
@@ -324,6 +339,26 @@ async function attachSellerSummaries(
 
 async function readAssetImageSafetyChecks(asset: AuctionAsset, imageSafety: ImageSafetyRepository): Promise<AdminImageSafetyCheck[]> {
   return (await attachImageSafetyChecks([asset], imageSafety))[0]?.imageSafetyChecks ?? [];
+}
+
+async function buildAssetCopyDraft(asset: AuctionAsset, assets: AssetsRepository): Promise<AdminAssetCopyDraftResponse> {
+  return {
+    draft: {
+      sourceAssetId: asset.id,
+      principalId: asset.principalId,
+      gameName: asset.gameName,
+      sellerGameId: asset.sellerGameId ?? "",
+      serverName: asset.serverName,
+      assetType: asset.assetType,
+      itemCategory: asset.itemCategory ?? null,
+      dragonBall: asset.dragonBall ? { ...asset.dragonBall } : null,
+      title: asset.title,
+      description: asset.description,
+      startingPriceCents: asset.startingPriceCents,
+      minIncrementCents: asset.minIncrementCents,
+      images: await assets.listImagesByAssetId(asset.id)
+    }
+  };
 }
 
 function readPrincipalBody(value: AdminPrincipalBody | undefined) {
@@ -806,6 +841,22 @@ export function registerAdminRoutes(
     };
   });
 
+  app.get<{ Params: { assetId: string }; Reply: AdminAssetCopyDraftResponse }>(
+    "/admin/assets/:assetId/copy-draft",
+    { preHandler: requireAdmin("asset:create", admins) },
+    async (request) => {
+      const scope = await readAdminDataScope(request, principals);
+      if (!scope) {
+        throw badRequest("invalid_asset_principal", "Active principal is required");
+      }
+      const asset = await assets.findById(request.params.assetId, scope);
+      if (!asset) {
+        throw new HttpError(404, "not_found", "Asset not found");
+      }
+      return buildAssetCopyDraft(asset, assets);
+    }
+  );
+
   app.post<{ Body: unknown }>("/admin/images", { preHandler: requireAdmin("asset:create", admins) }, async (request) => {
     if (!isRecord(request.body)) {
       throw badRequest("invalid_image", "Image payload is invalid");
@@ -899,6 +950,25 @@ export function registerAdminRoutes(
     });
     return { asset };
   });
+
+  app.post<{ Params: { assetId: string }; Body: AdminAssetEndTimeBody }>(
+    "/admin/assets/:assetId/end-time",
+    { preHandler: requireAdmin("asset:create", admins) },
+    async (request) => {
+      if (!request.admin) {
+        throw new HttpError(401, "unauthorized", "Authentication required");
+      }
+      if (!isRecord(request.body)) {
+        throw badRequest("invalid_asset_end_at", "Asset end time payload is invalid");
+      }
+      const scope = await readAdminDataScope(request, principals);
+      if (!scope) {
+        throw badRequest("invalid_asset_principal", "Active principal is required");
+      }
+      const endAt = readRequiredAdminAssetEndAt(request.body.endAt);
+      return { asset: await updateAssetEndTime(request.params.assetId, request.admin.id, scope, endAt) };
+    }
+  );
 
   app.get<{ Querystring: AdminAssetQuery }>(
     "/admin/assets/export",
@@ -1154,6 +1224,41 @@ export function registerAdminRoutes(
       await assets.save({ ...asset, status: "pending_review" });
       throw error;
     }
+    return asset;
+  }
+
+  async function updateAssetEndTime(assetId: string, adminId: number, scope: AdminDataScope, endAt: string) {
+    const original = await assets.findById(assetId, scope);
+    if (!original) {
+      throw new HttpError(404, "not_found", "Asset not found");
+    }
+    if (!canUpdateAssetEndTime(original)) {
+      throw badRequest("invalid_asset_state", "Only unfinished assets can update end time");
+    }
+
+    const asset = await assets.save({
+      ...original,
+      originalEndAt: endAt,
+      effectiveEndAt: endAt
+    });
+
+    try {
+      await admins.logOperation({
+        adminId,
+        action: "asset.end_time_update",
+        targetType: "asset",
+        targetId: asset.id,
+        detail: {
+          previousOriginalEndAt: original.originalEndAt,
+          previousEffectiveEndAt: original.effectiveEndAt,
+          endAt
+        }
+      });
+    } catch (error) {
+      await assets.save(original);
+      throw error;
+    }
+
     return asset;
   }
 

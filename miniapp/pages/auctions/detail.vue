@@ -97,6 +97,7 @@ import { confirmTradingDisclaimer } from "../../utils/disclaimer";
 import { connectAuctionSocket, type AuctionSocketTask } from "../../utils/realtime";
 import { buildAssetDetailShare, toTimelineShare } from "../../utils/share";
 import { requestBidRelatedSubscriptions } from "../../utils/subscribeMessage";
+import { isBidRestrictedError } from "../../utils/userActionErrors";
 
 const submitting = ref(false);
 const loading = ref(false);
@@ -105,8 +106,16 @@ const detail = ref<AssetDetailResponse | null>(null);
 const bidAmountYuan = ref("");
 const bidCommitmentAccepted = ref(false);
 const now = ref(new Date());
+const realtimeReconnectDelaysMs = [3000, 5000, 10000, 20000] as const;
+const realtimeFallbackRefreshIntervalMs = 20000;
+const realtimeFallbackAfterFailures = 2;
 let nowTimer: ReturnType<typeof setInterval> | null = null;
 let auctionSocket: AuctionSocketTask | null = null;
+let realtimeReconnectTimer: ReturnType<typeof setTimeout> | null = null;
+let realtimeFallbackRefreshTimer: ReturnType<typeof setInterval> | null = null;
+let realtimeReconnectAttempts = 0;
+let realtimeSocketGeneration = 0;
+let realtimeActive = false;
 
 type LoadDetailOptions = {
   silent?: boolean;
@@ -202,15 +211,79 @@ function onCommitmentChange(event: { detail?: { value?: unknown } }) {
   bidCommitmentAccepted.value = Array.isArray(value) && value.includes("accepted");
 }
 
-function closeAuctionRealtime() {
+function clearRealtimeReconnectTimer() {
+  if (realtimeReconnectTimer !== null) {
+    clearTimeout(realtimeReconnectTimer);
+    realtimeReconnectTimer = null;
+  }
+}
+
+function stopRealtimeFallbackRefresh() {
+  if (realtimeFallbackRefreshTimer !== null) {
+    clearInterval(realtimeFallbackRefreshTimer);
+    realtimeFallbackRefreshTimer = null;
+  }
+}
+
+function startRealtimeFallbackRefresh() {
+  if (realtimeFallbackRefreshTimer !== null || !assetId.value) {
+    return;
+  }
+
+  realtimeFallbackRefreshTimer = setInterval(() => {
+    void loadDetail({ silent: true });
+  }, realtimeFallbackRefreshIntervalMs);
+}
+
+function closeCurrentAuctionSocket() {
   if (auctionSocket) {
     auctionSocket.close?.({});
     auctionSocket = null;
   }
 }
 
+function closeAuctionRealtime() {
+  realtimeActive = false;
+  realtimeSocketGeneration += 1;
+  realtimeReconnectAttempts = 0;
+  clearRealtimeReconnectTimer();
+  stopRealtimeFallbackRefresh();
+  closeCurrentAuctionSocket();
+}
+
+function handleAuctionRealtimeOpen() {
+  realtimeReconnectAttempts = 0;
+  clearRealtimeReconnectTimer();
+  stopRealtimeFallbackRefresh();
+}
+
+function scheduleAuctionRealtimeReconnect() {
+  if (!realtimeActive || !assetId.value || realtimeReconnectTimer !== null) {
+    return;
+  }
+
+  const reconnectDelayMs =
+    realtimeReconnectDelaysMs[Math.min(realtimeReconnectAttempts, realtimeReconnectDelaysMs.length - 1)] ??
+    realtimeReconnectDelaysMs[realtimeReconnectDelaysMs.length - 1];
+  realtimeReconnectAttempts += 1;
+  if (realtimeReconnectAttempts >= realtimeFallbackAfterFailures) {
+    startRealtimeFallbackRefresh();
+  }
+
+  realtimeReconnectTimer = setTimeout(() => {
+    realtimeReconnectTimer = null;
+    if (realtimeActive) {
+      connectAuctionRealtime();
+    }
+  }, reconnectDelayMs);
+}
+
 function connectAuctionRealtime() {
-  closeAuctionRealtime();
+  realtimeActive = true;
+  clearRealtimeReconnectTimer();
+  const socketGeneration = realtimeSocketGeneration + 1;
+  realtimeSocketGeneration = socketGeneration;
+  closeCurrentAuctionSocket();
   if (!assetId.value) {
     return;
   }
@@ -223,8 +296,27 @@ function connectAuctionRealtime() {
     },
     onEvent(event) {
       applyAuctionEvent(event);
+    },
+    onOpen() {
+      if (socketGeneration === realtimeSocketGeneration) {
+        handleAuctionRealtimeOpen();
+      }
+    },
+    onClose() {
+      if (socketGeneration === realtimeSocketGeneration) {
+        auctionSocket = null;
+        scheduleAuctionRealtimeReconnect();
+      }
+    },
+    onError() {
+      if (socketGeneration === realtimeSocketGeneration) {
+        scheduleAuctionRealtimeReconnect();
+      }
     }
   });
+  if (!auctionSocket) {
+    scheduleAuctionRealtimeReconnect();
+  }
 }
 
 function prependRecentBid(bid: BidDisplayRecord) {
@@ -336,10 +428,25 @@ async function submitBid() {
     }
     uni.showToast({ title: "出价已提交", icon: "none" });
   } catch (error) {
-    uni.showToast({ title: bidFailureMessage(error, requiredBidCentsForDetail()), icon: "none" });
+    showBidFailure(error, requiredBidCentsForDetail());
   } finally {
     submitting.value = false;
   }
+}
+
+function showBidFailure(error: unknown, requiredCents: number) {
+  const message = bidFailureMessage(error, requiredCents);
+  if (isBidRestrictedError(error)) {
+    uni.showModal({
+      title: "出价受限",
+      content: message,
+      showCancel: false,
+      confirmText: "知道了"
+    });
+    return;
+  }
+
+  uni.showToast({ title: message, icon: "none" });
 }
 
 function formatPrice(cents: number) {

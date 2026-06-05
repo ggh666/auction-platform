@@ -118,6 +118,33 @@ export type AdminAssetDetailResponse = {
   recentBids: BidDisplayRecord[];
 };
 
+export type AdminAssetCopyDraftImage = {
+  objectKey: string;
+  publicUrl: string;
+  mimeType: string;
+  sizeBytes: number;
+};
+
+export type AdminAssetCopyDraft = {
+  sourceAssetId: string;
+  principalId: string | null;
+  gameName: string;
+  sellerGameId: string;
+  serverName: string;
+  assetType: string;
+  itemCategory: string | null;
+  dragonBall: AuctionAsset["dragonBall"];
+  title: string;
+  description: string;
+  startingPriceCents: number;
+  minIncrementCents: number;
+  images: AdminAssetCopyDraftImage[];
+};
+
+export type AdminAssetCopyDraftResponse = {
+  draft: AdminAssetCopyDraft;
+};
+
 export type BidRestrictionDuration = "30m" | "1d" | "permanent";
 
 export type AdminBidRestrictionRequest = {

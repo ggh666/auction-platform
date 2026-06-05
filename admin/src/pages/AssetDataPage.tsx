@@ -36,6 +36,7 @@ type BatchRemoveResponse = {
 
 type AssetDataPageProps = {
   onOpenAsset: (assetId: string) => void;
+  onCopyAsset: (assetId: string) => Promise<void>;
 };
 
 const emptyFilters: AssetFilters = {
@@ -152,13 +153,14 @@ function renderStatus(asset: AuctionAsset) {
   return <span className={`status ${meta.tone}`}>{meta.label}</span>;
 }
 
-export function AssetDataPage({ onOpenAsset }: AssetDataPageProps) {
+export function AssetDataPage({ onOpenAsset, onCopyAsset }: AssetDataPageProps) {
   const [assets, setAssets] = useState<AuctionAsset[]>([]);
   const [total, setTotal] = useState(0);
   const [page, setPage] = useState(1);
   const [filters, setFilters] = useState<AssetFilters>(emptyFilters);
   const [loading, setLoading] = useState(true);
   const [actingId, setActingId] = useState<string | null>(null);
+  const [copyingId, setCopyingId] = useState<string | null>(null);
   const [batching, setBatching] = useState(false);
   const [exporting, setExporting] = useState(false);
   const [selectedAssetIds, setSelectedAssetIds] = useState<string[]>([]);
@@ -232,6 +234,17 @@ export function AssetDataPage({ onOpenAsset }: AssetDataPageProps) {
       setError(confirmError instanceof Error ? confirmError.message : "完成交易失败");
     } finally {
       setActingId(null);
+    }
+  }
+
+  async function copyAsset(assetId: string) {
+    setCopyingId(assetId);
+    setError(null);
+    try {
+      await onCopyAsset(assetId);
+    } catch (copyError) {
+      setError(copyError instanceof Error ? copyError.message : "复制资产失败");
+      setCopyingId(null);
     }
   }
 
@@ -414,7 +427,7 @@ export function AssetDataPage({ onOpenAsset }: AssetDataPageProps) {
                 <input
                   aria-label={`选择资产 ${row.id}`}
                   checked={selectedIdSet.has(row.id)}
-                  disabled={batching || actingId === row.id || row.status !== "active"}
+                  disabled={batching || actingId === row.id || copyingId === row.id || row.status !== "active"}
                   onChange={() => toggleAsset(row.id)}
                   type="checkbox"
                 />
@@ -492,8 +505,16 @@ export function AssetDataPage({ onOpenAsset }: AssetDataPageProps) {
               return (
                 <div className="inline-actions">
                   <button
+                    disabled={actingId === row.id || copyingId === row.id || batching}
+                    onClick={() => void copyAsset(row.id)}
+                    type="button"
+                  >
+                    {copyingId === row.id ? "复制中" : "复制"}
+                  </button>
+                  <button
                     disabled={
                       actingId === row.id ||
+                      copyingId === row.id ||
                       batching ||
                       row.status !== "active" ||
                       row.currentPriceCents === null ||
@@ -505,7 +526,7 @@ export function AssetDataPage({ onOpenAsset }: AssetDataPageProps) {
                     完成交易
                   </button>
                   <button
-                    disabled={actingId === row.id || batching || row.status !== "active"}
+                    disabled={actingId === row.id || copyingId === row.id || batching || row.status !== "active"}
                     onClick={() => void removeAsset(row.id)}
                     type="button"
                   >

@@ -205,6 +205,78 @@ describe("admin routes", () => {
     }
   });
 
+  it("returns an editable copy draft for an existing asset without creating a new asset", async () => {
+    const assets = createInMemoryAssetsRepository();
+    const source = await assets.createPending({
+      ...pendingAssetInput(),
+      principalId: "1",
+      sellerGameId: "seller-game-copy",
+      assetType: "道具",
+      itemCategory: "龙珠",
+      dragonBall: {
+        element: "水",
+        profession: "法师",
+        quality: "红",
+        attributes: "附加伤害+12%，无视冰甲+8%"
+      },
+      title: "可复制历史资产",
+      description: "用于快速复刻发布",
+      startingPriceCents: 8800,
+      minIncrementCents: 200,
+      images: [
+        {
+          objectKey: "uploads/items/1/copy.png",
+          publicUrl: "https://img.example.com/uploads/items/1/copy.png",
+          mimeType: "image/png",
+          sizeBytes: 2048
+        }
+      ]
+    });
+    await assets.updateStatus(source.id, "active");
+    const app = buildApp({ enableMockAuth: true, assetsRepository: assets });
+
+    try {
+      const token = await adminLogin(app, "reviewer", "reviewer-pass");
+      const response = await app.inject({
+        method: "GET",
+        url: `/admin/assets/${source.id}/copy-draft`,
+        headers: { authorization: `Bearer ${token}` }
+      });
+
+      expect(response.statusCode).toBe(200);
+      expect(response.json().draft).toEqual({
+        sourceAssetId: source.id,
+        principalId: "1",
+        gameName: "梦幻西游",
+        sellerGameId: "seller-game-copy",
+        serverName: "测试区",
+        assetType: "道具",
+        itemCategory: "龙珠",
+        dragonBall: {
+          element: "水",
+          profession: "法师",
+          quality: "红",
+          attributes: "附加伤害+12%，无视冰甲+8%"
+        },
+        title: "可复制历史资产",
+        description: "用于快速复刻发布",
+        startingPriceCents: 8800,
+        minIncrementCents: 200,
+        images: [
+          {
+            objectKey: "uploads/items/1/copy.png",
+            publicUrl: "https://img.example.com/uploads/items/1/copy.png",
+            mimeType: "image/png",
+            sizeBytes: 2048
+          }
+        ]
+      });
+      await expect(assets.listForAdmin({ status: "pending_review", page: 1, pageSize: 20 })).resolves.toMatchObject({ total: 0 });
+    } finally {
+      await app.close();
+    }
+  });
+
   it("requires and returns the seller game id for admin published assets", async () => {
     const app = buildApp({ enableMockAuth: true });
 
@@ -1355,6 +1427,70 @@ describe("admin routes", () => {
       });
       expect(bid.statusCode).toBe(400);
       expect(bid.json().error.code).toBe("asset_not_active");
+    } finally {
+      await app.close();
+    }
+  });
+
+  it("lets a scoped admin update the deadline of an unfinished asset", async () => {
+    const admins = createInMemoryAdminRepository();
+    const assets = createInMemoryAssetsRepository();
+    const own = await assets.createPending({ ...pendingAssetInput(), principalId: "1", title: "可修改截止时间资产" });
+    const other = await assets.createPending({ ...pendingAssetInput(), principalId: "2", title: "其他主理人资产" });
+    const ended = await assets.createPending({ ...pendingAssetInput(), principalId: "1", title: "已结束资产" });
+    const activeOwn = await assets.updateStatus(own.id, "active");
+    await assets.updateStatus(other.id, "active");
+    await assets.save({ ...ended, status: "ended" });
+    const nextEndAt = new Date(Date.now() + 10 * 60 * 60 * 1000).toISOString();
+    const app = buildApp({ enableMockAuth: true, adminRepository: admins, assetsRepository: assets });
+
+    try {
+      const reviewer = await adminLogin(app, "reviewer", "reviewer-pass");
+      const updateOther = await app.inject({
+        method: "POST",
+        url: `/admin/assets/${other.id}/end-time`,
+        headers: { authorization: `Bearer ${reviewer}` },
+        payload: { endAt: nextEndAt }
+      });
+      const updateEnded = await app.inject({
+        method: "POST",
+        url: `/admin/assets/${ended.id}/end-time`,
+        headers: { authorization: `Bearer ${reviewer}` },
+        payload: { endAt: nextEndAt }
+      });
+      const updateOwn = await app.inject({
+        method: "POST",
+        url: `/admin/assets/${own.id}/end-time`,
+        headers: { authorization: `Bearer ${reviewer}` },
+        payload: { endAt: nextEndAt }
+      });
+
+      expect(updateOther.statusCode).toBe(404);
+      expect(updateEnded.statusCode).toBe(400);
+      expect(updateEnded.json().error.code).toBe("invalid_asset_state");
+      expect(updateOwn.statusCode).toBe(200);
+      expect(updateOwn.json().asset).toMatchObject({
+        id: own.id,
+        originalEndAt: nextEndAt,
+        effectiveEndAt: nextEndAt
+      });
+      await expect(assets.findById(own.id)).resolves.toMatchObject({
+        originalEndAt: nextEndAt,
+        effectiveEndAt: nextEndAt
+      });
+      await expect(admins.listOperations()).resolves.toEqual([
+        expect.objectContaining({
+          adminId: 1,
+          action: "asset.end_time_update",
+          targetType: "asset",
+          targetId: own.id,
+          detail: {
+            previousOriginalEndAt: activeOwn.originalEndAt,
+            previousEffectiveEndAt: activeOwn.effectiveEndAt,
+            endAt: nextEndAt
+          }
+        })
+      ]);
     } finally {
       await app.close();
     }
