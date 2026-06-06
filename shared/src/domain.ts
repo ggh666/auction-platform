@@ -141,3 +141,39 @@ export type NotificationItem = {
   readAt: string | null;
   createdAt: string;
 };
+
+export type AssetConversationType = "principal_contact" | "seller_contact";
+export type AssetMessageSenderType = "user" | "admin";
+
+export type AssetConversation = {
+  id: string;
+  assetId: string;
+  conversationType: AssetConversationType;
+  userId: string;
+  principalId: string | null;
+  targetUserId: string | null;
+  asset: Pick<AuctionAsset, "id" | "title" | "gameName" | "serverName" | "assetType">;
+  user: UserSummary;
+  principal: PrincipalSummary | null;
+  targetUser: UserSummary | null;
+  lastMessageText: string | null;
+  lastMessageAt: string | null;
+  lastMessageSenderType: AssetMessageSenderType | null;
+  userUnreadCount: number;
+  adminUnreadCount: number;
+  userReadAt: string | null;
+  adminReadAt: string | null;
+  createdAt: string;
+  updatedAt: string;
+};
+
+export type AssetMessage = {
+  id: string;
+  conversationId: string;
+  senderType: AssetMessageSenderType;
+  senderUserId: string | null;
+  senderAdminId: string | null;
+  senderDisplayName: string;
+  content: string;
+  createdAt: string;
+};

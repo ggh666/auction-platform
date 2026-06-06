@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import { createHash } from "node:crypto";
 import { buildApp } from "../../api/src/app";
 import { createInMemoryAdminRepository } from "../../api/src/modules/admin/admin.repository";
+import { createInMemoryAssetConversationsRepository } from "../../api/src/modules/assetConversations/assetConversations.repository";
 import { createInMemoryAssetFollowsRepository } from "../../api/src/modules/assetFollows/assetFollows.repository";
 import { createInMemoryAssetsRepository } from "../../api/src/modules/assets/assets.repository";
 import { createInMemoryBidsRepository } from "../../api/src/modules/bids/bids.repository";
@@ -45,6 +46,7 @@ function buildProductionTestApp() {
     bidsRepository: createInMemoryBidsRepository((asset) => assetsRepository.save(asset)),
     reportsService: createReportsService(),
     assetFollowsRepository: createInMemoryAssetFollowsRepository(),
+    assetConversationsRepository: createInMemoryAssetConversationsRepository(),
     principalsRepository: createInMemoryPrincipalsRepository(),
     configsRepository: createInMemorySystemConfigsRepository(),
     notificationsRepository: createInMemoryNotificationsRepository(),

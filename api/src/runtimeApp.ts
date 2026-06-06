@@ -4,6 +4,7 @@ import { readEnv, type Env } from "./config/env";
 import { createPool } from "./db/pool";
 import type { MysqlPool } from "./db/mysqlTypes";
 import { createMysqlAdminRepository } from "./modules/admin/admin.mysql.repository";
+import { createMysqlAssetConversationsRepository } from "./modules/assetConversations/assetConversations.mysql.repository";
 import { createMysqlAssetFollowsRepository } from "./modules/assetFollows/assetFollows.mysql.repository";
 import { createMysqlAssetsRepository } from "./modules/assets/assets.mysql.repository";
 import { createMysqlBidsRepository } from "./modules/bids/bids.mysql.repository";
@@ -42,6 +43,7 @@ export function buildRuntimeApp(options: RuntimeAppOptions = {}): RuntimeApp {
     bidsRepository: createMysqlBidsRepository(pool),
     reportsService: createMysqlReportsService(pool),
     assetFollowsRepository: createMysqlAssetFollowsRepository(pool),
+    assetConversationsRepository: createMysqlAssetConversationsRepository(pool),
     principalsRepository: createMysqlPrincipalsRepository(pool),
     configsRepository: createMysqlSystemConfigsRepository(pool),
     notificationsRepository: createMysqlNotificationsRepository(pool),

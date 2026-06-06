@@ -88,6 +88,15 @@
       }
     },
     {
+      "path": "pages/profile/asset-chat",
+      "style": {
+        "navigationBarTitleText": "资产消息",
+        "navigationBarBackgroundColor": "#071112",
+        "navigationBarTextStyle": "white",
+        "backgroundColor": "#071112"
+      }
+    },
+    {
       "path": "pages/profile/results",
       "style": {
         "navigationBarTitleText": "成交记录",

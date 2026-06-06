@@ -1,5 +1,10 @@
 import type {
   AssetCreateResponse,
+  AssetConversation,
+  AssetConversationListResponse,
+  AssetConversationMessageResponse,
+  AssetConversationMessagesResponse,
+  AssetConversationResponse,
   AssetDetailResponse,
   AssetListResponse,
   AssetPublishContextResponse,
@@ -150,6 +155,34 @@ export function markNotificationRead(notificationId: string): Promise<Notificati
 export function markAllNotificationsRead(): Promise<NotificationBulkActionResponse> {
   return request<NotificationBulkActionResponse>("/api/profile/notifications/read-all", {
     method: "POST"
+  });
+}
+
+export type AssetConversationItem = AssetConversation;
+
+export function createPrincipalConversation(assetId: string): Promise<AssetConversationResponse> {
+  return request<AssetConversationResponse>(`/api/assets/${assetId}/conversations/principal`, {
+    method: "POST"
+  });
+}
+
+export function listAssetConversations(query: Pick<AssetListQuery, "page" | "pageSize"> = {}): Promise<AssetConversationListResponse> {
+  return request<AssetConversationListResponse>(`/api/profile/asset-conversations${queryString(query)}`);
+}
+
+export function listAssetConversationMessages(
+  conversationId: string,
+  query: Pick<AssetListQuery, "page" | "pageSize"> = {}
+): Promise<AssetConversationMessagesResponse> {
+  return request<AssetConversationMessagesResponse>(
+    `/api/profile/asset-conversations/${conversationId}/messages${queryString(query)}`
+  );
+}
+
+export function sendAssetConversationMessage(conversationId: string, content: string): Promise<AssetConversationMessageResponse> {
+  return request<AssetConversationMessageResponse>(`/api/profile/asset-conversations/${conversationId}/messages`, {
+    method: "POST",
+    data: { content }
   });
 }
 

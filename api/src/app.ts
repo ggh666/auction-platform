@@ -9,6 +9,11 @@ import { registerAdminDashboardRoutes } from "./modules/admin/adminDashboard.rou
 import { registerAdminRoutes } from "./modules/admin/admin.routes";
 import { registerAdminUserRoutes } from "./modules/admin/adminUsers.routes";
 import { createInMemoryAssetFollowsRepository, type AssetFollowsRepository } from "./modules/assetFollows/assetFollows.repository";
+import {
+  createInMemoryAssetConversationsRepository,
+  type AssetConversationsRepository
+} from "./modules/assetConversations/assetConversations.repository";
+import { registerAssetConversationRoutes } from "./modules/assetConversations/assetConversations.routes";
 import { createInMemoryAssetsRepository, type AssetsRepository } from "./modules/assets/assets.repository";
 import { registerAssetRoutes } from "./modules/assets/assets.routes";
 import { createInMemoryBidsRepository, type BidsRepository } from "./modules/bids/bids.repository";
@@ -38,7 +43,9 @@ import {
 } from "./modules/subscribeMessages/subscribeMessage.service";
 import { createInMemoryUsersRepository, type UsersRepository } from "./modules/users/users.repository";
 import { AuctionHub } from "./realtime/auctionHub";
+import { MessageHub } from "./realtime/messageHub";
 import { attachAuctionWsServer } from "./realtime/wsServer";
+import { attachMessageWsServer } from "./realtime/messageWsServer";
 
 type FastifyStatusError = Error & { statusCode: number };
 const jsonBodyLimitBytes = 8 * 1024 * 1024;
@@ -86,6 +93,7 @@ export type AppOptions = {
   bidsRepository?: BidsRepository;
   reportsService?: ReportsService;
   assetFollowsRepository?: AssetFollowsRepository;
+  assetConversationsRepository?: AssetConversationsRepository;
   principalsRepository?: PrincipalsRepository;
   configsRepository?: SystemConfigsRepository;
   notificationsRepository?: NotificationsRepository;
@@ -95,6 +103,7 @@ export type AppOptions = {
   subscribeMessageService?: SubscribeMessageService;
   imageSafetyRepository?: ImageSafetyRepository;
   hub?: Pick<AuctionHub, "publish">;
+  messageHub?: MessageHub;
   env?: NodeJS.ProcessEnv;
   wechatCodeSessionExchanger?: WechatCodeSessionExchanger;
 };
@@ -109,6 +118,7 @@ export function buildApp(options: AppOptions = {}) {
       !options.bidsRepository ||
       !options.reportsService ||
       !options.assetFollowsRepository ||
+      !options.assetConversationsRepository ||
       !options.principalsRepository ||
       !options.configsRepository ||
       !options.notificationsRepository ||
@@ -125,6 +135,7 @@ export function buildApp(options: AppOptions = {}) {
   const admins = options.adminRepository ?? createInMemoryAdminRepository();
   const reports = options.reportsService ?? createReportsService();
   const assetFollows = options.assetFollowsRepository ?? createInMemoryAssetFollowsRepository();
+  const assetConversations = options.assetConversationsRepository ?? createInMemoryAssetConversationsRepository();
   const principals = options.principalsRepository ?? createInMemoryPrincipalsRepository();
   const bids = options.bidsRepository ?? createInMemoryBidsRepository((asset) => assets.save(asset), (assetId) => assets.findById(assetId));
   const configs = options.configsRepository ?? createInMemorySystemConfigsRepository();
@@ -158,6 +169,7 @@ export function buildApp(options: AppOptions = {}) {
     });
   const auctionHub = new AuctionHub();
   const hub = options.hub ?? auctionHub;
+  const messageHub = options.messageHub ?? new MessageHub();
   const enableMockAuth = env.nodeEnv !== "production" && (options.enableMockAuth ?? env.nodeEnv === "development");
 
   app.register(cors, { origin: env.corsAllowedOrigins });
@@ -181,6 +193,16 @@ export function buildApp(options: AppOptions = {}) {
     users
   });
   registerImageRoutes(app, imageStorage, users, contentSafety, configs);
+  registerAssetConversationRoutes(app, {
+    admins,
+    assets,
+    bids,
+    users,
+    principals,
+    conversations: assetConversations,
+    contentSafety,
+    messageHub
+  });
   registerAssetRoutes(app, assets, users, bids, configs, reports, contentSafety, principals, assetFollows);
   registerAdminDashboardRoutes(app, admins, { assets, bids, reports, users, principals });
   registerAdminRoutes(app, admins, assets, bids, users, contentSafety, principals, dealFollowups, imageSafety, imageStorage, notifications, hub);
@@ -193,6 +215,12 @@ export function buildApp(options: AppOptions = {}) {
     const wss = attachAuctionWsServer(app.server, auctionHub);
     app.addHook("onClose", (_instance, done) => {
       wss.close(done);
+    });
+  }
+  if (!options.messageHub) {
+    const messageWss = attachMessageWsServer(app, { admins, users, principals, hub: messageHub });
+    app.addHook("onClose", (_instance, done) => {
+      messageWss.close(done);
     });
   }
 

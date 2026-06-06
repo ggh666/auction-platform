@@ -31,6 +31,17 @@
         <view v-if="detail.asset.principal" class="principal-box">
           <text class="principal-title">主理人：{{ detail.asset.principal.displayName }}</text>
           <text class="principal-tip">需要沟通交换信息时，请优先联系该主理人。</text>
+          <button
+            class="principal-contact-button"
+            :disabled="contactingPrincipal || !principalContactState.enabled"
+            :loading="contactingPrincipal"
+            @tap="openPrincipalConversation"
+          >
+            联系主理人
+          </button>
+          <text v-if="!principalContactState.enabled" class="principal-contact-tip">
+            {{ principalContactState.reason ?? "参与估价后可联系主理人" }}
+          </text>
         </view>
         <view v-if="detail.asset.hasPublishedViolation" class="violation-tags">
           <text v-if="detail.asset.hasPublishedViolation" class="violation-tag">该宝贝关联违规公示</text>
@@ -80,9 +91,9 @@
 
 <script setup lang="ts">
 import { centsToYuanText, type AssetDetailResponse, type AuctionWsEvent, type BidDisplayRecord } from "@auction/shared";
-import { onLoad, onShareAppMessage, onShareTimeline, onUnload } from "@dcloudio/uni-app";
+import { onHide, onLoad, onShareAppMessage, onShareTimeline, onShow, onUnload } from "@dcloudio/uni-app";
 import { computed, ref } from "vue";
-import { getAssetDetail, placeBid, readApiBase } from "../../api/client";
+import { createPrincipalConversation, getAssetDetail, placeBid, readApiBase } from "../../api/client";
 import { readSessionUser } from "../../auth/session";
 import { mergeAuctionAssetUpdate } from "../../utils/assetMerge";
 import { assetStatusText, isSoldAsset } from "../../utils/assetStatusText";
@@ -100,6 +111,7 @@ import { requestBidRelatedSubscriptions } from "../../utils/subscribeMessage";
 import { isBidRestrictedError } from "../../utils/userActionErrors";
 
 const submitting = ref(false);
+const contactingPrincipal = ref(false);
 const loading = ref(false);
 const assetId = ref("");
 const detail = ref<AssetDetailResponse | null>(null);
@@ -125,6 +137,13 @@ const imageUrls = computed(() => detail.value?.asset.imageUrls.map((imageUrl) =>
 const unavailableMessage = computed(() =>
   detail.value ? auctionUnavailableMessage(detail.value.asset, now.value) : "交换详情未加载完成"
 );
+const principalContactState = computed<AssetDetailResponse["principalContact"]>(
+  () =>
+    detail.value?.principalContact ?? {
+      enabled: false,
+      reason: readSessionUser() ? "参与估价后可联系主理人" : "登录后联系主理人"
+    }
+);
 
 onLoad((query) => {
   const value = query?.assetId;
@@ -133,8 +152,15 @@ onLoad((query) => {
   nowTimer = setInterval(() => {
     now.value = new Date();
   }, 1000);
-  connectAuctionRealtime();
   void loadDetail();
+});
+
+onShow(() => {
+  connectAuctionRealtime();
+});
+
+onHide(() => {
+  closeAuctionRealtime();
 });
 
 onUnload(() => {
@@ -434,6 +460,30 @@ async function submitBid() {
   }
 }
 
+async function openPrincipalConversation() {
+  if (!detail.value || contactingPrincipal.value) {
+    return;
+  }
+  if (!readSessionUser()) {
+    uni.showToast({ title: "登录后联系主理人", icon: "none" });
+    uni.navigateTo({ url: "/pages/login/login" });
+    return;
+  }
+  if (!principalContactState.value.enabled) {
+    uni.showToast({ title: principalContactState.value.reason ?? "参与估价后可联系主理人", icon: "none" });
+    return;
+  }
+  contactingPrincipal.value = true;
+  try {
+    const response = await createPrincipalConversation(detail.value.asset.id);
+    uni.navigateTo({ url: `/pages/profile/asset-chat?conversationId=${response.conversation.id}` });
+  } catch (error) {
+    uni.showToast({ title: error instanceof Error && error.message.trim() ? error.message : "联系主理人失败", icon: "none" });
+  } finally {
+    contactingPrincipal.value = false;
+  }
+}
+
 function showBidFailure(error: unknown, requiredCents: number) {
   const message = bidFailureMessage(error, requiredCents);
   if (isBidRestrictedError(error)) {
@@ -571,6 +621,34 @@ function formatTime(value: string) {
   background: #eff8ff;
   border: 1px solid #b2ddff;
   border-radius: 8rpx;
+}
+
+.principal-contact-button {
+  width: 176rpx;
+  height: 58rpx;
+  margin: 16rpx 0 0;
+  font-size: 24rpx;
+  font-weight: 700;
+  line-height: 58rpx;
+  color: #071112;
+  background: #f6c453;
+  border-radius: 6rpx;
+}
+
+.principal-contact-button::after {
+  border: 0;
+}
+
+.principal-contact-button[disabled] {
+  color: rgba(247, 232, 182, 0.60);
+  background: rgba(138, 161, 150, 0.18);
+}
+
+.principal-contact-tip {
+  display: block;
+  margin-top: 10rpx;
+  font-size: 24rpx;
+  color: #8aa196;
 }
 
 .dragon-ball-box {

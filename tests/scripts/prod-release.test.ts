@@ -139,6 +139,30 @@ describe("production release script guards", () => {
     expect(script).toContain("用户发布开关");
   });
 
+  it("rejects archives that do not contain current asset conversation messaging features", () => {
+    const script = readFileSync(scriptPath, "utf8");
+
+    expect(script).toContain("api/src/db/migrations/018_asset_conversations.sql");
+    expect(script).toContain("api/src/modules/assetConversations/assetConversations.routes.ts");
+    expect(script).toContain("api/src/realtime/messageWsServer.ts");
+    expect(script).toContain("shared/src/ws-events.ts");
+    expect(script).toContain("miniapp/pages/profile/asset-chat.vue");
+    expect(script).toContain("admin/src/pages/MessageCenterPage.tsx");
+
+    expect(script).toContain("api/src/db/migrations/018_asset_conversations.sql::asset_conversations");
+    expect(script).toContain("api/src/modules/assetConversations/assetConversations.routes.ts::/api/assets/:assetId/conversations/principal");
+    expect(script).toContain("api/src/modules/assetConversations/assetConversations.routes.ts::/admin/asset-conversations");
+    expect(script).toContain("api/src/realtime/messageWsServer.ts::/ws/messages");
+    expect(script).toContain("shared/src/ws-events.ts::AssetMessageWsEvent");
+    expect(script).toContain("miniapp/api/client.ts::createPrincipalConversation");
+    expect(script).toContain("miniapp/pages/auctions/detail.vue::联系主理人");
+    expect(script).toContain("miniapp/pages/auctions/detail.vue::principalContactState");
+    expect(script).toContain("miniapp/pages/profile/asset-chat.vue::realtimeActive");
+    expect(script).toContain("miniapp/pages/profile/asset-chat.vue::请输入消息内容");
+    expect(script).toContain("admin/src/components/AppLayout.tsx::消息中心");
+    expect(script).toContain("admin/src/pages/MessageCenterPage.tsx::发送消息");
+  });
+
   it("checks that the running release script matches the archive before marker checks", () => {
     const script = readFileSync(scriptPath, "utf8");
     const validateConfigBlock = script.match(/validate_config\(\) \{[\s\S]*?\n\}/)?.[0] ?? "";

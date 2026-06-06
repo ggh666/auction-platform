@@ -4,8 +4,10 @@ import type {
   AdminManagedUser,
   AdminPrincipal,
   AdminRole,
+  AssetConversation,
   AuctionAsset,
   AuctionResultStatus,
+  AssetMessage,
   BidDisplayRecord,
   DealFollowupStatus,
   ImageSafetyStatus,
@@ -267,7 +269,43 @@ export type AssetDetailResponse = {
   asset: AuctionAsset;
   seller: UserSummary;
   recentBids: BidDisplayRecord[];
+  principalContact: {
+    enabled: boolean;
+    reason: string | null;
+  };
 };
+
+export type AssetConversationListResponse = {
+  items: AssetConversation[];
+  total: number;
+  page: number;
+  pageSize: number;
+  hasMore: boolean;
+  unreadCount: number;
+};
+
+export type AssetConversationResponse = {
+  conversation: AssetConversation;
+};
+
+export type AssetConversationMessagesResponse = {
+  items: AssetMessage[];
+  total: number;
+  page: number;
+  pageSize: number;
+  hasMore: boolean;
+};
+
+export type AssetConversationMessageRequest = {
+  content: string;
+};
+
+export type AssetConversationMessageResponse = {
+  conversation: AssetConversation;
+  message: AssetMessage;
+};
+
+export type AdminAssetConversationListResponse = AssetConversationListResponse;
 
 export type PlaceBidRequest = {
   assetId: string;

@@ -3,6 +3,7 @@ import { buildApp } from "../../api/src/app";
 import { readEnv } from "../../api/src/config/env";
 import { HttpError } from "../../api/src/http/errors";
 import { createInMemoryAdminRepository } from "../../api/src/modules/admin/admin.repository";
+import { createInMemoryAssetConversationsRepository } from "../../api/src/modules/assetConversations/assetConversations.repository";
 import { createInMemoryAssetFollowsRepository } from "../../api/src/modules/assetFollows/assetFollows.repository";
 import { createInMemoryAssetsRepository } from "../../api/src/modules/assets/assets.repository";
 import { createInMemoryBidsRepository } from "../../api/src/modules/bids/bids.repository";
@@ -37,6 +38,7 @@ function buildProductionApp(env: NodeJS.ProcessEnv = productionEnv) {
     bidsRepository: createInMemoryBidsRepository((asset) => assetsRepository.save(asset)),
     reportsService: createReportsService(),
     assetFollowsRepository: createInMemoryAssetFollowsRepository(),
+    assetConversationsRepository: createInMemoryAssetConversationsRepository(),
     principalsRepository: createInMemoryPrincipalsRepository(),
     configsRepository: createInMemorySystemConfigsRepository(),
     notificationsRepository: createInMemoryNotificationsRepository(),

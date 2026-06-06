@@ -9,6 +9,8 @@ DROP TABLE IF EXISTS violation_records;
 DROP TABLE IF EXISTS reports;
 DROP TABLE IF EXISTS auction_results;
 DROP TABLE IF EXISTS deal_followups;
+DROP TABLE IF EXISTS asset_messages;
+DROP TABLE IF EXISTS asset_conversations;
 DROP TABLE IF EXISTS station_notifications;
 DROP TABLE IF EXISTS asset_follows;
 DROP TABLE IF EXISTS bids;
@@ -180,6 +182,55 @@ CREATE TABLE station_notifications (
   CONSTRAINT fk_notifications_asset FOREIGN KEY (asset_id) REFERENCES auction_assets(id),
   CONSTRAINT fk_notifications_bid FOREIGN KEY (bid_id) REFERENCES bids(id),
   CONSTRAINT fk_notifications_actor FOREIGN KEY (actor_user_id) REFERENCES users(id)
+);
+
+CREATE TABLE asset_conversations (
+  id BIGINT UNSIGNED PRIMARY KEY AUTO_INCREMENT,
+  asset_id BIGINT UNSIGNED NOT NULL,
+  conversation_type ENUM('principal_contact','seller_contact') NOT NULL,
+  user_id BIGINT UNSIGNED NOT NULL,
+  principal_id BIGINT UNSIGNED NULL,
+  target_user_id BIGINT UNSIGNED NULL,
+  asset_title VARCHAR(120) NOT NULL,
+  asset_game_name VARCHAR(80) NOT NULL,
+  asset_server_name VARCHAR(80) NOT NULL,
+  asset_type VARCHAR(80) NOT NULL,
+  user_display_name VARCHAR(64) NOT NULL,
+  principal_display_name VARCHAR(64) NULL,
+  target_user_display_name VARCHAR(64) NULL,
+  last_message_text VARCHAR(500) NULL,
+  last_message_at DATETIME NULL,
+  last_message_sender_type ENUM('user','admin') NULL,
+  user_read_at DATETIME NULL,
+  admin_read_at DATETIME NULL,
+  created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  UNIQUE KEY uq_asset_conversation_principal (asset_id, conversation_type, user_id, principal_id),
+  UNIQUE KEY uq_asset_conversation_seller (asset_id, conversation_type, user_id, target_user_id),
+  INDEX idx_asset_conversations_user (user_id, last_message_at, updated_at),
+  INDEX idx_asset_conversations_principal (principal_id, last_message_at, updated_at),
+  INDEX idx_asset_conversations_type (conversation_type, last_message_at, updated_at),
+  CONSTRAINT fk_asset_conversations_asset FOREIGN KEY (asset_id) REFERENCES auction_assets(id),
+  CONSTRAINT fk_asset_conversations_user FOREIGN KEY (user_id) REFERENCES users(id),
+  CONSTRAINT fk_asset_conversations_principal FOREIGN KEY (principal_id) REFERENCES principals(id),
+  CONSTRAINT fk_asset_conversations_target_user FOREIGN KEY (target_user_id) REFERENCES users(id)
+);
+
+CREATE TABLE asset_messages (
+  id BIGINT UNSIGNED PRIMARY KEY AUTO_INCREMENT,
+  conversation_id BIGINT UNSIGNED NOT NULL,
+  sender_type ENUM('user','admin') NOT NULL,
+  sender_user_id BIGINT UNSIGNED NULL,
+  sender_admin_id BIGINT UNSIGNED NULL,
+  sender_display_name VARCHAR(64) NOT NULL,
+  content VARCHAR(500) NOT NULL,
+  created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  INDEX idx_asset_messages_conversation (conversation_id, created_at, id),
+  INDEX idx_asset_messages_sender_user (sender_user_id, created_at),
+  INDEX idx_asset_messages_sender_admin (sender_admin_id, created_at),
+  CONSTRAINT fk_asset_messages_conversation FOREIGN KEY (conversation_id) REFERENCES asset_conversations(id),
+  CONSTRAINT fk_asset_messages_sender_user FOREIGN KEY (sender_user_id) REFERENCES users(id),
+  CONSTRAINT fk_asset_messages_sender_admin FOREIGN KEY (sender_admin_id) REFERENCES admin_users(id)
 );
 
 CREATE TABLE auction_results (

@@ -3,47 +3,83 @@
     <view class="header">
       <view class="header-copy">
         <text class="title">通知中心</text>
-        <text v-if="unreadCount > 0" class="summary">{{ unreadCount }} 条未读通知</text>
+        <text class="summary">通知 / 消息</text>
+        <text v-if="activeTab === 'notifications' && unreadCount > 0" class="summary">{{ unreadCount }} 条未读通知</text>
+        <text v-if="activeTab === 'messages' && conversationUnreadCount > 0" class="summary">{{ conversationUnreadCount }} 条未读消息</text>
       </view>
-      <button
-        v-if="unreadCount > 0"
-        class="mark-all-button"
-        :loading="markingAllRead"
-        :disabled="markingAllRead"
-        @tap.stop="markAllRead"
-      >
-        全部已读
+      <block v-if="unreadCount > 0">
+        <button
+          v-if="activeTab === 'notifications'"
+          class="mark-all-button"
+          :loading="markingAllRead"
+          :disabled="markingAllRead"
+          @tap.stop="markAllRead"
+        >
+          全部已读
+        </button>
+      </block>
+    </view>
+    <view class="tabs">
+      <button class="tab-button" :class="{ active: activeTab === 'notifications' }" @tap="activeTab = 'notifications'">
+        通知
+      </button>
+      <button class="tab-button" :class="{ active: activeTab === 'messages' }" @tap="activeTab = 'messages'">
+        消息
       </button>
     </view>
-    <view v-if="loading" class="empty">正在加载通知</view>
-    <view v-else-if="notifications.length === 0" class="empty">暂无通知</view>
-    <view
-      v-for="notification in notifications"
-      :key="notification.id"
-      class="notification-row"
-      :class="{ unread: !notification.readAt }"
-      @tap="openNotification(notification)"
-    >
-      <text class="notification-title">{{ notification.assetTitle }}</text>
-      <text class="notification-content">{{ notificationContent(notification) }}</text>
-      <text class="notification-time">{{ formatTime(notification.createdAt) }}</text>
-    </view>
+    <block v-if="activeTab === 'notifications'">
+      <view v-if="loading" class="empty">正在加载通知</view>
+      <view v-else-if="notifications.length === 0" class="empty">暂无通知</view>
+      <view
+        v-for="notification in notifications"
+        :key="notification.id"
+        class="notification-row"
+        :class="{ unread: !notification.readAt }"
+        @tap="openNotification(notification)"
+      >
+        <text class="notification-title">{{ notification.assetTitle }}</text>
+        <text class="notification-content">{{ notificationContent(notification) }}</text>
+        <text class="notification-time">{{ formatTime(notification.createdAt) }}</text>
+      </view>
+    </block>
+    <block v-else>
+      <view v-if="loadingConversations" class="empty">正在加载消息</view>
+      <view v-else-if="conversations.length === 0" class="empty">暂无消息</view>
+      <view
+        v-for="conversation in conversations"
+        :key="conversation.id"
+        class="notification-row"
+        :class="{ unread: conversation.userUnreadCount > 0 }"
+        @tap="openAssetConversation(conversation.id)"
+      >
+        <text class="notification-title">{{ conversation.asset.title }}</text>
+        <text class="notification-content">
+          主理人：{{ conversation.principal?.displayName ?? "未绑定" }} / {{ conversation.lastMessageText ?? "暂无消息" }}
+        </text>
+        <text class="notification-time">{{ formatTime(conversation.lastMessageAt ?? conversation.updatedAt) }}</text>
+      </view>
+    </block>
   </view>
 </template>
 
 <script setup lang="ts">
-import { centsToYuanText, type NotificationItem } from "@auction/shared";
+import { centsToYuanText, type AssetConversation, type NotificationItem } from "@auction/shared";
 import { onShow } from "@dcloudio/uni-app";
 import { ref } from "vue";
-import { listNotifications, markAllNotificationsRead, markNotificationRead } from "../../api/client";
+import { listAssetConversations, listNotifications, markAllNotificationsRead, markNotificationRead } from "../../api/client";
 
+const activeTab = ref<"notifications" | "messages">("notifications");
 const loading = ref(false);
+const loadingConversations = ref(false);
 const markingAllRead = ref(false);
 const notifications = ref<NotificationItem[]>([]);
+const conversations = ref<AssetConversation[]>([]);
 const unreadCount = ref(0);
+const conversationUnreadCount = ref(0);
 
 onShow(() => {
   void loadNotifications();
+  void loadAssetConversations();
 });
 
 async function loadNotifications() {
@@ -58,6 +94,21 @@ async function loadNotifications() {
     uni.showToast({ title: "通知加载失败", icon: "none" });
   } finally {
     loading.value = false;
+  }
+}
+
+async function loadAssetConversations() {
+  loadingConversations.value = true;
+  try {
+    const response = await listAssetConversations();
+    conversations.value = response.items;
+    conversationUnreadCount.value = response.unreadCount;
+  } catch {
+    conversations.value = [];
+    conversationUnreadCount.value = 0;
+    uni.showToast({ title: "消息加载失败", icon: "none" });
+  } finally {
+    loadingConversations.value = false;
   }
 }
 
@@ -90,6 +141,10 @@ async function openNotification(notification: NotificationItem) {
     }
   }
   uni.navigateTo({ url: `/pages/auctions/detail?assetId=${notification.assetId}` });
+}
+
+function openAssetConversation(conversationId: string) {
+  uni.navigateTo({ url: `/pages/profile/asset-chat?conversationId=${conversationId}` });
 }
 
 function notificationContent(notification: NotificationItem) {
@@ -174,6 +229,36 @@ function formatTime(value: string) {
 .mark-all-button[disabled] {
   color: rgba(7, 17, 18, 0.68);
   background: rgba(246, 196, 83, 0.68);
+}
+
+.tabs {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 12rpx;
+  margin-bottom: 18rpx;
+  padding: 8rpx;
+  background: rgba(7, 17, 18, 0.08);
+  border-radius: 8rpx;
+}
+
+.tab-button {
+  height: 60rpx;
+  margin: 0;
+  font-size: 26rpx;
+  line-height: 60rpx;
+  color: #667085;
+  background: transparent;
+  border-radius: 6rpx;
+}
+
+.tab-button::after {
+  border: 0;
+}
+
+.tab-button.active {
+  font-weight: 700;
+  color: #071112;
+  background: #f6c453;
 }
 
 .notification-row {

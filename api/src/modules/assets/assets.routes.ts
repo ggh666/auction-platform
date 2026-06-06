@@ -393,7 +393,24 @@ export function registerAssetRoutes(
         await enrichAssetWithPrincipal(enrichAssetWithFollow(enrichAssetWithViolations(asset, violationSummary), followedAssetIds), principals)
       ),
       seller: await readUserSummary(users, asset.sellerId),
-      recentBids: await Promise.all(recentBids.slice(-20).reverse().map((bid) => toBidDisplayRecord(users, bid)))
+      recentBids: await Promise.all(recentBids.slice(-20).reverse().map((bid) => toBidDisplayRecord(users, bid))),
+      principalContact: {
+        enabled: Boolean(asset.principalId && viewerIsParticipant),
+        reason: principalContactReason(asset.principalId, viewerUserId, viewerIsParticipant)
+      }
     };
   });
+}
+
+function principalContactReason(principalId: string | null, viewerUserId: string | null, viewerIsParticipant: boolean): string | null {
+  if (!principalId) {
+    return "该资产暂无主理人";
+  }
+  if (!viewerUserId) {
+    return "登录后联系主理人";
+  }
+  if (!viewerIsParticipant) {
+    return "参与估价后可联系主理人";
+  }
+  return null;
 }
