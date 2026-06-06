@@ -11,7 +11,8 @@ const defaultConfigs: SystemConfig[] = [
   { key: "extension_duration_seconds", value: "300", updatedBy: null, updatedAt: new Date(0).toISOString() },
   { key: "max_images_per_asset", value: "9", updatedBy: null, updatedAt: new Date(0).toISOString() },
   { key: "max_image_size_bytes", value: "5242880", updatedBy: null, updatedAt: new Date(0).toISOString() },
-  { key: "default_daily_publish_limit", value: "3", updatedBy: null, updatedAt: new Date(0).toISOString() }
+  { key: "default_daily_publish_limit", value: "3", updatedBy: null, updatedAt: new Date(0).toISOString() },
+  { key: "user_asset_publish_enabled", value: "true", updatedBy: null, updatedAt: new Date(0).toISOString() }
 ];
 
 function cloneConfig(config: SystemConfig): SystemConfig {

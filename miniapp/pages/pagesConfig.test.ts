@@ -8,11 +8,11 @@ describe("miniapp page configuration", () => {
     expect(pagesConfig.pages.map((page) => page.path)).not.toContain("pages/reports/create");
   });
 
-  it("does not expose user publishing pages in the miniapp", () => {
+  it("exposes user asset list and publish pages in the miniapp", () => {
     const paths = pagesConfig.pages.map((page) => page.path);
 
-    expect(paths).not.toContain("pages/auctions/publish");
-    expect(paths).not.toContain("pages/profile/assets");
+    expect(paths).toContain("pages/auctions/publish");
+    expect(paths).toContain("pages/profile/assets");
   });
 
   it("renders the custom tab bar labels with regular miniapp views", () => {

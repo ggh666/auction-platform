@@ -5,6 +5,7 @@ import {
   createInMemoryAssetsRepository,
   type AssetsRepository
 } from "../../api/src/modules/assets/assets.repository";
+import type { ContentSafetyService, ImageSafetyInput } from "../../api/src/modules/contentSafety/contentSafety.service";
 import type { ImageStorage } from "../../api/src/modules/images/r2Storage";
 import { validateImageUpload } from "../../api/src/modules/images/images.service";
 
@@ -30,6 +31,15 @@ async function login(app: ReturnType<typeof buildApp>, displayName = "卖家") {
     method: "POST",
     url: "/api/auth/mock-login",
     payload: { displayName }
+  });
+  return response.json().token as string;
+}
+
+async function wechatLogin(app: ReturnType<typeof buildApp>, code = "seller-code", displayName = "卖家") {
+  const response = await app.inject({
+    method: "POST",
+    url: "/api/auth/wechat-login",
+    payload: { code, displayName }
   });
   return response.json().token as string;
 }
@@ -70,11 +80,25 @@ describe("asset workflow", () => {
     };
   }
 
-  it("disables miniapp user asset publishing", async () => {
+  it("allows miniapp users to publish pending assets while the publish switch is enabled", async () => {
     const app = buildApp({ enableMockAuth: true });
 
     try {
       const token = await login(app);
+
+      const context = await app.inject({
+        method: "GET",
+        url: "/api/asset-publish-context",
+        headers: { authorization: `Bearer ${token}` }
+      });
+      expect(context.statusCode).toBe(200);
+      expect(context.json()).toMatchObject({
+        enabled: true,
+        remainingDailyPublishCount: 3,
+        defaultMinIncrementCents: 100,
+        imagePolicy: { maxImagesPerAsset: 9, maxImageSizeBytes: 5242880 },
+        principals: expect.arrayContaining([expect.objectContaining({ id: "1", displayName: "默认主理人" })])
+      });
 
       const response = await app.inject({
         method: "POST",
@@ -83,18 +107,55 @@ describe("asset workflow", () => {
         payload: validAssetPayload()
       });
 
-      expect(response.statusCode).toBe(410);
-      expect(response.json().error.code).toBe("user_asset_publish_disabled");
+      expect(response.statusCode).toBe(200);
+      expect(response.json().asset).toMatchObject({
+        sellerId: "1",
+        principalId: "1",
+        title: "69级角色",
+        status: "pending_review"
+      });
     } finally {
       await app.close();
     }
   });
 
-  it("disables miniapp user image uploads", async () => {
+  it("blocks miniapp publishing and image uploads while the publish switch is disabled", async () => {
     const app = buildApp({ enableMockAuth: true, imageStorage: fakeImageStorage() });
 
     try {
       const token = await login(app);
+      const superToken = await app.inject({
+        method: "POST",
+        url: "/admin/auth/login",
+        payload: { username: "super", password: "super-pass" }
+      });
+      const config = await app.inject({
+        method: "POST",
+        url: "/admin/configs/user_asset_publish_enabled",
+        headers: { authorization: `Bearer ${superToken.json().token}` },
+        payload: { value: "false" }
+      });
+      expect(config.statusCode).toBe(200);
+
+      const context = await app.inject({
+        method: "GET",
+        url: "/api/asset-publish-context",
+        headers: { authorization: `Bearer ${token}` }
+      });
+      expect(context.statusCode).toBe(200);
+      expect(context.json()).toMatchObject({
+        enabled: false,
+        disabledReason: "暂未开放用户提交资产"
+      });
+
+      const created = await app.inject({
+        method: "POST",
+        url: "/api/assets",
+        headers: { authorization: `Bearer ${token}` },
+        payload: validAssetPayload()
+      });
+      expect(created.statusCode).toBe(403);
+      expect(created.json().error.code).toBe("asset_publish_disabled");
 
       const response = await app.inject({
         method: "POST",
@@ -107,8 +168,61 @@ describe("asset workflow", () => {
         }
       });
 
-      expect(response.statusCode).toBe(410);
-      expect(response.json().error.code).toBe("user_image_upload_disabled");
+      expect(response.statusCode).toBe(403);
+      expect(response.json().error.code).toBe("asset_publish_disabled");
+    } finally {
+      await app.close();
+    }
+  });
+
+  it("allows miniapp users to upload asset images while the publish switch is enabled", async () => {
+    const imageSafetyInputs: ImageSafetyInput[] = [];
+    const contentSafetyService: ContentSafetyService = {
+      async assertTextAllowed() {},
+      async requestImageCheck(input) {
+        imageSafetyInputs.push(input);
+        return { status: "pending", traceId: "image-trace-1" };
+      },
+      async assertImageUploadsAllowed() {},
+      async assertAssetImagesAllowed() {}
+    };
+    const app = buildApp({
+      enableMockAuth: true,
+      imageStorage: fakeImageStorage(),
+      contentSafetyService,
+      wechatCodeSessionExchanger: async (code: string) => ({ openid: `openid-${code}` })
+    });
+
+    try {
+      const token = await wechatLogin(app, "image-uploader-code");
+
+      const response = await app.inject({
+        method: "POST",
+        url: "/api/images",
+        headers: { authorization: `Bearer ${token}` },
+        payload: {
+          assetType: "账号",
+          mimeType: "image/jpeg",
+          base64Data: Buffer.from("image").toString("base64")
+        }
+      });
+
+      expect(response.statusCode).toBe(200);
+      expect(response.json().image).toMatchObject({
+        mimeType: "image/jpeg",
+        sizeBytes: 5,
+        publicUrl: expect.stringContaining("uploads/accounts/1/"),
+        safetyStatus: "pending",
+        safetyTraceId: "image-trace-1"
+      });
+      expect(imageSafetyInputs).toEqual([
+        expect.objectContaining({
+          userId: "1",
+          objectKey: expect.stringContaining("uploads/accounts/1/"),
+          mediaUrl: expect.stringContaining("uploads/accounts/1/"),
+          openid: "openid-image-uploader-code"
+        })
+      ]);
     } finally {
       await app.close();
     }

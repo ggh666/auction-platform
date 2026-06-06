@@ -98,20 +98,44 @@ describe("profile routes", () => {
     }
   });
 
-  it("disables miniapp user published asset records", async () => {
-    const app = buildApp({ enableMockAuth: true });
+  it("lists the current user's published assets with pagination", async () => {
+    const assets = createInMemoryAssetsRepository();
+    const app = buildApp({ enableMockAuth: true, assetsRepository: assets });
 
     try {
       const seller = await login(app, "卖家");
+      const otherSeller = await login(app, "其他卖家");
+      expect(otherSeller).toEqual(expect.any(String));
+      const first = await assets.createPending({ ...assetPayload({ title: "第一条资产" }), sellerId: "1" });
+      const second = await assets.createPending({ ...assetPayload({ title: "第二条资产" }), sellerId: "1" });
+      const third = await assets.createPending({ ...assetPayload({ title: "第三条资产" }), sellerId: "1" });
+      await assets.updateStatus(second.id, "active");
+      await assets.rejectPending(third.id, "资料不完整");
+      await assets.createPending({ ...assetPayload({ title: "其他人的资产" }), sellerId: "2" });
 
-      const response = await app.inject({
+      const firstPage = await app.inject({
         method: "GET",
-        url: "/api/profile/assets",
+        url: "/api/profile/assets?page=1&pageSize=2",
+        headers: { authorization: `Bearer ${seller}` }
+      });
+      const secondPage = await app.inject({
+        method: "GET",
+        url: "/api/profile/assets?page=2&pageSize=2",
         headers: { authorization: `Bearer ${seller}` }
       });
 
-      expect(response.statusCode).toBe(410);
-      expect(response.json().error.code).toBe("user_asset_records_disabled");
+      expect(firstPage.statusCode).toBe(200);
+      expect(firstPage.json()).toMatchObject({ total: 3, page: 1, pageSize: 2, hasMore: true });
+      expect(firstPage.json().items).toHaveLength(2);
+      expect(firstPage.json().items).toEqual([
+        expect.objectContaining({ id: third.id, title: "第三条资产", status: "rejected", sellerId: "1" }),
+        expect.objectContaining({ id: second.id, title: "第二条资产", status: "active", sellerId: "1" })
+      ]);
+      expect(secondPage.statusCode).toBe(200);
+      expect(secondPage.json()).toMatchObject({ total: 3, page: 2, pageSize: 2, hasMore: false });
+      expect(secondPage.json().items).toEqual([
+        expect.objectContaining({ id: first.id, title: "第一条资产", status: "pending_review", sellerId: "1" })
+      ]);
     } finally {
       await app.close();
     }

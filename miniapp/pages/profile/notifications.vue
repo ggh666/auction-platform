@@ -2,7 +2,7 @@
   <view class="page">
     <view class="header">
       <view class="header-copy">
-        <text class="title">消息通知</text>
+        <text class="title">通知中心</text>
         <text v-if="unreadCount > 0" class="summary">{{ unreadCount }} 条未读通知</text>
       </view>
       <button

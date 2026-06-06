@@ -37,8 +37,32 @@ if (tsconfig.compilerOptions?.noEmit === true) {
   issues.push('tsconfig.json must not set "compilerOptions.noEmit": true for HBuilderX ts-loader');
 }
 
-if (projectConfig.miniprogramRoot !== "") {
-  issues.push('project.config.json must set "miniprogramRoot": ""');
+if (projectConfig.miniprogramRoot !== "dist/build/mp-weixin/") {
+  issues.push('project.config.json must set "miniprogramRoot": "dist/build/mp-weixin/" for WeChat DevTools root imports');
+}
+
+const generatedConfigs = [
+  "dist/build/mp-weixin/project.config.json",
+  "dist/dev/mp-weixin/project.config.json",
+  "unpackage/dist/dev/mp-weixin/project.config.json"
+];
+
+for (const generatedConfig of generatedConfigs) {
+  const generatedConfigPath = resolve(root, generatedConfig);
+
+  if (!existsSync(generatedConfigPath)) {
+    continue;
+  }
+
+  const generatedProjectConfig = JSON.parse(readFileSync(generatedConfigPath, "utf8"));
+  if (generatedProjectConfig.miniprogramRoot !== "") {
+    issues.push(`${generatedConfig} must set "miniprogramRoot": "" for direct output imports`);
+  }
+}
+
+const buildOutputRoot = resolve(root, "dist/build/mp-weixin");
+if (existsSync(buildOutputRoot) && !existsSync(resolve(buildOutputRoot, "app.json"))) {
+  issues.push("dist/build/mp-weixin exists but app.json is missing; run npm run build:mp-weixin --workspace @auction/miniapp");
 }
 
 if (existsSync(esbuildPackagePath) && existsSync(esbuildBinaryPath)) {

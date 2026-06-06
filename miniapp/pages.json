@@ -30,6 +30,15 @@
       }
     },
     {
+      "path": "pages/auctions/publish",
+      "style": {
+        "navigationBarTitleText": "提交资产",
+        "navigationBarBackgroundColor": "#071112",
+        "navigationBarTextStyle": "white",
+        "backgroundColor": "#071112"
+      }
+    },
+    {
       "path": "pages/profile/index",
       "style": {
         "navigationBarTitleText": "个人中心",
@@ -50,6 +59,17 @@
       }
     },
     {
+      "path": "pages/profile/assets",
+      "style": {
+        "navigationBarTitleText": "我的资产",
+        "navigationBarBackgroundColor": "#071112",
+        "navigationBarTextStyle": "white",
+        "backgroundColor": "#071112",
+        "enablePullDownRefresh": true,
+        "onReachBottomDistance": 80
+      }
+    },
+    {
       "path": "pages/profile/bids",
       "style": {
         "navigationBarTitleText": "我的出价",
@@ -61,7 +81,7 @@
     {
       "path": "pages/profile/notifications",
       "style": {
-        "navigationBarTitleText": "消息通知",
+        "navigationBarTitleText": "通知中心",
         "navigationBarBackgroundColor": "#071112",
         "navigationBarTextStyle": "white",
         "backgroundColor": "#071112"

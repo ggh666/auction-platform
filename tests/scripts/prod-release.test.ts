@@ -1,5 +1,5 @@
 import { spawnSync } from "node:child_process";
-import { readFileSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { describe, expect, it } from "vitest";
 
@@ -7,6 +7,22 @@ const projectRoot = resolve(import.meta.dirname, "../..");
 const scriptPath = resolve(import.meta.dirname, "../../scripts/prod-release.sh");
 
 describe("production release script guards", () => {
+  it("keeps required release markers aligned with current source files", () => {
+    const script = readFileSync(scriptPath, "utf8");
+    const markerBlock = script.match(/required_release_markers=\([\s\S]*?\n\)/)?.[0] ?? "";
+    const markers = Array.from(markerBlock.matchAll(/"([^"]+::[^"]+)"/g)).map((match) => match[1]);
+
+    expect(markers.length).toBeGreaterThan(0);
+
+    for (const marker of markers) {
+      const [file, pattern] = marker.split("::");
+      const sourcePath = resolve(projectRoot, file);
+
+      expect(existsSync(sourcePath), `${marker} points to a missing file`).toBe(true);
+      expect(readFileSync(sourcePath, "utf8"), marker).toContain(pattern);
+    }
+  });
+
   it("verifies the release in a staging directory before stopping the running API", () => {
     const result = spawnSync("bash", [scriptPath, "--dry-run"], {
       cwd: projectRoot,
@@ -86,6 +102,60 @@ describe("production release script guards", () => {
     expect(script).toContain("miniapp/pages/auctions/list.vue::dragonBallProfession");
   });
 
+  it("rejects archives that do not contain current user asset publishing features", () => {
+    const script = readFileSync(scriptPath, "utf8");
+
+    expect(script).toContain("api/src/db/migrations/013_user_asset_publish_switch.sql");
+    expect(script).toContain("api/src/modules/auth/auth.routes.ts");
+    expect(script).toContain("api/src/modules/configs/publishConfig.ts");
+    expect(script).toContain("api/src/modules/images/images.routes.ts");
+    expect(script).toContain("miniapp/pages/auctions/publish.vue");
+    expect(script).toContain("miniapp/pages/profile/assets.vue");
+    expect(script).toContain("miniapp/pages/profile/index.vue");
+    expect(script).toContain("miniapp/utils/assetPublishCopy.ts");
+    expect(script).toContain("admin/src/pages/ConfigPage.tsx");
+
+    expect(script).toContain("api/src/db/migrations/013_user_asset_publish_switch.sql::user_asset_publish_enabled");
+    expect(script).toContain("api/src/modules/auth/auth.routes.ts::/api/profile/assets");
+    expect(script).toContain("api/src/modules/configs/publishConfig.ts::USER_ASSET_PUBLISH_ENABLED_KEY");
+    expect(script).toContain("api/src/modules/images/images.routes.ts::asset_publish_disabled");
+    expect(script).toContain("api/src/modules/images/images.routes.ts::openid: user.openid");
+    expect(script).toContain("api/src/modules/assets/assets.routes.ts::/api/asset-publish-context");
+    expect(script).toContain("api/src/modules/assets/assets.routes.ts::remainingDailyPublishCount");
+    expect(script).toContain("shared/src/api-contracts.ts::AssetPublishContextResponse");
+    expect(script).toContain("miniapp/api/client.ts::getAssetPublishContext");
+    expect(script).toContain("miniapp/api/client.ts::listMyAssets");
+    expect(script).toContain("miniapp/utils/assetPublishCopy.ts::USER_ASSET_SUBMIT_DISABLED_REASON");
+    expect(script).toContain("miniapp/utils/assetPublishCopy.ts::normalizeUserAssetSubmitDisabledReason");
+    expect(script).toContain("miniapp/pages.json::pages/profile/assets");
+    expect(script).toContain("miniapp/pages.json::pages/auctions/publish");
+    expect(script).toContain("miniapp/pages/auctions/publish.vue::提交审核");
+    expect(script).toContain("miniapp/pages/auctions/publish.vue::请重新登录后上传");
+    expect(script).toContain("miniapp/pages/profile/assets.vue::getAssetPublishContext");
+    expect(script).toContain("miniapp/pages/profile/assets.vue::提交资产");
+    expect(script).toContain("miniapp/pages/profile/index.vue::通知中心");
+    expect(script).toContain("miniapp/pages/profile/index.vue::我的资产");
+    expect(script).toContain("admin/src/pages/ConfigPage.tsx::user_asset_publish_enabled");
+    expect(script).toContain("用户发布开关");
+  });
+
+  it("checks that the running release script matches the archive before marker checks", () => {
+    const script = readFileSync(scriptPath, "utf8");
+    const validateConfigBlock = script.match(/validate_config\(\) \{[\s\S]*?\n\}/)?.[0] ?? "";
+
+    expect(validateConfigBlock.indexOf("verify_release_script_matches_archive")).toBeLessThan(
+      validateConfigBlock.indexOf("verify_archive_contents")
+    );
+  });
+
+  it("reads full archive files during marker checks to avoid grep -q SIGPIPE failures", () => {
+    const script = readFileSync(scriptPath, "utf8");
+    const archiveFileContainsBlock = script.match(/archive_file_contains\(\) \{[\s\S]*?\n\}/)?.[0] ?? "";
+
+    expect(archiveFileContainsBlock).toContain('grep -- "$2" >/dev/null');
+    expect(archiveFileContainsBlock).not.toContain("grep -q");
+  });
+
   it("verifies deployed admin static assets after copying them to nginx web root", () => {
     const script = readFileSync(scriptPath, "utf8");
 
@@ -97,6 +167,8 @@ describe("production release script guards", () => {
     expect(script).toContain("copy-draft");
     expect(script).toContain("复制资产");
     expect(script).toContain("修改截止时间");
+    expect(script).toContain("user_asset_publish_enabled");
+    expect(script).toContain("用户发布开关");
     expect(script).toMatch(/verify_admin_static_contents\s*$/m);
     expect(script).toMatch(/verify_admin_static_or_fail\s*$/m);
   });

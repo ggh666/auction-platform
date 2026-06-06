@@ -12,11 +12,23 @@ describe("miniapp build configuration", () => {
     expect(viteConfig).not.toContain("__DEAL_CONTACT_SUBSCRIBE_TEMPLATE_ID__");
   });
 
-  it("keeps the source project root compatible with HBuilderX and WeChat DevTools", () => {
+  it("points root WeChat DevTools imports at the built mini program output", () => {
     const projectConfig = JSON.parse(readFileSync(resolve(import.meta.dirname, "project.config.json"), "utf8")) as {
       miniprogramRoot?: string;
     };
 
-    expect(projectConfig.miniprogramRoot).toBe("");
+    expect(projectConfig.miniprogramRoot).toBe("dist/build/mp-weixin/");
+  });
+
+  it("clears miniprogramRoot in generated WeChat DevTools configs", () => {
+    const patchScript = readFileSync(
+      resolve(import.meta.dirname, "scripts/patch-mp-weixin-project-config.mjs"),
+      "utf8"
+    );
+
+    expect(patchScript).toContain("dist/build/mp-weixin/project.config.json");
+    expect(patchScript).toContain("dist/dev/mp-weixin/project.config.json");
+    expect(patchScript).toContain("unpackage/dist/dev/mp-weixin/project.config.json");
+    expect(patchScript).toContain('projectConfig.miniprogramRoot = ""');
   });
 });

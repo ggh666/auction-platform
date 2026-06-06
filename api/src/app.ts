@@ -180,7 +180,7 @@ export function buildApp(options: AppOptions = {}) {
     principals,
     users
   });
-  registerImageRoutes(app, imageStorage, users, contentSafety);
+  registerImageRoutes(app, imageStorage, users, contentSafety, configs);
   registerAssetRoutes(app, assets, users, bids, configs, reports, contentSafety, principals, assetFollows);
   registerAdminDashboardRoutes(app, admins, { assets, bids, reports, users, principals });
   registerAdminRoutes(app, admins, assets, bids, users, contentSafety, principals, dealFollowups, imageSafety, imageStorage, notifications, hub);

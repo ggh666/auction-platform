@@ -1,6 +1,8 @@
 import type {
+  AssetCreateResponse,
   AssetDetailResponse,
   AssetListResponse,
+  AssetPublishContextResponse,
   AuctionAsset,
   LoginResponse,
   NotificationActionResponse,
@@ -10,6 +12,7 @@ import type {
   PlaceBidResponse,
   PrincipalListResponse,
   ProfileResultsResponse,
+  UploadedImageResponse,
   UserSummary,
   WechatLoginRequest
 } from "@auction/shared";
@@ -130,6 +133,10 @@ export function listMyResults(query: Pick<AssetListQuery, "page" | "pageSize"> =
   return request<ProfileResultsResponse>(`/api/profile/results${queryString(query)}`);
 }
 
+export function listMyAssets(query: Pick<AssetListQuery, "page" | "pageSize"> = {}): Promise<AssetListResponse> {
+  return request<AssetListResponse>(`/api/profile/assets${queryString(query)}`);
+}
+
 export function listNotifications(): Promise<NotificationListResponse> {
   return request<NotificationListResponse>("/api/profile/notifications");
 }
@@ -176,6 +183,45 @@ export function listAssets(query: AssetListQuery = {}): Promise<AssetListRespons
 
 export function listPrincipals(): Promise<PrincipalListResponse> {
   return request<PrincipalListResponse>("/api/principals");
+}
+
+export function getAssetPublishContext(): Promise<AssetPublishContextResponse> {
+  return request<AssetPublishContextResponse>("/api/asset-publish-context");
+}
+
+export type UploadedAssetImage = UploadedImageResponse["image"];
+
+export function uploadAssetImage(input: {
+  assetType: string;
+  mimeType: UploadedAssetImage["mimeType"];
+  base64Data: string;
+}): Promise<UploadedImageResponse> {
+  return request<UploadedImageResponse>("/api/images", {
+    method: "POST",
+    data: input
+  });
+}
+
+export type CreateAssetInput = {
+  principalId: string;
+  sellerGameId?: string;
+  gameName: string;
+  serverName: string;
+  assetType: string;
+  itemCategory?: string | null;
+  dragonBall?: unknown;
+  title: string;
+  description: string;
+  startingPriceCents: number;
+  minIncrementCents: number;
+  images: Array<Pick<UploadedAssetImage, "objectKey" | "publicUrl" | "mimeType" | "sizeBytes">>;
+};
+
+export function createAsset(input: CreateAssetInput): Promise<AssetCreateResponse> {
+  return request<AssetCreateResponse>("/api/assets", {
+    method: "POST",
+    data: input
+  });
 }
 
 export function listFollowedAssets(query: Pick<AssetListQuery, "page" | "pageSize"> = {}): Promise<AssetListResponse> {

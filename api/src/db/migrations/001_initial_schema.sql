@@ -284,4 +284,5 @@ INSERT INTO system_configs (config_key, config_value) VALUES
   ('extension_duration_seconds', '300'),
   ('max_images_per_asset', '9'),
   ('max_image_size_bytes', '5242880'),
-  ('default_daily_publish_limit', '3');
+  ('default_daily_publish_limit', '3'),
+  ('user_asset_publish_enabled', 'true');

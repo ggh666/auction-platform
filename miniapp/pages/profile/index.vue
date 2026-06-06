@@ -2,7 +2,13 @@
   <view class="page">
     <view class="page-header">
       <text class="title">个人中心</text>
-      <button class="home-button" @tap="goHome">返回主页</button>
+      <view class="top-actions">
+        <button class="notification-button" @tap="go('/pages/profile/notifications')">
+          通知中心
+          <text v-if="unreadNotifications > 0" class="badge top-badge">{{ unreadNotifications }}</text>
+        </button>
+        <button class="home-button" @tap="goHome">返回主页</button>
+      </view>
     </view>
     <view class="profile-card">
       <image v-if="user?.avatarUrl" class="avatar" :src="user.avatarUrl" mode="aspectFill" />
@@ -24,12 +30,9 @@
       <text class="menu-title">我的出价</text>
       <text class="menu-desc">跟踪参与过的交换和当前最高价</text>
     </view>
-    <view class="menu-item" @tap="go('/pages/profile/notifications')">
-      <view class="menu-title-row">
-        <text class="menu-title">消息通知</text>
-        <text v-if="unreadNotifications > 0" class="badge">{{ unreadNotifications }}</text>
-      </view>
-      <text class="menu-desc">查看参与交换后的新出价提醒</text>
+    <view class="menu-item" @tap="go('/pages/profile/assets')">
+      <text class="menu-title">我的资产</text>
+      <text class="menu-desc">查看我发布过的资产和审核状态</text>
     </view>
     <view class="menu-item" @tap="go('/pages/profile/results')">
       <text class="menu-title">成交记录</text>
@@ -150,8 +153,18 @@ function logout() {
   color: #101828;
 }
 
-.home-button {
+.top-actions {
+  display: flex;
   flex: 0 0 auto;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 12rpx;
+}
+
+.home-button,
+.notification-button {
+  flex: 0 0 auto;
+  position: relative;
   height: 56rpx;
   margin: 0;
   padding: 0 18rpx;
@@ -162,7 +175,8 @@ function logout() {
   border-radius: 8rpx;
 }
 
-.home-button::after {
+.home-button::after,
+.notification-button::after {
   border: 0;
 }
 
@@ -265,12 +279,6 @@ function logout() {
   color: #101828;
 }
 
-.menu-title-row {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-}
-
 .badge {
   min-width: 36rpx;
   height: 36rpx;
@@ -281,6 +289,12 @@ function logout() {
   color: #fff;
   background: #d92d20;
   border-radius: 18rpx;
+}
+
+.top-badge {
+  position: absolute;
+  top: -12rpx;
+  right: -10rpx;
 }
 
 .menu-desc {
@@ -342,7 +356,8 @@ function logout() {
   background: linear-gradient(180deg, #a7f3d0, #34d399);
 }
 
-.home-button {
+.home-button,
+.notification-button {
   color: #f7e8b6;
   font-weight: 800;
   background: rgba(11, 32, 30, 0.9);

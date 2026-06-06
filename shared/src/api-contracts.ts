@@ -8,6 +8,7 @@ import type {
   AuctionResultStatus,
   BidDisplayRecord,
   DealFollowupStatus,
+  ImageSafetyStatus,
   NotificationItem,
   PrincipalSummary,
   SystemConfig,
@@ -43,6 +44,34 @@ export type AssetListResponse = {
   page?: number;
   pageSize?: number;
   hasMore?: boolean;
+};
+
+export type AssetPublishContextResponse = {
+  enabled: boolean;
+  disabledReason: string | null;
+  principals: PrincipalSummary[];
+  defaultMinIncrementCents: number;
+  remainingDailyPublishCount: number;
+  imagePolicy: {
+    maxImagesPerAsset: number;
+    maxImageSizeBytes: number;
+    allowedMimeTypes: string[];
+  };
+};
+
+export type AssetCreateResponse = {
+  asset: AuctionAsset;
+};
+
+export type UploadedImageResponse = {
+  image: {
+    objectKey: string;
+    publicUrl: string;
+    mimeType: string;
+    sizeBytes: number;
+    safetyStatus: ImageSafetyStatus;
+    safetyTraceId: string | null;
+  };
 };
 
 export type ProfileResultItem = {

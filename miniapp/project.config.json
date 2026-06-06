@@ -1,6 +1,6 @@
 {
   "description": "微信开发者工具配置。HBuilderX 会在编译产物目录中读取同名配置。",
-  "miniprogramRoot": "",
+  "miniprogramRoot": "dist/build/mp-weixin/",
   "compileType": "miniprogram",
   "appid": "wx6ef44aa749f07e94",
   "projectname": "资源交换",

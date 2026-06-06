@@ -37,15 +37,25 @@ required_release_files=(
   "api/src/modules/contentSafety/wechatMediaProxy.ts"
   "api/src/modules/contentSafety/wechatMediaProxy.routes.ts"
   "api/src/scripts/retryFailedImageChecks.ts"
+  "api/src/db/migrations/013_user_asset_publish_switch.sql"
   "api/src/db/migrations/017_public_asset_dragon_filters_index.sql"
+  "api/src/modules/auth/auth.routes.ts"
   "api/src/modules/assets/assets.routes.ts"
   "api/src/modules/assets/assets.repository.ts"
   "api/src/modules/assets/assets.mysql.repository.ts"
+  "api/src/modules/configs/publishConfig.ts"
+  "api/src/modules/images/images.routes.ts"
   "api/src/modules/admin/admin.routes.ts"
   "shared/src/api-contracts.ts"
   "miniapp/api/client.ts"
+  "miniapp/pages.json"
+  "miniapp/utils/assetPublishCopy.ts"
   "miniapp/pages/auctions/list.vue"
+  "miniapp/pages/auctions/publish.vue"
+  "miniapp/pages/profile/assets.vue"
+  "miniapp/pages/profile/index.vue"
   "admin/src/App.tsx"
+  "admin/src/pages/ConfigPage.tsx"
   "admin/src/pages/AssetDataPage.tsx"
   "admin/src/pages/AssetPublishPage.tsx"
   "admin/src/pages/AssetDetailPage.tsx"
@@ -63,18 +73,43 @@ required_release_markers=(
   "api/src/scripts/retryFailedImageChecks.ts::manual_wechat_media_download_retry"
   "api/src/scripts/retryFailedImageChecks.ts::wechatMediaCheckUrlForImageCheck"
   "api/src/scripts/retryFailedImageChecks.ts::mediaCheckDetailForImageCheck"
+  "api/src/db/migrations/013_user_asset_publish_switch.sql::user_asset_publish_enabled"
   "api/src/db/migrations/017_public_asset_dragon_filters_index.sql::idx_assets_public_dragon_filters"
+  "api/src/modules/auth/auth.routes.ts::/api/profile/assets"
+  "api/src/modules/configs/publishConfig.ts::USER_ASSET_PUBLISH_ENABLED_KEY"
+  "api/src/modules/configs/publishConfig.ts::USER_ASSET_PUBLISH_DISABLED_REASON"
+  "api/src/modules/images/images.routes.ts::readUserAssetPublishConfig"
+  "api/src/modules/images/images.routes.ts::asset_publish_disabled"
+  "api/src/modules/images/images.routes.ts::openid: user.openid"
+  "api/src/modules/assets/assets.routes.ts::/api/asset-publish-context"
+  "api/src/modules/assets/assets.routes.ts::remainingDailyPublishCount"
   "api/src/modules/assets/assets.routes.ts::dragonBallProfessionQuery"
   "api/src/modules/assets/assets.routes.ts::principalId: principalIdQuery"
   "api/src/modules/assets/assets.mysql.repository.ts::dragon_ball_profession = ?"
   "api/src/modules/assets/assets.repository.ts::dragonBallQuality"
+  "shared/src/api-contracts.ts::AssetPublishContextResponse"
+  "shared/src/api-contracts.ts::UploadedImageResponse"
+  "miniapp/api/client.ts::getAssetPublishContext"
+  "miniapp/api/client.ts::listMyAssets"
   "miniapp/api/client.ts::listPrincipals"
+  "miniapp/utils/assetPublishCopy.ts::USER_ASSET_SUBMIT_DISABLED_REASON"
+  "miniapp/utils/assetPublishCopy.ts::normalizeUserAssetSubmitDisabledReason"
+  "miniapp/pages.json::pages/profile/assets"
+  "miniapp/pages.json::pages/auctions/publish"
   "miniapp/pages/auctions/list.vue::filter-panel"
   "miniapp/pages/auctions/list.vue::筛选主理人"
   "miniapp/pages/auctions/list.vue::dragonBallProfession"
+  "miniapp/pages/auctions/publish.vue::提交审核"
+  "miniapp/pages/auctions/publish.vue::uploadAssetImage"
+  "miniapp/pages/auctions/publish.vue::请重新登录后上传"
+  "miniapp/pages/profile/assets.vue::getAssetPublishContext"
+  "miniapp/pages/profile/assets.vue::提交资产"
+  "miniapp/pages/profile/index.vue::通知中心"
+  "miniapp/pages/profile/index.vue::我的资产"
   "api/src/modules/admin/admin.routes.ts::/admin/assets/:assetId/copy-draft"
   "api/src/modules/admin/admin.routes.ts::/admin/assets/:assetId/end-time"
   "shared/src/api-contracts.ts::AdminAssetCopyDraft"
+  "admin/src/pages/ConfigPage.tsx::user_asset_publish_enabled"
   "admin/src/App.tsx::copy-draft"
   "admin/src/pages/AssetDataPage.tsx::onCopyAsset"
   "admin/src/pages/AssetDataPage.tsx::复制中"
@@ -87,6 +122,8 @@ admin_static_markers=(
   "copy-draft"
   "复制资产"
   "修改截止时间"
+  "user_asset_publish_enabled"
+  "用户发布开关"
 )
 
 usage() {
@@ -206,7 +243,7 @@ archive_contains_file() {
 }
 
 archive_file_contains() {
-  tar -xOf "$ARCHIVE_PATH" "$(archive_member_path "$1")" | grep -q -- "$2"
+  tar -xOf "$ARCHIVE_PATH" "$(archive_member_path "$1")" | grep -- "$2" >/dev/null
 }
 
 directory_file_contains() {
@@ -368,8 +405,8 @@ validate_config() {
     [ "$(id -u)" -eq 0 ] || die "Please run as root on the production server"
     [ -f "$ARCHIVE_PATH" ] || die "Release archive not found: $ARCHIVE_PATH"
     tar -tzf "$ARCHIVE_PATH" >/dev/null
-    verify_archive_contents
     verify_release_script_matches_archive
+    verify_archive_contents
   fi
 }
 

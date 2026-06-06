@@ -688,7 +688,7 @@ describe("admin routes", () => {
     }
   });
 
-  it("keeps public principal lookup available while miniapp publishing is disabled", async () => {
+  it("keeps public principal lookup available while miniapp publishing is enabled", async () => {
     const app = buildApp({ enableMockAuth: true });
 
     try {
@@ -711,8 +711,8 @@ describe("admin routes", () => {
         headers: { authorization: `Bearer ${token}` },
         payload: { ...pendingAssetInput(), principalId: "1" }
       });
-      expect(created.statusCode).toBe(410);
-      expect(created.json().error.code).toBe("user_asset_publish_disabled");
+      expect(created.statusCode).toBe(200);
+      expect(created.json().asset).toMatchObject({ principalId: "1", status: "pending_review" });
     } finally {
       await app.close();
     }
@@ -2282,7 +2282,7 @@ describe("admin routes", () => {
       });
 
       expect(list.statusCode).toBe(200);
-      expect(list.json()).toMatchObject({ total: 6, page: 1, pageSize: 3 });
+      expect(list.json()).toMatchObject({ total: 7, page: 1, pageSize: 3 });
       expect(list.json().items).toEqual([
         expect.objectContaining({ key: "default_min_increment_cents", value: "100" }),
         expect.objectContaining({ key: "extension_window_seconds", value: "300" }),
