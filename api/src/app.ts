@@ -183,6 +183,7 @@ export function buildApp(options: AppOptions = {}) {
     options.subscribeMessageService ??
     createWechatSubscribeMessageService({
       priceChangeTemplateId: env.wechatPriceChangeSubscribeTemplateId,
+      replyMessageTemplateId: env.wechatReplyMessageSubscribeTemplateId,
       assetMessageTemplateId: env.wechatAssetMessageSubscribeTemplateId,
       miniprogramState: env.wechatSubscribeMessageMiniprogramState,
       tokenProvider: wechatTokenProvider

@@ -17,6 +17,7 @@ import { createInMemoryNotificationsRepository } from "../../api/src/modules/not
 import { createInMemoryPrincipalsRepository } from "../../api/src/modules/principals/principals.repository";
 import { createReportsService } from "../../api/src/modules/reports/reports.service";
 import { createInMemoryUsersRepository } from "../../api/src/modules/users/users.repository";
+import { wechatSubscribeTemplates } from "@auction/shared";
 
 const productionEnv = {
   NODE_ENV: "production",
@@ -357,6 +358,21 @@ describe("readEnv", () => {
 
   it("uses a default slow request threshold for API timing logs", () => {
     expect(readEnv(productionEnv).apiSlowRequestThresholdMs).toBe(800);
+  });
+
+  it("prefers the reply message subscribe template id and keeps the old asset message id as a fallback", () => {
+    expect(readEnv({}).wechatReplyMessageSubscribeTemplateId).toBe(wechatSubscribeTemplates.replyMessage.templateId);
+    expect(
+      readEnv({
+        WECHAT_REPLY_MESSAGE_SUBSCRIBE_TEMPLATE_ID: " tmpl-reply ",
+        WECHAT_ASSET_MESSAGE_SUBSCRIBE_TEMPLATE_ID: " tmpl-legacy-asset "
+      }).wechatReplyMessageSubscribeTemplateId
+    ).toBe("tmpl-reply");
+    expect(
+      readEnv({
+        WECHAT_ASSET_MESSAGE_SUBSCRIBE_TEMPLATE_ID: " tmpl-legacy-asset "
+      }).wechatReplyMessageSubscribeTemplateId
+    ).toBe("tmpl-legacy-asset");
   });
 
   it("parses API slow request threshold overrides", () => {

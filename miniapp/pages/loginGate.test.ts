@@ -23,7 +23,7 @@ describe("miniapp on-demand login gates", () => {
 
     expect(auctionDetailPage).toContain('requireLoginForAction("请先登录后再出价"');
     expect(auctionDetailPage).toContain('requireLoginForAction("登录后联系主理人"');
-    expect(exchangeDetailPage).toContain('requireLoginForAction("登录后联系发布者"');
+    expect(exchangeDetailPage).toContain('requireLoginForAction("登录后打招呼"');
   });
 
   it("requires login when switching to the profile tab without trapping back navigation", () => {

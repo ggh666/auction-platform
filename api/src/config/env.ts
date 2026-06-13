@@ -1,3 +1,5 @@
+import { wechatSubscribeTemplates } from "@auction/shared";
+
 export type Env = {
   nodeEnv: string;
   logLevel: LogLevel;
@@ -19,6 +21,7 @@ export type Env = {
   wechatAppSecret: string;
   wechatEventToken: string;
   wechatPriceChangeSubscribeTemplateId: string;
+  wechatReplyMessageSubscribeTemplateId: string;
   wechatAssetMessageSubscribeTemplateId: string;
   wechatSubscribeMessageMiniprogramState: "developer" | "trial" | "formal";
   corsAllowedOrigins: true | string[];
@@ -158,7 +161,14 @@ export function readEnv(source: NodeJS.ProcessEnv = process.env): Env {
     wechatAppSecret: source.WECHAT_APP_SECRET ?? "",
     wechatEventToken: source.WECHAT_EVENT_TOKEN ?? "",
     wechatPriceChangeSubscribeTemplateId: source.WECHAT_PRICE_CHANGE_SUBSCRIBE_TEMPLATE_ID?.trim() ?? "",
-    wechatAssetMessageSubscribeTemplateId: source.WECHAT_ASSET_MESSAGE_SUBSCRIBE_TEMPLATE_ID?.trim() ?? "",
+    wechatReplyMessageSubscribeTemplateId:
+      source.WECHAT_REPLY_MESSAGE_SUBSCRIBE_TEMPLATE_ID?.trim() ||
+      source.WECHAT_ASSET_MESSAGE_SUBSCRIBE_TEMPLATE_ID?.trim() ||
+      wechatSubscribeTemplates.replyMessage.templateId,
+    wechatAssetMessageSubscribeTemplateId:
+      source.WECHAT_ASSET_MESSAGE_SUBSCRIBE_TEMPLATE_ID?.trim() ||
+      source.WECHAT_REPLY_MESSAGE_SUBSCRIBE_TEMPLATE_ID?.trim() ||
+      "",
     wechatSubscribeMessageMiniprogramState: readMiniprogramState(source.WECHAT_SUBSCRIBE_MESSAGE_MINIPROGRAM_STATE, nodeEnv),
     corsAllowedOrigins: readCorsAllowedOrigins(source.CORS_ALLOWED_ORIGINS, nodeEnv),
     contentSafetyEnabled,

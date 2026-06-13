@@ -64,11 +64,11 @@ describe("WeChat subscribe messages", () => {
     expect(fetchImpl).not.toHaveBeenCalled();
   });
 
-  it("sends asset conversation notifications to the chat page using the asset message template", async () => {
+  it("sends asset conversation notifications to the chat page using the reply message template fields", async () => {
     const fetchImpl = vi.fn(async () => jsonResponse({ errcode: 0 }));
     const service = createWechatSubscribeMessageService({
       priceChangeTemplateId: "tmpl-price-change",
-      assetMessageTemplateId: "tmpl-asset-message",
+      replyMessageTemplateId: "tmpl-reply-message",
       miniprogramState: "trial",
       tokenProvider: { getAccessToken: async () => "access-token" },
       fetchImpl
@@ -90,15 +90,15 @@ describe("WeChat subscribe messages", () => {
         method: "POST",
         body: JSON.stringify({
           touser: "openid-2",
-          template_id: "tmpl-asset-message",
+          template_id: "tmpl-reply-message",
           page: "pages/profile/asset-chat?conversationId=conversation-9",
           miniprogram_state: "trial",
           lang: "zh_CN",
           data: {
             thing1: { value: "紫色工程龙珠" },
             name2: { value: "发布者" },
-            thing3: { value: "可以，先说下你的资源" },
-            time4: { value: "2026-06-06 12:34" }
+            thing5: { value: "可以，先说下你的资源" },
+            date4: { value: "2026-06-06 12:34:56" }
           }
         })
       })

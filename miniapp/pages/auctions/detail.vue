@@ -83,7 +83,7 @@
         </text>
       </view>
       <button class="primary-action" :loading="submitting" :disabled="submitting || Boolean(unavailableMessage)" @tap="submitBid">
-        {{ unavailableMessage ? "不可估价" : "提交估价" }}
+        {{ unavailableMessage ? "不可估价" : "我要了" }}
       </button>
     </view>
   </view>

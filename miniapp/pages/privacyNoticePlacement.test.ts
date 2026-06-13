@@ -19,7 +19,7 @@ describe("miniapp privacy notices", () => {
     expect(detailPage).toContain("隐私说明");
     expect(detailPage).toContain("估价金额");
     expect(detailPage).toContain("不会展示手机号等无关个人信息");
-    expect(detailPage.indexOf("隐私说明")).toBeLessThan(detailPage.indexOf("提交估价"));
+    expect(detailPage.indexOf("隐私说明")).toBeLessThan(detailPage.indexOf("我要了"));
 
     expect(listPage).toContain("隐私说明：搜索词和筛选条件仅用于本次列表查询。");
     expect(listPage).not.toContain("关注操作仅用于生成个人关注记录，不会公开展示");

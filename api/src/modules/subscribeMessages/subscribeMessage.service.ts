@@ -37,6 +37,7 @@ export type SubscribeMessageService = {
 type WechatSubscribeMessageServiceOptions = {
   templateId?: string;
   priceChangeTemplateId?: string;
+  replyMessageTemplateId?: string;
   assetMessageTemplateId?: string;
   miniprogramState: "developer" | "trial" | "formal";
   tokenProvider: WechatAccessTokenProvider;
@@ -59,6 +60,13 @@ function formatWechatTime(value: string): string {
   }
   const pad = (input: number) => String(input).padStart(2, "0");
   return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())} ${pad(date.getHours())}:${pad(date.getMinutes())}`;
+}
+
+function formatWechatDateTime(value: string): string {
+  const date = new Date(value);
+  const normalizedDate = Number.isNaN(date.getTime()) ? new Date() : date;
+  const pad = (input: number) => String(input).padStart(2, "0");
+  return `${normalizedDate.getFullYear()}-${pad(normalizedDate.getMonth() + 1)}-${pad(normalizedDate.getDate())} ${pad(normalizedDate.getHours())}:${pad(normalizedDate.getMinutes())}:${pad(normalizedDate.getSeconds())}`;
 }
 
 export function createNoopSubscribeMessageService(): SubscribeMessageService {
@@ -128,13 +136,13 @@ export function createWechatSubscribeMessageService(options: WechatSubscribeMess
     async sendAssetMessage(input) {
       await sendTemplate({
         touserOpenid: input.touserOpenid,
-        templateId: options.assetMessageTemplateId ?? "",
+        templateId: options.replyMessageTemplateId ?? options.assetMessageTemplateId ?? "",
         page: `pages/profile/asset-chat?conversationId=${encodeURIComponent(input.conversationId)}`,
         data: {
           thing1: { value: truncateThing(input.assetTitle) },
           name2: { value: truncateThing(input.senderDisplayName, 10) },
-          thing3: { value: truncateThing(input.content, 20) },
-          time4: { value: formatWechatTime(input.sentAt) }
+          thing5: { value: truncateThing(input.content, 20) },
+          date4: { value: formatWechatDateTime(input.sentAt) }
         }
       });
     }

@@ -41,7 +41,7 @@
       </view>
 
       <button class="contact-button" :loading="contacting" :disabled="contacting || isOwnResource" @tap="contactPublisher">
-        {{ isOwnResource ? "这是你发布的资源" : "联系发布者" }}
+        {{ isOwnResource ? "这是你发布的资源" : "打招呼" }}
       </button>
     </block>
   </view>
@@ -144,7 +144,7 @@ async function contactPublisher() {
   if (contacting.value || !resource.value) {
     return;
   }
-  if (!requireLoginForAction("登录后联系发布者")) {
+  if (!requireLoginForAction("登录后打招呼")) {
     return;
   }
   if (isOwnResource.value) {

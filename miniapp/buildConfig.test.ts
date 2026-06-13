@@ -8,8 +8,10 @@ describe("miniapp build configuration", () => {
 
     expect(viteConfig).toContain("UNI_APP_PRICE_CHANGE_SUBSCRIBE_TEMPLATE_ID");
     expect(viteConfig).toContain("__PRICE_CHANGE_SUBSCRIBE_TEMPLATE_ID__");
-    expect(viteConfig).toContain("UNI_APP_ASSET_MESSAGE_SUBSCRIBE_TEMPLATE_ID");
-    expect(viteConfig).toContain("__ASSET_MESSAGE_SUBSCRIBE_TEMPLATE_ID__");
+    expect(viteConfig).toContain("UNI_APP_REPLY_MESSAGE_SUBSCRIBE_TEMPLATE_ID");
+    expect(viteConfig).toContain("__REPLY_MESSAGE_SUBSCRIBE_TEMPLATE_ID__");
+    expect(viteConfig).toContain("wechatSubscribeTemplates.replyMessage.templateId");
+    expect(viteConfig).not.toContain("1A5JXwLJfcDbZXHCQcQf7M8NA0GM4sfJ29CUFwFKUIc");
     expect(viteConfig).not.toContain("UNI_APP_DEAL_CONTACT_SUBSCRIBE_TEMPLATE_ID");
     expect(viteConfig).not.toContain("__DEAL_CONTACT_SUBSCRIBE_TEMPLATE_ID__");
   });
@@ -133,21 +135,21 @@ describe("miniapp build configuration", () => {
     expect(deployGuide).not.toContain("项目目录选择编译后的微信小程序产物");
   });
 
-  it("documents reused asset message subscription configuration without a duplicate miniapp flow", () => {
+  it("documents reused reply message subscription configuration without a duplicate miniapp flow", () => {
     const subscriptionGuide = readFileSync(
       resolve(import.meta.dirname, "../docs/wechat-price-change-subscribe-message.md"),
       "utf8"
     );
 
-    expect(subscriptionGuide).toContain("资产消息提醒");
+    expect(subscriptionGuide).toContain("留言回复通知");
     expect(subscriptionGuide).toContain("复用 `requestAssetMessageSubscription()`");
     expect(subscriptionGuide).toContain("不新增独立订阅按钮");
-    expect(subscriptionGuide).toContain("WECHAT_ASSET_MESSAGE_SUBSCRIBE_TEMPLATE_ID");
-    expect(subscriptionGuide).toContain("UNI_APP_ASSET_MESSAGE_SUBSCRIBE_TEMPLATE_ID");
+    expect(subscriptionGuide).toContain("WECHAT_REPLY_MESSAGE_SUBSCRIBE_TEMPLATE_ID");
+    expect(subscriptionGuide).toContain("UNI_APP_REPLY_MESSAGE_SUBSCRIBE_TEMPLATE_ID");
     expect(subscriptionGuide).toContain("thing1");
     expect(subscriptionGuide).toContain("name2");
-    expect(subscriptionGuide).toContain("thing3");
-    expect(subscriptionGuide).toContain("time4");
+    expect(subscriptionGuide).toContain("thing5");
+    expect(subscriptionGuide).toContain("date4");
     expect(subscriptionGuide).toContain("pages/profile/asset-chat?conversationId=");
   });
 });

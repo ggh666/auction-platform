@@ -260,7 +260,9 @@ describe("production release script guards", () => {
     expect(script).toContain("admin/src/pages/ExchangeResourcePage.tsx");
     expect(script).toContain("api/src/modules/admin/adminPermissions.ts");
     expect(script).toContain("api/src/modules/subscribeMessages/subscribeMessage.service.ts::sendAssetMessage");
-    expect(script).toContain("api/src/config/env.ts::WECHAT_ASSET_MESSAGE_SUBSCRIBE_TEMPLATE_ID");
+    expect(script).toContain("api/src/config/env.ts::WECHAT_REPLY_MESSAGE_SUBSCRIBE_TEMPLATE_ID");
+    expect(script).toContain("shared/config/wechat-subscribe-templates.json::replyMessage");
+    expect(script).toContain("shared/src/wechatSubscribeTemplates.ts::wechatSubscribeTemplates");
     expect(script).toContain("shared/src/api-contracts.ts::ExchangeResourceListResponse");
     expect(script).toContain("shared/src/ws-events.ts::targetUserId");
     expect(script).toContain("miniapp/pages.json::pages/exchange/list");
@@ -271,8 +273,8 @@ describe("production release script guards", () => {
     expect(script).toContain("miniapp/utils/share.ts::buildGameModeShare");
     expect(script).toContain("miniapp/utils/share.ts::buildPriceReferenceShare");
     expect(script).toContain("miniapp/utils/subscribeMessage.ts::requestAssetMessageSubscription");
-    expect(script).toContain("miniapp/vite.config.js::UNI_APP_ASSET_MESSAGE_SUBSCRIBE_TEMPLATE_ID");
-    expect(script).toContain("miniapp/vite.config.js::__ASSET_MESSAGE_SUBSCRIBE_TEMPLATE_ID__");
+    expect(script).toContain("miniapp/vite.config.js::UNI_APP_REPLY_MESSAGE_SUBSCRIBE_TEMPLATE_ID");
+    expect(script).toContain("miniapp/vite.config.js::__REPLY_MESSAGE_SUBSCRIBE_TEMPLATE_ID__");
     expect(script).toContain("miniapp/pages/games/mode.vue::自由交换");
     expect(script).toContain("miniapp/pages/games/mode.vue::onShareAppMessage");
     expect(script).toContain("miniapp/pages/games/mode.vue::buildGameModeShare");
@@ -283,7 +285,7 @@ describe("production release script guards", () => {
     expect(script).toContain("miniapp/pages/exchange/list.vue::buildExchangeResourceListShare");
     expect(script).toContain("miniapp/pages/exchange/detail.vue::交易需谨慎");
     expect(script).toContain("miniapp/pages/exchange/detail.vue::这是你发布的资源");
-    expect(script).toContain("miniapp/pages/exchange/detail.vue::登录后联系发布者");
+    expect(script).toContain("miniapp/pages/exchange/detail.vue::登录后打招呼");
     expect(script).toContain("api/src/modules/exchangeResources/exchangeResources.routes.ts::这是你发布的资源，不能联系自己");
     expect(script).toContain("api/src/modules/exchangeResources/exchangeResources.routes.ts::/admin/exchange-resources");
     expect(script).toContain("api/src/modules/exchangeResources/exchangeResources.repository.ts::listForAdmin");
