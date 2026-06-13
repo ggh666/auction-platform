@@ -97,6 +97,7 @@ import { createPrincipalConversation, getAssetDetail, placeBid, readApiBase } fr
 import { readSessionUser } from "../../auth/session";
 import { mergeAuctionAssetUpdate } from "../../utils/assetMerge";
 import { assetStatusText, isSoldAsset } from "../../utils/assetStatusText";
+import { requireLoginForAction } from "../../utils/authNavigation";
 import {
   auctionUnavailableMessage,
   bidFailureMessage,
@@ -396,6 +397,10 @@ async function submitBid() {
     return;
   }
 
+  if (!requireLoginForAction("请先登录后再出价")) {
+    return;
+  }
+
   if (!assetId.value) {
     uni.showToast({ title: "缺少宝贝编号，无法出价", icon: "none" });
     return;
@@ -464,9 +469,7 @@ async function openPrincipalConversation() {
   if (!detail.value || contactingPrincipal.value) {
     return;
   }
-  if (!readSessionUser()) {
-    uni.showToast({ title: "登录后联系主理人", icon: "none" });
-    uni.navigateTo({ url: "/pages/login/login" });
+  if (!requireLoginForAction("登录后联系主理人")) {
     return;
   }
   if (!principalContactState.value.enabled) {

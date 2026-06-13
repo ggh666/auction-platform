@@ -16,8 +16,8 @@ describe("miniapp user publishing switch", () => {
 
     expect(auctionListPage).not.toContain("openPublish");
     expect(auctionListPage).not.toContain("发布{{ selectedAssetType }}");
-    expect(profilePage).toContain("我的资产");
-    expect(profilePage).toContain("/pages/profile/assets");
+    expect(profilePage).not.toContain("<text class=\"menu-title\">我的资产</text>");
+    expect(profilePage).not.toContain("go('/pages/profile/assets')");
     expect(pagesConfig).toContain("pages/auctions/publish");
     expect(pagesConfig).toContain("pages/profile/assets");
     const assetListPage = readPage("pages/profile/assets.vue");
@@ -31,8 +31,10 @@ describe("miniapp user publishing switch", () => {
     const publishPage = readPage("pages/auctions/publish.vue");
     expect(publishPage).toContain("createAsset");
     expect(publishPage).toContain("normalizeUserAssetSubmitDisabledReason");
+    expect(publishPage).toContain("missingUserAssetBaseFieldMessage");
     expect(publishPage).toContain("WeChat openid is required for content safety check");
     expect(publishPage).toContain("请重新登录后上传");
     expect(publishPage).not.toContain("特殊时期暂未开放用户发布资产");
+    expect(publishPage).not.toContain("请填写游戏、区服、标题和描述");
   });
 });

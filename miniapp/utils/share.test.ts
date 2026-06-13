@@ -2,7 +2,11 @@ import { describe, expect, it } from "vitest";
 import {
   buildAssetDetailShare,
   buildAssetListShare,
+  buildExchangeResourceDetailShare,
+  buildExchangeResourceListShare,
+  buildGameModeShare,
   buildHomeShare,
+  buildPriceReferenceShare,
   toTimelineShare
 } from "./share";
 
@@ -21,6 +25,37 @@ describe("miniapp share helpers", () => {
     });
   });
 
+  it("builds game mode and free exchange list share targets", () => {
+    expect(buildGameModeShare({ gameName: "塔防精灵" })).toEqual({
+      title: "塔防精灵交换方式",
+      path: "/pages/games/mode?gameName=%E5%A1%94%E9%98%B2%E7%B2%BE%E7%81%B5"
+    });
+    expect(
+      buildExchangeResourceListShare({
+        gameName: "塔防精灵",
+        dragonBallProfession: "法师",
+        dragonBallQuality: "蓝",
+        keyword: "17区"
+      })
+    ).toEqual({
+      title: "塔防精灵龙珠自由交换",
+      path: "/pages/exchange/list?gameName=%E5%A1%94%E9%98%B2%E7%B2%BE%E7%81%B5&dragonBallProfession=%E6%B3%95%E5%B8%88&dragonBallQuality=%E8%93%9D&keyword=17%E5%8C%BA"
+    });
+  });
+
+  it("builds a price reference share target with selected profession and quality", () => {
+    expect(
+      buildPriceReferenceShare({
+        gameName: "塔防精灵",
+        profession: "法师",
+        quality: "蓝"
+      })
+    ).toEqual({
+      title: "塔防精灵龙珠估值参考",
+      path: "/pages/priceReference/index?gameName=%E5%A1%94%E9%98%B2%E7%B2%BE%E7%81%B5&profession=%E6%B3%95%E5%B8%88&quality=%E8%93%9D"
+    });
+  });
+
   it("builds an asset detail share target with the first usable image", () => {
     expect(
       buildAssetDetailShare({
@@ -33,6 +68,21 @@ describe("miniapp share helpers", () => {
       title: "成品账号 - 塔防精灵交换",
       path: "/pages/auctions/detail?assetId=12",
       imageUrl: "https://cdn.example.com/a.jpg"
+    });
+  });
+
+  it("builds an exchange resource detail share target", () => {
+    expect(
+      buildExchangeResourceDetailShare({
+        resourceId: "88",
+        title: "红品质龙珠交换",
+        gameName: "塔防精灵",
+        imageUrl: "https://cdn.example.com/exchange.jpg"
+      })
+    ).toEqual({
+      title: "红品质龙珠交换 - 塔防精灵自由交换",
+      path: "/pages/exchange/detail?resourceId=88",
+      imageUrl: "https://cdn.example.com/exchange.jpg"
     });
   });
 

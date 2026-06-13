@@ -30,10 +30,12 @@ import { ref } from "vue";
 import { listNotifications } from "../../api/client";
 import { readToken } from "../../auth/session";
 import { buildHomeShare, toTimelineShare } from "../../utils/share";
+import { syncCustomTabBarSelected } from "../../utils/tabBar";
 
 const unreadNotifications = ref(0);
 
 onShow(() => {
+  syncCustomTabBarSelected(0);
   uni.showShareMenu({ withShareTicket: true, menus: ["shareAppMessage", "shareTimeline"] });
   void refreshUnreadNotifications();
 });
@@ -57,7 +59,7 @@ async function refreshUnreadNotifications() {
 }
 
 function openGame(gameName: string) {
-  uni.navigateTo({ url: `/pages/auctions/list?gameName=${encodeURIComponent(gameName)}` });
+  uni.navigateTo({ url: `/pages/games/mode?gameName=${encodeURIComponent(gameName)}` });
 }
 
 function openNotifications() {

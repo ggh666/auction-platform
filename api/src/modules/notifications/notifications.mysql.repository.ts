@@ -113,6 +113,19 @@ export function createMysqlNotificationsRepository(db: MysqlExecutor): Notificat
       return listByUser(userId);
     },
 
+    async deleteByUserIds(userId, notificationIds) {
+      if (notificationIds.length === 0) {
+        return 0;
+      }
+      const placeholders = notificationIds.map(() => "?").join(",");
+      const [result] = await db.execute<MysqlResultHeader>(
+        `DELETE FROM station_notifications
+         WHERE user_id = ? AND id IN (${placeholders})`,
+        [Number(userId), ...notificationIds.map(Number)]
+      );
+      return result.affectedRows;
+    },
+
     async deleteByBidId(bidId) {
       const [result] = await db.execute<MysqlResultHeader>(
         `DELETE FROM station_notifications

@@ -1,7 +1,9 @@
 import { describe, expect, it } from "vitest";
 import {
+  requestAssetMessageSubscription,
   requestBidRelatedSubscriptions,
   requestPriceChangeSubscription,
+  readAssetMessageSubscribeTemplateId,
   readPriceChangeSubscribeTemplateId
 } from "./subscribeMessage";
 
@@ -17,6 +19,24 @@ describe("miniapp subscribe message helpers", () => {
   it("reads the configured price change template id", () => {
     expect(readPriceChangeSubscribeTemplateId({ UNI_APP_PRICE_CHANGE_SUBSCRIBE_TEMPLATE_ID: " tmpl-1 " })).toBe("tmpl-1");
     expect(readPriceChangeSubscribeTemplateId({})).toBe("xnfSOrsId25WJBEWJkbG8UDRp4PD8pyHAx2F_47_2X0");
+  });
+
+  it("reads and requests the configured asset message template id", async () => {
+    const requestedTemplateIds: string[][] = [];
+    expect(readAssetMessageSubscribeTemplateId({ UNI_APP_ASSET_MESSAGE_SUBSCRIBE_TEMPLATE_ID: " tmpl-message " })).toBe(
+      "tmpl-message"
+    );
+
+    const result = await requestAssetMessageSubscription({
+      assetMessageTemplateId: "tmpl-message",
+      requestSubscribeMessage(options) {
+        requestedTemplateIds.push(options.tmplIds);
+        options.success({ "tmpl-message": "accept" });
+      }
+    });
+
+    expect(requestedTemplateIds).toEqual([["tmpl-message"]]);
+    expect(result).toBe("accepted");
   });
 
   it("skips subscription requests when no template id is configured", async () => {

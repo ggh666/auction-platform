@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import type {
   AdminAssetConversationListResponse,
   AdminPrincipalListResponse,
@@ -15,6 +15,19 @@ type MessageCenterPageProps = {
   role: AdminRole;
 };
 
+function formatMessageTime(value: string): string {
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) {
+    return value;
+  }
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, "0");
+  const day = String(date.getDate()).padStart(2, "0");
+  const hour = String(date.getHours()).padStart(2, "0");
+  const minute = String(date.getMinutes()).padStart(2, "0");
+  return `${year}-${month}-${day} ${hour}:${minute}`;
+}
+
 export function MessageCenterPage({ role }: MessageCenterPageProps) {
   const [conversations, setConversations] = useState<AssetConversation[]>([]);
   const [selectedId, setSelectedId] = useState<string | null>(null);
@@ -25,6 +38,8 @@ export function MessageCenterPage({ role }: MessageCenterPageProps) {
   const [loading, setLoading] = useState(false);
   const [sending, setSending] = useState(false);
   const [error, setError] = useState("");
+  const selectedIdRef = useRef<string | null>(null);
+  const principalIdRef = useRef("");
 
   const selectedConversation = useMemo(
     () => conversations.find((conversation) => conversation.id === selectedId) ?? null,
@@ -36,12 +51,17 @@ export function MessageCenterPage({ role }: MessageCenterPageProps) {
   }, [principalId]);
 
   useEffect(() => {
+    selectedIdRef.current = selectedId;
     if (!selectedId) {
       setMessages([]);
       return;
     }
     void loadMessages(selectedId);
   }, [selectedId]);
+
+  useEffect(() => {
+    principalIdRef.current = principalId;
+  }, [principalId]);
 
   useEffect(() => {
     if (role !== "super_admin") {
@@ -53,32 +73,51 @@ export function MessageCenterPage({ role }: MessageCenterPageProps) {
   useEffect(() => {
     let reconnectTimer: ReturnType<typeof setTimeout> | null = null;
     let socket: AdminMessageSocket | null = null;
+    let active = true;
+    function scheduleReconnect() {
+      if (!active || reconnectTimer !== null) {
+        return;
+      }
+      reconnectTimer = setTimeout(() => {
+        reconnectTimer = null;
+        connect();
+      }, 5000);
+    }
     function connect() {
+      if (!active) {
+        return;
+      }
       socket = connectAdminMessageSocket({
         onEvent(event) {
           if (event.type === "asset_conversation_updated") {
-            upsertConversation(event.conversation);
+            if (shouldDisplayRealtimeConversation(event.conversation)) {
+              upsertConversation(event.conversation);
+              if (event.conversation.id === selectedIdRef.current) {
+                void loadMessages(event.conversation.id);
+              }
+            }
           }
-          if (event.type === "asset_message_created" && event.conversationId === selectedId) {
+          if (event.type === "asset_message_created" && event.conversationId === selectedIdRef.current) {
             upsertMessage(event.message);
           }
         },
         onClose() {
-          reconnectTimer = setTimeout(connect, 5000);
+          scheduleReconnect();
         },
         onError() {
-          reconnectTimer = setTimeout(connect, 5000);
+          scheduleReconnect();
         }
       });
     }
     connect();
     return () => {
+      active = false;
       if (reconnectTimer) {
         clearTimeout(reconnectTimer);
       }
       socket?.close();
     };
-  }, [selectedId]);
+  }, [role]);
 
   async function loadPrincipals() {
     try {
@@ -152,6 +191,11 @@ export function MessageCenterPage({ role }: MessageCenterPageProps) {
     setConversations((items) => [conversation, ...items.filter((item) => item.id !== conversation.id)]);
   }
 
+  function shouldDisplayRealtimeConversation(conversation: AssetConversation) {
+    const filteredPrincipalId = principalIdRef.current;
+    return role !== "super_admin" || !filteredPrincipalId || conversation.principalId === filteredPrincipalId;
+  }
+
   function upsertMessage(message: AssetMessage) {
     setMessages((items) =>
       [...items.filter((item) => item.id !== message.id), message].sort(
@@ -166,7 +210,6 @@ export function MessageCenterPage({ role }: MessageCenterPageProps) {
         <div>
           <p className="eyebrow">消息中心</p>
           <h3>资产会话</h3>
-          <p>普通主理人账号只显示自己负责的会话，超级管理员可筛选主理人。</p>
         </div>
         {role === "super_admin" ? (
           <label className="filter-control">
@@ -212,7 +255,16 @@ export function MessageCenterPage({ role }: MessageCenterPageProps) {
                 {messages.length === 0 ? <p className="muted">选择会话后显示历史消息</p> : null}
                 {messages.map((message) => (
                   <div className={`chat-message ${message.senderType}`} key={message.id}>
-                    <span>{message.senderDisplayName}</span>
+                    <div className="message-meta">
+                      <span>{message.senderDisplayName}</span>
+                      <time
+                        className="message-time"
+                        dateTime={message.createdAt}
+                        title={`发送时间：${formatMessageTime(message.createdAt)}`}
+                      >
+                        {formatMessageTime(message.createdAt)}
+                      </time>
+                    </div>
                     <p>{message.content}</p>
                   </div>
                 ))}

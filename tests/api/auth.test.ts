@@ -9,6 +9,8 @@ import { createInMemoryBidsRepository } from "../../api/src/modules/bids/bids.re
 import { createInMemoryImageSafetyRepository } from "../../api/src/modules/contentSafety/imageSafety.repository";
 import { createInMemorySystemConfigsRepository } from "../../api/src/modules/configs/configs.repository";
 import { createInMemoryDealFollowupsRepository } from "../../api/src/modules/dealFollowups/dealFollowups.repository";
+import { createInMemoryDragonBallPriceReferencesRepository } from "../../api/src/modules/dragonBallPriceReferences/dragonBallPriceReferences.repository";
+import { createInMemoryExchangeResourcesRepository } from "../../api/src/modules/exchangeResources/exchangeResources.repository";
 import { createInMemoryNotificationsRepository } from "../../api/src/modules/notifications/notifications.repository";
 import { createInMemoryPrincipalsRepository } from "../../api/src/modules/principals/principals.repository";
 import { createReportsService } from "../../api/src/modules/reports/reports.service";
@@ -51,6 +53,8 @@ function buildProductionTestApp() {
     configsRepository: createInMemorySystemConfigsRepository(),
     notificationsRepository: createInMemoryNotificationsRepository(),
     dealFollowupsRepository: createInMemoryDealFollowupsRepository(),
+    exchangeResourcesRepository: createInMemoryExchangeResourcesRepository(),
+    dragonBallPriceReferencesRepository: createInMemoryDragonBallPriceReferencesRepository(),
     imageSafetyRepository: createInMemoryImageSafetyRepository()
   });
 }

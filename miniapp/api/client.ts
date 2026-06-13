@@ -9,6 +9,12 @@ import type {
   AssetListResponse,
   AssetPublishContextResponse,
   AuctionAsset,
+  DragonBallPriceReferenceLatestResponse,
+  DragonBallPriceReferenceTrendResponse,
+  ExchangeResourceContextResponse,
+  ExchangeResourceCreateRequest,
+  ExchangeResourceListResponse,
+  ExchangeResourceResponse,
   LoginResponse,
   NotificationActionResponse,
   NotificationBulkActionResponse,
@@ -92,7 +98,7 @@ export function request<T>(path: string, options: RequestOptionsWithoutUrl = {})
         }
 
         const errorPayload = readErrorPayload(response.data);
-        reject(Object.assign(new Error(errorPayload.message), { details: errorPayload.details }));
+        reject(Object.assign(new Error(errorPayload.message), { details: errorPayload.details, statusCode: response.statusCode }));
       },
       fail(error) {
         reject(error);
@@ -158,6 +164,13 @@ export function markAllNotificationsRead(): Promise<NotificationBulkActionRespon
   });
 }
 
+export function deleteNotifications(ids: string[]): Promise<NotificationBulkActionResponse> {
+  return request<NotificationBulkActionResponse>("/api/profile/notifications/delete", {
+    method: "POST",
+    data: { ids }
+  });
+}
+
 export type AssetConversationItem = AssetConversation;
 
 export function createPrincipalConversation(assetId: string): Promise<AssetConversationResponse> {
@@ -166,8 +179,21 @@ export function createPrincipalConversation(assetId: string): Promise<AssetConve
   });
 }
 
+export function createSellerConversation(resourceId: string): Promise<AssetConversationResponse> {
+  return request<AssetConversationResponse>(`/api/exchange-resources/${resourceId}/conversations/seller`, {
+    method: "POST"
+  });
+}
+
 export function listAssetConversations(query: Pick<AssetListQuery, "page" | "pageSize"> = {}): Promise<AssetConversationListResponse> {
   return request<AssetConversationListResponse>(`/api/profile/asset-conversations${queryString(query)}`);
+}
+
+export function deleteAssetConversations(ids: string[]): Promise<AssetConversationListResponse> {
+  return request<AssetConversationListResponse>("/api/profile/asset-conversations/delete", {
+    method: "POST",
+    data: { ids }
+  });
 }
 
 export function listAssetConversationMessages(
@@ -184,6 +210,48 @@ export function sendAssetConversationMessage(conversationId: string, content: st
     method: "POST",
     data: { content }
   });
+}
+
+export function getExchangeResourceContext(gameName?: string): Promise<ExchangeResourceContextResponse> {
+  return request<ExchangeResourceContextResponse>(`/api/exchange-resources/context${queryString({ gameName })}`);
+}
+
+export function listExchangeResources(query: Pick<AssetListQuery, "gameName" | "dragonBallProfession" | "dragonBallQuality" | "keyword" | "page" | "pageSize"> = {}): Promise<ExchangeResourceListResponse> {
+  return request<ExchangeResourceListResponse>(`/api/exchange-resources${queryString(query)}`);
+}
+
+export function getExchangeResourceDetail(resourceId: string): Promise<ExchangeResourceResponse> {
+  return request<ExchangeResourceResponse>(`/api/exchange-resources/${resourceId}`);
+}
+
+export function createExchangeResource(input: ExchangeResourceCreateRequest): Promise<ExchangeResourceResponse> {
+  return request<ExchangeResourceResponse>("/api/exchange-resources", {
+    method: "POST",
+    data: input
+  });
+}
+
+export function listMyExchangeResources(query: Pick<AssetListQuery, "page" | "pageSize"> = {}): Promise<ExchangeResourceListResponse> {
+  return request<ExchangeResourceListResponse>(`/api/profile/exchange-resources${queryString(query)}`);
+}
+
+export function closeExchangeResource(resourceId: string): Promise<ExchangeResourceResponse> {
+  return request<ExchangeResourceResponse>(`/api/profile/exchange-resources/${resourceId}/close`, {
+    method: "POST"
+  });
+}
+
+export function getDragonBallPriceReferenceLatest(gameName?: string): Promise<DragonBallPriceReferenceLatestResponse> {
+  return request<DragonBallPriceReferenceLatestResponse>(`/api/dragon-ball-price-references/latest${queryString({ gameName })}`);
+}
+
+export function getDragonBallPriceReferenceTrend(query: {
+  gameName?: string;
+  profession: string;
+  quality: string;
+  limit?: number;
+}): Promise<DragonBallPriceReferenceTrendResponse> {
+  return request<DragonBallPriceReferenceTrendResponse>(`/api/dragon-ball-price-references/trend${queryString(query)}`);
 }
 
 export type AssetListQuery = {
@@ -228,6 +296,7 @@ export function uploadAssetImage(input: {
   assetType: string;
   mimeType: UploadedAssetImage["mimeType"];
   base64Data: string;
+  usage?: "asset" | "exchange_resource";
 }): Promise<UploadedImageResponse> {
   return request<UploadedImageResponse>("/api/images", {
     method: "POST",

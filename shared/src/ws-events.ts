@@ -15,6 +15,7 @@ export type AssetMessageWsEvent =
       type: "asset_message_created";
       userId: string;
       principalId: string | null;
+      targetUserId: string | null;
       conversationId: string;
       message: AssetMessage;
       serverTime: string;
@@ -23,6 +24,7 @@ export type AssetMessageWsEvent =
       type: "asset_conversation_updated";
       userId: string;
       principalId: string | null;
+      targetUserId: string | null;
       conversation: AssetConversation;
       serverTime: string;
     }

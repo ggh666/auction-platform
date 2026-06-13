@@ -164,6 +164,107 @@ describe("asset conversations", () => {
     }
   });
 
+  it("does not send asset message subscribe reminders for principal contact conversations", async () => {
+    const assets = createInMemoryAssetsRepository();
+    const sentAssetMessages: unknown[] = [];
+    const app = buildApp({
+      enableMockAuth: true,
+      assetsRepository: assets,
+      subscribeMessageService: {
+        async sendPriceChange() {},
+        async sendAssetMessage(input) {
+          sentAssetMessages.push(input);
+        }
+      }
+    });
+
+    try {
+      const sellerToken = await login(app, "卖家");
+      const asset = await createActiveAsset(assets, "1");
+      const conversation = await createConversation(app, sellerToken, asset.id);
+      const conversationId = conversation.json().conversation.id;
+      const reviewerToken = await adminToken(app, "reviewer", "reviewer-pass");
+
+      const userMessage = await app.inject({
+        method: "POST",
+        url: `/api/profile/asset-conversations/${conversationId}/messages`,
+        headers: { authorization: `Bearer ${sellerToken}` },
+        payload: { content: "我想咨询这个账号" }
+      });
+      const adminReply = await app.inject({
+        method: "POST",
+        url: `/admin/asset-conversations/${conversationId}/messages`,
+        headers: { authorization: `Bearer ${reviewerToken}` },
+        payload: { content: "主理人已收到，请稍等" }
+      });
+
+      expect(userMessage.statusCode).toBe(200);
+      expect(adminReply.statusCode).toBe(200);
+      expect(sentAssetMessages).toEqual([]);
+    } finally {
+      await app.close();
+    }
+  });
+
+  it("lets users hide selected conversations without deleting them for admins or future replies", async () => {
+    const assets = createInMemoryAssetsRepository();
+    const app = buildApp({ enableMockAuth: true, assetsRepository: assets });
+
+    try {
+      const sellerToken = await login(app, "卖家");
+      const asset = await createActiveAsset(assets, "1");
+      const conversation = await createConversation(app, sellerToken, asset.id);
+      const conversationId = conversation.json().conversation.id;
+      const reviewerToken = await adminToken(app, "reviewer", "reviewer-pass");
+
+      await app.inject({
+        method: "POST",
+        url: `/api/profile/asset-conversations/${conversationId}/messages`,
+        headers: { authorization: `Bearer ${sellerToken}` },
+        payload: { content: "我想问一下" }
+      });
+
+      const hidden = await app.inject({
+        method: "POST",
+        url: "/api/profile/asset-conversations/delete",
+        headers: { authorization: `Bearer ${sellerToken}` },
+        payload: { ids: [conversationId] }
+      });
+      const userListAfterHide = await app.inject({
+        method: "GET",
+        url: "/api/profile/asset-conversations",
+        headers: { authorization: `Bearer ${sellerToken}` }
+      });
+      const adminListAfterHide = await app.inject({
+        method: "GET",
+        url: "/admin/asset-conversations",
+        headers: { authorization: `Bearer ${reviewerToken}` }
+      });
+
+      expect(hidden.statusCode).toBe(200);
+      expect(hidden.json().items).toEqual([]);
+      expect(userListAfterHide.json().items).toEqual([]);
+      expect(adminListAfterHide.json().items).toEqual([expect.objectContaining({ id: conversationId })]);
+
+      const adminReply = await app.inject({
+        method: "POST",
+        url: `/admin/asset-conversations/${conversationId}/messages`,
+        headers: { authorization: `Bearer ${reviewerToken}` },
+        payload: { content: "可以沟通" }
+      });
+      const userListAfterReply = await app.inject({
+        method: "GET",
+        url: "/api/profile/asset-conversations",
+        headers: { authorization: `Bearer ${sellerToken}` }
+      });
+
+      expect(adminReply.statusCode).toBe(200);
+      expect(userListAfterReply.json().items).toEqual([expect.objectContaining({ id: conversationId, userUnreadCount: 1 })]);
+    } finally {
+      await app.close();
+    }
+  });
+
   it("scopes admin conversation lists by bound principal and lets super admins see all", async () => {
     const assets = createInMemoryAssetsRepository();
     const app = buildApp({ enableMockAuth: true, assetsRepository: assets });
@@ -285,6 +386,7 @@ describe("asset conversations", () => {
       type: "asset_message_created",
       userId: "1",
       principalId: "1",
+      targetUserId: null,
       conversationId: "9",
       message: {
         id: "3",
@@ -303,5 +405,41 @@ describe("asset conversations", () => {
     expect(principalEvents).toHaveLength(1);
     expect(superEvents).toHaveLength(1);
     expect(otherUserEvents).toHaveLength(0);
+  });
+
+  it("publishes seller contact message events only to the participating users", () => {
+    const hub = new MessageHub();
+    const requesterEvents: unknown[] = [];
+    const publisherEvents: unknown[] = [];
+    const principalEvents: unknown[] = [];
+    const superEvents: unknown[] = [];
+    hub.subscribeUser("1", { send: (event) => publisherEvents.push(event) });
+    hub.subscribeUser("2", { send: (event) => requesterEvents.push(event) });
+    hub.subscribePrincipal("1", { send: (event) => principalEvents.push(event) });
+    hub.subscribeAllAdmins({ send: (event) => superEvents.push(event) });
+
+    hub.publish({
+      type: "asset_message_created",
+      userId: "2",
+      principalId: null,
+      targetUserId: "1",
+      conversationId: "9",
+      message: {
+        id: "3",
+        conversationId: "9",
+        senderType: "user",
+        senderUserId: "2",
+        senderAdminId: null,
+        senderDisplayName: "联系方",
+        content: "你好",
+        createdAt: "2026-06-06T00:00:00.000Z"
+      },
+      serverTime: "2026-06-06T00:00:00.000Z"
+    });
+
+    expect(requesterEvents).toHaveLength(1);
+    expect(publisherEvents).toHaveLength(1);
+    expect(principalEvents).toHaveLength(0);
+    expect(superEvents).toHaveLength(0);
   });
 });

@@ -9,6 +9,8 @@ shared/node_modules/
 dist/
 admin/dist/
 miniapp/dist/
+miniapp/.devtools/
+miniapp/devtools/
 miniapp/unpackage/
 test-results/
 coverage/

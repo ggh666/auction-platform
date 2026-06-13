@@ -10,6 +10,9 @@ import type {
   AssetMessage,
   BidDisplayRecord,
   DealFollowupStatus,
+  DragonBallPriceReferenceBatch,
+  DragonBallPriceReferenceTrendItem,
+  ExchangeResource,
   ImageSafetyStatus,
   NotificationItem,
   PrincipalSummary,
@@ -63,6 +66,79 @@ export type AssetPublishContextResponse = {
 
 export type AssetCreateResponse = {
   asset: AuctionAsset;
+};
+
+export type ExchangeResourceContextResponse = {
+  enabled: boolean;
+  disabledReason: string | null;
+  gameName: string;
+  supportedItemCategories: ["龙珠"];
+};
+
+export type ExchangeResourceCreateRequest = {
+  gameName: string;
+  serverName?: string;
+  title: string;
+  dragonBallAmountCents?: number | null;
+  dragonBall: {
+    profession: string;
+    quality: string;
+    attributes: string;
+  };
+  image: {
+    objectKey: string;
+    publicUrl: string;
+    mimeType: string;
+    sizeBytes: number;
+  };
+  desiredExchange: string;
+  description?: string;
+};
+
+export type ExchangeResourceListResponse = {
+  items: ExchangeResource[];
+  total: number;
+  page: number;
+  pageSize: number;
+  hasMore: boolean;
+};
+
+export type ExchangeResourceResponse = {
+  resource: ExchangeResource;
+};
+
+export type DragonBallPriceReferenceItemInput = {
+  profession: string;
+  quality: string;
+  minPriceCents: number;
+  maxPriceCents: number;
+};
+
+export type DragonBallPriceReferenceBatchUpsertRequest = {
+  gameName: string;
+  weekStartDate: string;
+  note?: string;
+  items: DragonBallPriceReferenceItemInput[];
+};
+
+export type DragonBallPriceReferenceBatchResponse = {
+  batch: DragonBallPriceReferenceBatch;
+};
+
+export type DragonBallPriceReferenceBatchListResponse = {
+  items: DragonBallPriceReferenceBatch[];
+  total: number;
+  page: number;
+  pageSize: number;
+  hasMore: boolean;
+};
+
+export type DragonBallPriceReferenceLatestResponse = {
+  batch: DragonBallPriceReferenceBatch | null;
+};
+
+export type DragonBallPriceReferenceTrendResponse = {
+  items: DragonBallPriceReferenceTrendItem[];
 };
 
 export type UploadedImageResponse = {
@@ -306,6 +382,10 @@ export type AssetConversationMessageResponse = {
 };
 
 export type AdminAssetConversationListResponse = AssetConversationListResponse;
+
+export type BulkDeleteRequest = {
+  ids: string[];
+};
 
 export type PlaceBidRequest = {
   assetId: string;

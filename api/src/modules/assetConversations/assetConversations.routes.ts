@@ -7,7 +7,8 @@ import type {
   AssetConversationMessagesResponse,
   AssetConversationResponse,
   AssetMessage,
-  AssetConversationType
+  AssetConversationType,
+  BulkDeleteRequest
 } from "@auction/shared";
 import type { FastifyInstance } from "fastify";
 import { requireActiveUser, requireAdmin } from "../../http/auth";
@@ -19,6 +20,7 @@ import type { AssetsRepository } from "../assets/assets.repository";
 import type { BidsRepository } from "../bids/bids.repository";
 import { assertLocalMarketplaceTextAllowed, type ContentSafetyService } from "../contentSafety/contentSafety.service";
 import type { PrincipalsRepository } from "../principals/principals.repository";
+import type { SubscribeMessageService } from "../subscribeMessages/subscribeMessage.service";
 import { readUserSummary } from "../users/userSummary";
 import type { UsersRepository } from "../users/users.repository";
 import type { MessageHub } from "../../realtime/messageHub";
@@ -40,6 +42,7 @@ export function registerAssetConversationRoutes(
     conversations: AssetConversationsRepository;
     contentSafety: ContentSafetyService;
     messageHub: Pick<MessageHub, "publish">;
+    subscribeMessages: SubscribeMessageService;
   }
 ): void {
   app.post<{ Params: { assetId: string }; Reply: AssetConversationResponse }>(
@@ -89,12 +92,22 @@ export function registerAssetConversationRoutes(
     }
   );
 
+  app.post<{ Body: BulkDeleteRequest; Reply: AssetConversationListResponse }>(
+    "/api/profile/asset-conversations/delete",
+    { preHandler: requireActiveUser(deps.users) },
+    async (request) => {
+      const ids = readBulkDeleteIds(request.body);
+      await deps.conversations.hideForUser(request.user.id, ids);
+      return deps.conversations.listForUser(request.user.id);
+    }
+  );
+
   app.get<{ Params: { conversationId: string }; Querystring: PageQuery; Reply: AssetConversationMessagesResponse }>(
     "/api/profile/asset-conversations/:conversationId/messages",
     { preHandler: requireActiveUser(deps.users) },
     async (request) => {
       const conversation = await assertUserConversation(deps.conversations, request.params.conversationId, request.user.id);
-      await deps.conversations.markRead(conversation.id, "user");
+      await deps.conversations.markReadForUser(conversation.id, request.user.id);
       return deps.conversations.listMessages(conversation.id, readPagination(request.query));
     }
   );
@@ -122,6 +135,9 @@ export function registerAssetConversationRoutes(
         content
       });
       publishMessageEvents(deps.messageHub, result.conversation, result.message);
+      await sendSellerContactSubscribeMessage(deps.subscribeMessages, deps.users, result.conversation, result.message).catch((error) => {
+        request.log.error({ err: error, conversationId: result.conversation.id }, "failed to send asset message subscribe reminder");
+      });
       return result;
     }
   );
@@ -136,8 +152,11 @@ export function registerAssetConversationRoutes(
         return { items: [], total: 0, page, pageSize, hasMore: false, unreadCount: 0 };
       }
       const type = readConversationType(request.query.type);
+      if (type === "seller_contact") {
+        return { items: [], total: 0, page, pageSize, hasMore: false, unreadCount: 0 };
+      }
       const principalId = scope.principalId ?? normalizeIdQuery(request.query.principalId);
-      return deps.conversations.listForAdmin({ page, pageSize, principalId, type });
+      return deps.conversations.listForAdmin({ page, pageSize, principalId, type: type ?? "principal_contact" });
     }
   );
 
@@ -187,6 +206,17 @@ function readMessageContent(body: AssetConversationMessageRequest | undefined): 
   return content;
 }
 
+function readBulkDeleteIds(body: BulkDeleteRequest | undefined): string[] {
+  if (!body || !Array.isArray(body.ids)) {
+    throw badRequest("invalid_delete_ids", "请选择要删除的记录");
+  }
+  const ids = [...new Set(body.ids.map((id) => (typeof id === "string" ? id.trim() : "")).filter(Boolean))];
+  if (ids.length === 0 || ids.length > 100) {
+    throw badRequest("invalid_delete_ids", "请选择 1 到 100 条记录");
+  }
+  return ids;
+}
+
 function normalizeIdQuery(value: unknown): string | undefined {
   if (typeof value !== "string" || !value.trim()) {
     return undefined;
@@ -206,7 +236,7 @@ function readConversationType(value: unknown): AssetConversationType | undefined
 
 async function assertUserConversation(conversations: AssetConversationsRepository, conversationId: string, userId: string) {
   const conversation = await conversations.findById(conversationId);
-  if (!conversation || conversation.userId !== userId) {
+  if (!conversation || (conversation.userId !== userId && conversation.targetUserId !== userId)) {
     throw notFound("asset_conversation_not_found", "Asset conversation not found");
   }
   return conversation;
@@ -220,6 +250,9 @@ async function assertAdminConversation(
 ) {
   const conversation = await conversations.findById(conversationId);
   if (!conversation) {
+    throw notFound("asset_conversation_not_found", "Asset conversation not found");
+  }
+  if (conversation.conversationType !== "principal_contact") {
     throw notFound("asset_conversation_not_found", "Asset conversation not found");
   }
   const scope = await readAdminDataScope(request, principals);
@@ -239,6 +272,7 @@ function publishMessageEvents(
     type: "asset_message_created",
     userId: conversation.userId,
     principalId: conversation.principalId,
+    targetUserId: conversation.targetUserId,
     conversationId: conversation.id,
     message,
     serverTime
@@ -247,7 +281,33 @@ function publishMessageEvents(
     type: "asset_conversation_updated",
     userId: conversation.userId,
     principalId: conversation.principalId,
+    targetUserId: conversation.targetUserId,
     conversation,
     serverTime
+  });
+}
+
+async function sendSellerContactSubscribeMessage(
+  subscribeMessages: SubscribeMessageService,
+  users: UsersRepository,
+  conversation: AssetConversation,
+  message: AssetMessage
+) {
+  if (conversation.conversationType !== "seller_contact" || message.senderType !== "user" || !message.senderUserId) {
+    return;
+  }
+  const recipientUserId = message.senderUserId === conversation.userId ? conversation.targetUserId : conversation.userId;
+  if (!recipientUserId) {
+    return;
+  }
+  const recipient = await users.findById(Number(recipientUserId));
+  await subscribeMessages.sendAssetMessage({
+    touserOpenid: recipient?.openid ?? null,
+    recipientUserId,
+    conversationId: conversation.id,
+    assetTitle: conversation.asset.title,
+    senderDisplayName: message.senderDisplayName,
+    content: message.content,
+    sentAt: message.createdAt
   });
 }

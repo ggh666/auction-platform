@@ -4,7 +4,7 @@ import type { UploadedImageResponse } from "@auction/shared";
 import { requireActiveUser } from "../../http/auth";
 import { HttpError, badRequest } from "../../http/errors";
 import type { SystemConfigsRepository } from "../configs/configs.repository";
-import { readUserAssetPublishConfig } from "../configs/publishConfig";
+import { readFreeExchangePublishConfig, readUserAssetPublishConfig } from "../configs/publishConfig";
 import {
   extensionForMimeType,
   uploadDirectoryForAssetType,
@@ -29,19 +29,28 @@ export function registerImageRoutes(
     if (!user) {
       throw new HttpError(401, "unauthorized", "Authentication required");
     }
-    const publishConfig = await readUserAssetPublishConfig(configs);
-    if (!publishConfig.enabled) {
-      throw new HttpError(403, "asset_publish_disabled", "User asset publishing is temporarily disabled");
-    }
     if (typeof request.body !== "object" || request.body === null || Array.isArray(request.body)) {
       throw badRequest("invalid_image", "Image payload is invalid");
     }
     const body = request.body as Record<string, unknown>;
+    const usage = typeof body.usage === "string" ? body.usage.trim() : "asset";
+    if (usage === "exchange_resource") {
+      const freeExchangeConfig = await readFreeExchangePublishConfig(configs);
+      if (!freeExchangeConfig.enabled) {
+        throw new HttpError(403, "exchange_publish_disabled", "Free exchange publishing is temporarily disabled");
+      }
+    } else {
+      const publishConfig = await readUserAssetPublishConfig(configs);
+      if (!publishConfig.enabled) {
+        throw new HttpError(403, "asset_publish_disabled", "User asset publishing is temporarily disabled");
+      }
+    }
     const mimeType = body.mimeType;
     if (typeof mimeType !== "string") {
       throw badRequest("invalid_image", "mimeType is required");
     }
     const imageBody = decodeBase64Image(body.base64Data);
+    const publishConfig = await readUserAssetPublishConfig(configs);
     try {
       validateImageUpload({ mimeType, sizeBytes: imageBody.length }, publishConfig.imagePolicy);
     } catch (error) {
@@ -50,7 +59,10 @@ export function registerImageRoutes(
 
     let uploadDirectory: string;
     try {
-      uploadDirectory = uploadDirectoryForAssetType(request.user.id, body.assetType);
+      uploadDirectory =
+        usage === "exchange_resource"
+          ? `uploads/exchange-resources/${request.user.id}`
+          : uploadDirectoryForAssetType(request.user.id, body.assetType);
     } catch (error) {
       throw badRequest("invalid_image_asset_type", error instanceof Error ? error.message : "Unsupported image asset type");
     }

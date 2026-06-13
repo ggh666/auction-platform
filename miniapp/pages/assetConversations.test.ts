@@ -43,4 +43,23 @@ describe("miniapp asset conversations", () => {
     expect(chatPage).toContain("onHide(() =>");
     expect(chatPage).toContain("closeRealtime();");
   });
+
+  it("reconnects and refreshes the active chat after realtime socket errors", () => {
+    const chatPage = readMiniappFile("pages/profile/asset-chat.vue");
+
+    expect(chatPage).toContain("handleRealtimeOpen");
+    expect(chatPage).toContain("handleRealtimeError");
+    expect(chatPage).toContain("socket = null;");
+    expect(chatPage).toContain("void refreshConversationMessages();");
+  });
+
+  it("polls the active chat as a fallback when message sockets are unavailable", () => {
+    const chatPage = readMiniappFile("pages/profile/asset-chat.vue");
+
+    expect(chatPage).toContain("messageRefreshTimer");
+    expect(chatPage).toContain("startMessageRefreshPolling");
+    expect(chatPage).toContain("stopMessageRefreshPolling");
+    expect(chatPage).toContain("setInterval");
+    expect(chatPage).toContain("3000");
+  });
 });

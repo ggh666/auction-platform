@@ -7,6 +7,7 @@
 
     <view v-if="!publishEnabled" class="switch-note">
       <text>{{ publishDisabledReason }}</text>
+      <button v-if="loginRequired" class="inline-login-button" @tap="goLogin">去登录</button>
     </view>
     <view v-else-if="remainingDailyPublishCount <= 0" class="switch-note">
       <text>今日发布次数已用完，请明天再试。</text>
@@ -146,12 +147,14 @@ import {
   type UploadedAssetImage
 } from "../../api/client";
 import { assetTypes, normalizeAssetType, type AssetType } from "../../utils/assetType";
+import { loginUrlForRedirect } from "../../utils/authNavigation";
 import { defaultGameName, gameOptions, normalizeGameName, type GameName } from "../../utils/gameOptions";
 import { detectImageMimeType } from "../../utils/imageMime";
 import { appendAssetImagePaths, MAX_ASSET_IMAGES, removeAssetImagePathAt } from "../../utils/imageSelection";
 import { normalizePrincipalSelection } from "../../utils/principalSelection";
 import { restrictedActionFailureMessage } from "../../utils/userActionErrors";
 import { normalizeUserAssetSubmitDisabledReason, USER_ASSET_SUBMIT_DISABLED_REASON } from "../../utils/assetPublishCopy";
+import { missingDragonBallFieldMessage, missingUserAssetBaseFieldMessage } from "../../utils/assetPublishValidation";
 
 type ItemCategory = "" | "龙珠";
 
@@ -186,6 +189,7 @@ const imagePaths = ref<string[]>([]);
 const uploadedImages = ref<UploadedAssetImage[]>([]);
 const uploadingImages = ref(false);
 const submitting = ref(false);
+const loginRequired = ref(false);
 
 const selectedGameIndex = computed(() => Math.max(0, gameOptions.findIndex((gameName) => gameName === form.gameName)));
 const selectedAssetTypeIndex = computed(() => Math.max(0, assetTypes.findIndex((type) => type === form.assetType)));
@@ -235,11 +239,13 @@ async function loadContext() {
     principals.value = response.principals;
     form.minIncrementYuan = String(Math.max(1, Math.floor(response.defaultMinIncrementCents / 100)));
     form.principalId = normalizePrincipalSelection(response.principals, form.principalId) || response.principals[0]?.id || "";
+    loginRequired.value = false;
   } catch {
     publishEnabled.value = false;
     publishDisabledReason.value = "请先登录后再提交资产";
     remainingDailyPublishCount.value = 0;
     principals.value = [];
+    loginRequired.value = true;
   }
 }
 
@@ -379,17 +385,27 @@ function readActionError(error: unknown, fallback: string) {
 }
 
 function validateForm(): { ok: true; startingPriceCents: number; minIncrementCents: number } | { ok: false; message: string } {
-  if (!form.gameName.trim() || !form.serverName.trim() || !form.title.trim() || !form.description.trim()) {
-    return { ok: false, message: "请填写游戏、区服、标题和描述" };
+  const baseFieldMessage = missingUserAssetBaseFieldMessage({
+    gameName: form.gameName,
+    serverName: form.serverName,
+    title: form.title,
+    description: form.description
+  });
+  if (baseFieldMessage) {
+    return { ok: false, message: baseFieldMessage };
   }
   if (!form.principalId) {
     return { ok: false, message: "请选择主理人" };
   }
-  if (
-    isDragonBallItem.value &&
-    (!form.dragonBallProfession || !form.dragonBallQuality || !form.dragonBallAttributes.trim())
-  ) {
-    return { ok: false, message: "请填写龙珠职业、品质和属性" };
+  if (isDragonBallItem.value) {
+    const dragonBallFieldMessage = missingDragonBallFieldMessage({
+      profession: form.dragonBallProfession,
+      quality: form.dragonBallQuality,
+      attributes: form.dragonBallAttributes
+    });
+    if (dragonBallFieldMessage) {
+      return { ok: false, message: dragonBallFieldMessage };
+    }
   }
   try {
     const startingPriceCents = parseYuanToCents(form.startingPriceYuan);
@@ -453,6 +469,14 @@ async function submit() {
     submitting.value = false;
   }
 }
+
+function goLogin() {
+  uni.navigateTo({
+    url: loginUrlForRedirect(
+      `/pages/auctions/publish?gameName=${encodeURIComponent(form.gameName)}&assetType=${encodeURIComponent(form.assetType)}`
+    )
+  });
+}
 </script>
 
 <style scoped>
@@ -493,12 +517,29 @@ async function submit() {
 }
 
 .switch-note {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16rpx;
   padding: 18rpx 20rpx;
   margin-bottom: 18rpx;
   color: #f7e8b6;
   background: rgba(246, 196, 83, 0.10);
   border: 1px solid rgba(246, 196, 83, 0.24);
   border-radius: 8rpx;
+}
+
+.inline-login-button {
+  flex: 0 0 auto;
+  height: 56rpx;
+  margin: 0;
+  padding: 0 20rpx;
+  color: #071112;
+  font-size: 24rpx;
+  font-weight: 800;
+  line-height: 56rpx;
+  background: #f6c453;
+  border-radius: 6rpx;
 }
 
 .form-panel {
@@ -654,6 +695,10 @@ async function submit() {
 }
 
 .submit-button::after {
+  border: 0;
+}
+
+.inline-login-button::after {
   border: 0;
 }
 

@@ -3,6 +3,7 @@ import type {
   AssetConversationType,
   AssetMessage,
   AssetMessageSenderType,
+  AssetResourceSource,
   AuctionAsset,
   PrincipalSummary,
   UserSummary
@@ -41,6 +42,13 @@ export type CreatePrincipalConversationInput = {
   principal: PrincipalSummary;
 };
 
+export type CreateSellerConversationInput = {
+  assetSource: AssetResourceSource;
+  asset: Pick<AuctionAsset, "id" | "title" | "gameName" | "serverName" | "assetType">;
+  user: UserSummary;
+  targetUser: UserSummary;
+};
+
 export type CreateMessageInput = {
   conversationId: string;
   senderType: AssetMessageSenderType;
@@ -52,12 +60,15 @@ export type CreateMessageInput = {
 
 export type AssetConversationsRepository = {
   createOrGetPrincipalConversation(input: CreatePrincipalConversationInput): Promise<AssetConversation>;
+  createOrGetSellerConversation(input: CreateSellerConversationInput): Promise<AssetConversation>;
   findById(id: string): Promise<AssetConversation | null>;
   listForUser(userId: string, input?: ConversationPageInput): Promise<ConversationListResult>;
   listForAdmin(input?: AdminConversationListInput): Promise<ConversationListResult>;
   listMessages(conversationId: string, input?: ConversationPageInput): Promise<ConversationMessagesResult>;
   createMessage(input: CreateMessageInput): Promise<{ conversation: AssetConversation; message: AssetMessage }>;
   markRead(conversationId: string, reader: "user" | "admin"): Promise<AssetConversation | null>;
+  markReadForUser(conversationId: string, userId: string): Promise<AssetConversation | null>;
+  hideForUser(userId: string, conversationIds: string[]): Promise<number>;
 };
 
 function normalizePage(input: ConversationPageInput = {}) {
@@ -131,6 +142,27 @@ export function createInMemoryAssetConversationsRepository(
     return { ...conversation, userUnreadCount, adminUnreadCount };
   }
 
+  function withUserPerspectiveUnread(conversation: AssetConversation, userId: string): AssetConversation {
+    if (conversation.conversationType !== "seller_contact") {
+      return withUnreadCounts(conversation);
+    }
+    const readAt = conversation.targetUserId === userId ? conversation.adminReadAt : conversation.userReadAt;
+    const userUnreadCount = messagesFor(conversation.id).filter(
+      (message) => message.senderType === "user" && message.senderUserId !== userId && isAfterRead(message, readAt)
+    ).length;
+    return { ...conversation, userUnreadCount, adminUnreadCount: 0 };
+  }
+
+  function visibleForUser(conversation: AssetConversation, userId: string): boolean {
+    if (conversation.userId === userId) {
+      return conversation.userDeletedAt === null;
+    }
+    if (conversation.targetUserId === userId) {
+      return conversation.targetUserDeletedAt === null;
+    }
+    return false;
+  }
+
   function readConversation(id: string): AssetConversation | null {
     const conversation = conversations.get(id);
     return conversation ? cloneConversation(withUnreadCounts(conversation)) : null;
@@ -151,13 +183,14 @@ export function createInMemoryAssetConversationsRepository(
           conversation.principalId === input.principal.id
       );
       if (existing) {
-        return cloneConversation(withUnreadCounts(existing));
+        return saveConversation({ ...existing, userDeletedAt: null, targetUserDeletedAt: null });
       }
 
       const timestamp = now().toISOString();
       const conversation: AssetConversation = {
         id: String(nextConversationId++),
         assetId: input.asset.id,
+        assetSource: "auction_asset",
         conversationType: "principal_contact",
         userId: input.user.id,
         principalId: input.principal.id,
@@ -173,6 +206,50 @@ export function createInMemoryAssetConversationsRepository(
         adminUnreadCount: 0,
         userReadAt: timestamp,
         adminReadAt: timestamp,
+        userDeletedAt: null,
+        targetUserDeletedAt: null,
+        createdAt: timestamp,
+        updatedAt: timestamp
+      };
+      messages.set(conversation.id, []);
+      return saveConversation(conversation);
+    },
+
+    async createOrGetSellerConversation(input) {
+      const existing = [...conversations.values()].find(
+        (conversation) =>
+          conversation.conversationType === "seller_contact" &&
+          conversation.assetSource === input.assetSource &&
+          conversation.assetId === input.asset.id &&
+          conversation.userId === input.user.id &&
+          conversation.targetUserId === input.targetUser.id
+      );
+      if (existing) {
+        return saveConversation({ ...existing, userDeletedAt: null, targetUserDeletedAt: null });
+      }
+
+      const timestamp = now().toISOString();
+      const conversation: AssetConversation = {
+        id: String(nextConversationId++),
+        assetId: input.asset.id,
+        assetSource: input.assetSource,
+        conversationType: "seller_contact",
+        userId: input.user.id,
+        principalId: null,
+        targetUserId: input.targetUser.id,
+        asset: { ...input.asset },
+        user: { ...input.user },
+        principal: null,
+        targetUser: { ...input.targetUser },
+        lastMessageText: null,
+        lastMessageAt: null,
+        lastMessageSenderType: null,
+        userUnreadCount: 0,
+        adminUnreadCount: 0,
+        userReadAt: timestamp,
+        adminReadAt: timestamp,
+        userDeletedAt: null,
+        targetUserDeletedAt: null,
         createdAt: timestamp,
         updatedAt: timestamp
       };
@@ -186,7 +263,10 @@ export function createInMemoryAssetConversationsRepository(
 
     async listForUser(userId, input = {}) {
       const filtered = sortConversations(
-        [...conversations.values()].filter((conversation) => conversation.userId === userId).map(withUnreadCounts)
+        [...conversations.values()]
+          .filter((conversation) => conversation.userId === userId || conversation.targetUserId === userId)
+          .filter((conversation) => visibleForUser(conversation, userId))
+          .map((conversation) => withUserPerspectiveUnread(conversation, userId))
       );
       const page = pageItems(filtered.map(cloneConversation), input);
       return {
@@ -199,7 +279,7 @@ export function createInMemoryAssetConversationsRepository(
       const filtered = sortConversations(
         [...conversations.values()]
           .filter((conversation) => !input.principalId || conversation.principalId === input.principalId)
-          .filter((conversation) => !input.type || conversation.conversationType === input.type)
+          .filter((conversation) => (input.type ? conversation.conversationType === input.type : conversation.conversationType === "principal_contact"))
           .map(withUnreadCounts)
       );
       const page = pageItems(filtered.map(cloneConversation), input);
@@ -238,8 +318,14 @@ export function createInMemoryAssetConversationsRepository(
         lastMessageText: input.content,
         lastMessageAt: timestamp,
         lastMessageSenderType: input.senderType,
-        userReadAt: input.senderType === "user" ? timestamp : conversation.userReadAt,
-        adminReadAt: input.senderType === "admin" ? timestamp : conversation.adminReadAt,
+        userDeletedAt: null,
+        targetUserDeletedAt: null,
+        userReadAt:
+          input.senderType === "user" && input.senderUserId !== conversation.targetUserId ? timestamp : conversation.userReadAt,
+        adminReadAt:
+          input.senderType === "admin" || (input.senderType === "user" && input.senderUserId === conversation.targetUserId)
+            ? timestamp
+            : conversation.adminReadAt,
         updatedAt: timestamp
       };
       messages.set(input.conversationId, [...messagesFor(input.conversationId), cloneMessage(message)]);
@@ -259,6 +345,40 @@ export function createInMemoryAssetConversationsRepository(
         adminReadAt: reader === "admin" ? timestamp : conversation.adminReadAt,
         updatedAt: conversation.updatedAt
       });
+    },
+
+    async markReadForUser(conversationId, userId) {
+      const conversation = conversations.get(conversationId);
+      if (!conversation || (conversation.userId !== userId && conversation.targetUserId !== userId)) {
+        return null;
+      }
+      const timestamp = now().toISOString();
+      return saveConversation({
+        ...conversation,
+        userReadAt: conversation.userId === userId ? timestamp : conversation.userReadAt,
+        adminReadAt: conversation.targetUserId === userId ? timestamp : conversation.adminReadAt,
+        updatedAt: conversation.updatedAt
+      });
+    },
+
+    async hideForUser(userId, conversationIds) {
+      const selected = new Set(conversationIds);
+      const timestamp = now().toISOString();
+      let hidden = 0;
+      for (const [id, conversation] of conversations.entries()) {
+        if (!selected.has(id) || (conversation.userId !== userId && conversation.targetUserId !== userId)) {
+          continue;
+        }
+        const updated = {
+          ...conversation,
+          userDeletedAt: conversation.userId === userId ? timestamp : conversation.userDeletedAt,
+          targetUserDeletedAt: conversation.targetUserId === userId ? timestamp : conversation.targetUserDeletedAt,
+          updatedAt: conversation.updatedAt
+        };
+        conversations.set(id, cloneConversation(updated));
+        hidden++;
+      }
+      return hidden;
     }
   };
 }

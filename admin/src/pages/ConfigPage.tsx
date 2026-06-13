@@ -13,7 +13,8 @@ const configLabels: Record<string, { label: string; hint: string }> = {
   max_images_per_asset: { label: "单资产图片数", hint: "发布资产时允许上传的最大图片数量" },
   max_image_size_bytes: { label: "单张图片大小", hint: "单位：字节，例如 5242880 表示 5MB" },
   default_daily_publish_limit: { label: "默认每日发布次数", hint: "未单独设置用户时，每个用户每天可发布的资产数量" },
-  user_asset_publish_enabled: { label: "用户发布开关", hint: "true 表示开放用户自主发布；false 表示临时关闭发布入口和提交接口" }
+  user_asset_publish_enabled: { label: "用户发布开关", hint: "true 表示开放用户自主发布；false 表示临时关闭发布入口和提交接口" },
+  free_exchange_publish_enabled: { label: "自由交换发布开关", hint: "true 表示开放自由交换发布；false 表示临时关闭自由交换提交入口" }
 };
 
 function configName(key: string): string {

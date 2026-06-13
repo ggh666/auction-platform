@@ -1,12 +1,15 @@
 type ImportMetaEnv = {
   UNI_APP_PRICE_CHANGE_SUBSCRIBE_TEMPLATE_ID?: string;
   VITE_PRICE_CHANGE_SUBSCRIBE_TEMPLATE_ID?: string;
+  UNI_APP_ASSET_MESSAGE_SUBSCRIBE_TEMPLATE_ID?: string;
+  VITE_ASSET_MESSAGE_SUBSCRIBE_TEMPLATE_ID?: string;
 };
 
 type SubscribeMessageResponse = Record<string, unknown>;
 type SubscribeMessageRuntime = { requestSubscribeMessage?: SubscribeMessageRequester };
 
 declare const __PRICE_CHANGE_SUBSCRIBE_TEMPLATE_ID__: string | undefined;
+declare const __ASSET_MESSAGE_SUBSCRIBE_TEMPLATE_ID__: string | undefined;
 
 const defaultPriceChangeSubscribeTemplateId = "xnfSOrsId25WJBEWJkbG8UDRp4PD8pyHAx2F_47_2X0";
 
@@ -43,6 +46,16 @@ export function readPriceChangeSubscribeTemplateId(env: ImportMetaEnv = (import.
       env.VITE_PRICE_CHANGE_SUBSCRIBE_TEMPLATE_ID,
     buildTimeTemplateId,
     defaultPriceChangeSubscribeTemplateId
+  );
+}
+
+export function readAssetMessageSubscribeTemplateId(env: ImportMetaEnv = (import.meta as ImportMeta & { env?: ImportMetaEnv }).env ?? {}): string {
+  const buildTimeTemplateId =
+    typeof __ASSET_MESSAGE_SUBSCRIBE_TEMPLATE_ID__ === "undefined" ? "" : __ASSET_MESSAGE_SUBSCRIBE_TEMPLATE_ID__;
+  return firstNonEmptyTemplateId(
+    env.UNI_APP_ASSET_MESSAGE_SUBSCRIBE_TEMPLATE_ID ??
+      env.VITE_ASSET_MESSAGE_SUBSCRIBE_TEMPLATE_ID,
+    buildTimeTemplateId
   );
 }
 
@@ -136,6 +149,49 @@ export function requestBidRelatedSubscriptions(input: {
         tmplIds: templateIds,
         success(response) {
           resolve(templateIds.some((templateId) => response[templateId] === "accept") ? "accepted" : "rejected");
+        },
+        fail() {
+          resolve("failed");
+        }
+      });
+    } catch {
+      resolve("failed");
+    }
+  });
+}
+
+export function requestAssetMessageSubscription(input: {
+  assetMessageTemplateId?: string;
+  requestSubscribeMessage?: SubscribeMessageRequester;
+  onDebug?: (event: PriceChangeSubscriptionDebugEvent) => void;
+} = {}): Promise<PriceChangeSubscriptionResult> {
+  const templateId = (input.assetMessageTemplateId ?? readAssetMessageSubscribeTemplateId()).trim();
+  if (!templateId) {
+    input.onDebug?.({ type: "template_missing" });
+    return Promise.resolve("skipped");
+  }
+
+  const requestSubscribeMessage = input.requestSubscribeMessage ?? defaultSubscribeRequester();
+  if (!requestSubscribeMessage) {
+    const runtime = globalThis as typeof globalThis & {
+      uni?: SubscribeMessageRuntime;
+      wx?: SubscribeMessageRuntime;
+    };
+    input.onDebug?.({
+      type: "requester_unavailable",
+      templateId,
+      hasWxRequester: typeof runtime.wx?.requestSubscribeMessage === "function",
+      hasUniRequester: typeof runtime.uni?.requestSubscribeMessage === "function"
+    });
+    return Promise.resolve("skipped");
+  }
+
+  return new Promise((resolve) => {
+    try {
+      requestSubscribeMessage({
+        tmplIds: [templateId],
+        success(response) {
+          resolve(response[templateId] === "accept" ? "accepted" : "rejected");
         },
         fail() {
           resolve("failed");

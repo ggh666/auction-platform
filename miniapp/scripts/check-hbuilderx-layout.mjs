@@ -4,7 +4,11 @@ import { execFileSync } from "node:child_process";
 
 const root = resolve(import.meta.dirname, "..");
 const requiredRootFiles = [
+  "App.wxml",
   "App.vue",
+  "app.js",
+  "app.json",
+  "app.wxss",
   "main.ts",
   "manifest.json",
   "pages.json",
@@ -19,6 +23,9 @@ const missing = [...requiredRootFiles, ...requiredRootDirs].filter(
 
 const manifest = JSON.parse(readFileSync(resolve(root, "manifest.json"), "utf8"));
 const projectConfig = JSON.parse(readFileSync(resolve(root, "project.config.json"), "utf8"));
+const rootAppJson = existsSync(resolve(root, "app.json"))
+  ? JSON.parse(readFileSync(resolve(root, "app.json"), "utf8"))
+  : {};
 const tsconfig = JSON.parse(readFileSync(resolve(root, "tsconfig.json"), "utf8"));
 const esbuildPackagePath = resolve(root, "node_modules/esbuild/package.json");
 const esbuildBinaryPath = resolve(root, "node_modules/@esbuild/darwin-x64/bin/esbuild");
@@ -37,11 +44,36 @@ if (tsconfig.compilerOptions?.noEmit === true) {
   issues.push('tsconfig.json must not set "compilerOptions.noEmit": true for HBuilderX ts-loader');
 }
 
-if (projectConfig.miniprogramRoot !== "dist/build/mp-weixin/") {
-  issues.push('project.config.json must set "miniprogramRoot": "dist/build/mp-weixin/" for WeChat DevTools root imports');
+if (projectConfig.miniprogramRoot !== "") {
+  issues.push('project.config.json must set "miniprogramRoot": "" so WeChat DevTools reads the source root app.json');
+}
+
+if (!rootAppJson.pages?.every((pagePath) => pagePath.startsWith("devtools/mp-weixin/pages/"))) {
+  issues.push("root app.json pages must wrap devtools/mp-weixin pages");
+}
+
+if (!rootAppJson.tabBar?.list?.every((item) => item.pagePath?.startsWith("devtools/mp-weixin/pages/"))) {
+  issues.push("root app.json tabBar page paths must wrap devtools/mp-weixin pages");
+}
+
+const rootAppJsPath = resolve(root, "app.js");
+if (existsSync(rootAppJsPath)) {
+  const rootAppJs = readFileSync(rootAppJsPath, "utf8");
+  if (!rootAppJs.includes("patchPageNavigationUrls") || !rootAppJs.includes('require("./devtools/mp-weixin/app.js")')) {
+    issues.push("root app.js must patch generated page navigation URLs before requiring devtools/mp-weixin/app.js");
+  }
+}
+
+const rootAppWxssPath = resolve(root, "app.wxss");
+if (existsSync(rootAppWxssPath)) {
+  const rootAppWxss = readFileSync(rootAppWxssPath, "utf8");
+  if (!rootAppWxss.includes('@import "devtools/mp-weixin/app.wxss";')) {
+    issues.push("root app.wxss must import devtools/mp-weixin/app.wxss");
+  }
 }
 
 const generatedConfigs = [
+  "devtools/mp-weixin/project.config.json",
   "dist/build/mp-weixin/project.config.json",
   "dist/dev/mp-weixin/project.config.json",
   "unpackage/dist/dev/mp-weixin/project.config.json"
@@ -63,6 +95,16 @@ for (const generatedConfig of generatedConfigs) {
 const buildOutputRoot = resolve(root, "dist/build/mp-weixin");
 if (existsSync(buildOutputRoot) && !existsSync(resolve(buildOutputRoot, "app.json"))) {
   issues.push("dist/build/mp-weixin exists but app.json is missing; run npm run build:mp-weixin --workspace @auction/miniapp");
+}
+
+const stableOutputRoot = resolve(root, "devtools/mp-weixin");
+if (existsSync(stableOutputRoot) && !existsSync(resolve(stableOutputRoot, "app.json"))) {
+  issues.push("devtools/mp-weixin exists but app.json is missing; run npm run dev:mp-weixin or build:mp-weixin --workspace @auction/miniapp");
+}
+
+const devOutputRoot = resolve(root, "dist/dev/mp-weixin");
+if (existsSync(devOutputRoot) && !existsSync(resolve(devOutputRoot, "app.json"))) {
+  issues.push("dist/dev/mp-weixin exists but app.json is missing; run npm run dev:mp-weixin --workspace @auction/miniapp");
 }
 
 if (existsSync(esbuildPackagePath) && existsSync(esbuildBinaryPath)) {

@@ -63,4 +63,45 @@ describe("WeChat subscribe messages", () => {
     expect("sendDealContactRequired" in service).toBe(false);
     expect(fetchImpl).not.toHaveBeenCalled();
   });
+
+  it("sends asset conversation notifications to the chat page using the asset message template", async () => {
+    const fetchImpl = vi.fn(async () => jsonResponse({ errcode: 0 }));
+    const service = createWechatSubscribeMessageService({
+      priceChangeTemplateId: "tmpl-price-change",
+      assetMessageTemplateId: "tmpl-asset-message",
+      miniprogramState: "trial",
+      tokenProvider: { getAccessToken: async () => "access-token" },
+      fetchImpl
+    });
+
+    await service.sendAssetMessage({
+      touserOpenid: "openid-2",
+      recipientUserId: "2",
+      conversationId: "conversation-9",
+      assetTitle: "紫色工程龙珠",
+      senderDisplayName: "发布者",
+      content: "可以，先说下你的资源",
+      sentAt: "2026-06-06T12:34:56"
+    });
+
+    expect(fetchImpl).toHaveBeenCalledWith(
+      "https://api.weixin.qq.com/cgi-bin/message/subscribe/send?access_token=access-token",
+      expect.objectContaining({
+        method: "POST",
+        body: JSON.stringify({
+          touser: "openid-2",
+          template_id: "tmpl-asset-message",
+          page: "pages/profile/asset-chat?conversationId=conversation-9",
+          miniprogram_state: "trial",
+          lang: "zh_CN",
+          data: {
+            thing1: { value: "紫色工程龙珠" },
+            name2: { value: "发布者" },
+            thing3: { value: "可以，先说下你的资源" },
+            time4: { value: "2026-06-06 12:34" }
+          }
+        })
+      })
+    );
+  });
 });

@@ -13,6 +13,7 @@ describe("miniapp page configuration", () => {
 
     expect(paths).toContain("pages/auctions/publish");
     expect(paths).toContain("pages/profile/assets");
+    expect(paths).toContain("pages/profile/exchanges");
   });
 
   it("renders the custom tab bar labels with regular miniapp views", () => {
@@ -20,10 +21,34 @@ describe("miniapp page configuration", () => {
       resolve(import.meta.dirname, "../custom-tab-bar/index.wxml"),
       "utf8"
     );
+    const tabBarScript = readFileSync(resolve(import.meta.dirname, "../custom-tab-bar/index.js"), "utf8");
+    const tabBarStyles = readFileSync(resolve(import.meta.dirname, "../custom-tab-bar/index.wxss"), "utf8");
 
     expect(tabBarMarkup).toContain('wx:for="{{list}}"');
     expect(tabBarMarkup).toContain("{{item.text}}");
+    expect(tabBarMarkup).toContain('hover-class="tab-item-hover"');
+    expect(tabBarMarkup).toContain('data-index="{{index}}"');
+    expect(tabBarScript).toContain("this.setData({ selected: targetIndex })");
+    expect(tabBarScript).toContain("currentRoute()");
+    expect(tabBarScript).toContain("DEVTOOLS_WRAPPER_PREFIX");
+    expect(tabBarScript).toContain("normalizeRoute");
+    expect(tabBarScript).toContain("routePrefix");
+    expect(tabBarScript).toContain("prefixedPagePath(pagePath)");
+    expect(tabBarScript).toContain("targetIndex === this.data.selected && normalizeRoute(this.currentRoute()) === pagePath");
+    expect(tabBarStyles).toContain(".tab-item-hover");
+    expect(tabBarStyles).toContain(".tab-item.active .tab-surface");
     expect(tabBarMarkup).not.toContain("cover-view");
     expect(tabBarMarkup).not.toContain("cover-text");
+  });
+
+  it("syncs the custom tab bar selected state from tab pages on show", () => {
+    const gamesPage = readFileSync(resolve(import.meta.dirname, "games/index.vue"), "utf8");
+    const profilePage = readFileSync(resolve(import.meta.dirname, "profile/index.vue"), "utf8");
+    const tabBarUtil = readFileSync(resolve(import.meta.dirname, "../utils/tabBar.ts"), "utf8");
+
+    expect(gamesPage).toContain("syncCustomTabBarSelected(0)");
+    expect(profilePage).toContain("syncCustomTabBarSelected(1)");
+    expect(tabBarUtil).toContain("getTabBar");
+    expect(tabBarUtil).toContain("setTimeout");
   });
 });

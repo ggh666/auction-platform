@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import { buildApp } from "../../api/src/app";
 import { readEnv } from "../../api/src/config/env";
 import { HttpError } from "../../api/src/http/errors";
+import { createRequestTimingHooks } from "../../api/src/observability/requestTiming";
 import { createInMemoryAdminRepository } from "../../api/src/modules/admin/admin.repository";
 import { createInMemoryAssetConversationsRepository } from "../../api/src/modules/assetConversations/assetConversations.repository";
 import { createInMemoryAssetFollowsRepository } from "../../api/src/modules/assetFollows/assetFollows.repository";
@@ -10,6 +11,8 @@ import { createInMemoryBidsRepository } from "../../api/src/modules/bids/bids.re
 import { createInMemoryImageSafetyRepository } from "../../api/src/modules/contentSafety/imageSafety.repository";
 import { createInMemorySystemConfigsRepository } from "../../api/src/modules/configs/configs.repository";
 import { createInMemoryDealFollowupsRepository } from "../../api/src/modules/dealFollowups/dealFollowups.repository";
+import { createInMemoryDragonBallPriceReferencesRepository } from "../../api/src/modules/dragonBallPriceReferences/dragonBallPriceReferences.repository";
+import { createInMemoryExchangeResourcesRepository } from "../../api/src/modules/exchangeResources/exchangeResources.repository";
 import { createInMemoryNotificationsRepository } from "../../api/src/modules/notifications/notifications.repository";
 import { createInMemoryPrincipalsRepository } from "../../api/src/modules/principals/principals.repository";
 import { createReportsService } from "../../api/src/modules/reports/reports.service";
@@ -43,6 +46,8 @@ function buildProductionApp(env: NodeJS.ProcessEnv = productionEnv) {
     configsRepository: createInMemorySystemConfigsRepository(),
     notificationsRepository: createInMemoryNotificationsRepository(),
     dealFollowupsRepository: createInMemoryDealFollowupsRepository(),
+    exchangeResourcesRepository: createInMemoryExchangeResourcesRepository(),
+    dragonBallPriceReferencesRepository: createInMemoryDragonBallPriceReferencesRepository(),
     imageSafetyRepository: createInMemoryImageSafetyRepository()
   });
 }
@@ -81,6 +86,100 @@ describe("api app", () => {
     } finally {
       await app.close();
     }
+  });
+
+  it("records structured request timing logs", async () => {
+    const entries: Array<{ level: "info" | "warn"; payload: Record<string, unknown>; message: string }> = [];
+    const hooks = createRequestTimingHooks({
+      slowRequestThresholdMs: 800,
+      now: (() => {
+        const values = [1000, 1125];
+        return () => values.shift() ?? 1125;
+      })(),
+      log: {
+        info(payload, message) {
+          entries.push({ level: "info", payload, message });
+        },
+        warn(payload, message) {
+          entries.push({ level: "warn", payload, message });
+        }
+      }
+    });
+
+    hooks.onRequest({
+      method: "GET",
+      url: "/api/assets?page=1",
+      id: "req-1"
+    });
+    hooks.onResponse(
+      {
+        method: "GET",
+        url: "/api/assets?page=1",
+        id: "req-1",
+        routeOptions: { url: "/api/assets" }
+      },
+      { statusCode: 200 }
+    );
+
+    expect(entries).toEqual([
+      {
+        level: "info",
+        message: "api_request_completed",
+        payload: expect.objectContaining({
+          method: "GET",
+          route: "/api/assets",
+          statusCode: 200,
+          durationMs: 125,
+          requestId: "req-1",
+          slow: false
+        })
+      }
+    ]);
+  });
+
+  it("records slow request timing logs at warn level", async () => {
+    const entries: Array<{ level: "info" | "warn"; payload: Record<string, unknown>; message: string }> = [];
+    const hooks = createRequestTimingHooks({
+      slowRequestThresholdMs: 100,
+      now: (() => {
+        const values = [1000, 1255];
+        return () => values.shift() ?? 1255;
+      })(),
+      log: {
+        info(payload, message) {
+          entries.push({ level: "info", payload, message });
+        },
+        warn(payload, message) {
+          entries.push({ level: "warn", payload, message });
+        }
+      }
+    });
+
+    hooks.onRequest({ method: "POST", url: "/api/bids", id: "req-2" });
+    hooks.onResponse(
+      {
+        method: "POST",
+        url: "/api/bids",
+        id: "req-2",
+        routeOptions: { url: "/api/bids" }
+      },
+      { statusCode: 200 }
+    );
+
+    expect(entries).toEqual([
+      {
+        level: "warn",
+        message: "api_request_slow",
+        payload: expect.objectContaining({
+          method: "POST",
+          route: "/api/bids",
+          statusCode: 200,
+          durationMs: 255,
+          requestId: "req-2",
+          slow: true
+        })
+      }
+    ]);
   });
 
   it("returns request errors with the original status code", async () => {
@@ -246,5 +345,54 @@ describe("readEnv", () => {
     expect(
       readEnv({ ...productionEnv, CORS_ALLOWED_ORIGINS: "https://admin.example.com, https://servicewechat.com" }).corsAllowedOrigins
     ).toEqual(["https://admin.example.com", "https://servicewechat.com"]);
+  });
+
+  it("uses bounded MySQL pool idle defaults to avoid long-lived sleep connections", () => {
+    expect(readEnv(productionEnv)).toMatchObject({
+      mysqlConnectionLimit: 10,
+      mysqlMaxIdle: 2,
+      mysqlIdleTimeoutMs: 60000
+    });
+  });
+
+  it("uses a default slow request threshold for API timing logs", () => {
+    expect(readEnv(productionEnv).apiSlowRequestThresholdMs).toBe(800);
+  });
+
+  it("parses API slow request threshold overrides", () => {
+    expect(readEnv({ ...productionEnv, API_SLOW_REQUEST_THRESHOLD_MS: "1200" }).apiSlowRequestThresholdMs).toBe(1200);
+  });
+
+  it("rejects invalid API slow request thresholds", () => {
+    expect(() => readEnv({ ...productionEnv, API_SLOW_REQUEST_THRESHOLD_MS: "0" })).toThrow(
+      new Error("Invalid API_SLOW_REQUEST_THRESHOLD_MS")
+    );
+  });
+
+  it("parses MySQL pool sizing overrides", () => {
+    expect(
+      readEnv({
+        ...productionEnv,
+        MYSQL_CONNECTION_LIMIT: "8",
+        MYSQL_MAX_IDLE: "1",
+        MYSQL_IDLE_TIMEOUT_MS: "30000"
+      })
+    ).toMatchObject({
+      mysqlConnectionLimit: 8,
+      mysqlMaxIdle: 1,
+      mysqlIdleTimeoutMs: 30000
+    });
+  });
+
+  it("rejects invalid MySQL pool sizing", () => {
+    expect(() => readEnv({ ...productionEnv, MYSQL_CONNECTION_LIMIT: "0" })).toThrow(
+      new Error("Invalid MYSQL_CONNECTION_LIMIT")
+    );
+    expect(() => readEnv({ ...productionEnv, MYSQL_CONNECTION_LIMIT: "2", MYSQL_MAX_IDLE: "3" })).toThrow(
+      new Error("Invalid MYSQL_MAX_IDLE")
+    );
+    expect(() => readEnv({ ...productionEnv, MYSQL_IDLE_TIMEOUT_MS: "0" })).toThrow(
+      new Error("Invalid MYSQL_IDLE_TIMEOUT_MS")
+    );
   });
 });

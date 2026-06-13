@@ -16,6 +16,7 @@ export type NotificationsRepository = {
   listByUser(userId: string, limit?: number): Promise<NotificationItem[]>;
   markRead(userId: string, notificationId: string): Promise<NotificationItem | null>;
   markAllRead(userId: string): Promise<NotificationItem[]>;
+  deleteByUserIds(userId: string, notificationIds: string[]): Promise<number>;
   deleteByBidId(bidId: string): Promise<number>;
 };
 
@@ -77,6 +78,18 @@ export function createInMemoryNotificationsRepository(): NotificationsRepository
         }
       }
       return listUserNotifications(userId);
+    },
+
+    async deleteByUserIds(userId, notificationIds) {
+      const selected = new Set(notificationIds);
+      let deleted = 0;
+      for (let index = notifications.length - 1; index >= 0; index--) {
+        if (notifications[index].userId === userId && selected.has(notifications[index].id)) {
+          notifications.splice(index, 1);
+          deleted++;
+        }
+      }
+      return deleted;
     },
 
     async deleteByBidId(bidId) {

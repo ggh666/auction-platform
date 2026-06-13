@@ -11,17 +11,47 @@ type AppLayoutProps = {
   children: ReactNode;
 };
 
-const navItems = [
+type NavItem = {
+  key: string;
+  label: string;
+  roles: AdminRole[];
+};
+
+type NavGroup = {
+  label: string;
+  items: NavItem[];
+};
+
+const navGroups: NavGroup[] = [
+  {
+    label: "用户管理",
+    items: [
+      { key: "users", label: "前台用户", roles: ["super_admin"] },
+      { key: "adminUsers", label: "后台用户", roles: ["super_admin"] },
+      { key: "principals", label: "主理人管理", roles: ["super_admin"] }
+    ]
+  },
+  {
+    label: "资产管理",
+    items: [
+      { key: "reviews", label: "审核管理", roles: ["super_admin", "reviewer"] },
+      { key: "assetPublish", label: "发布资产", roles: ["super_admin", "reviewer", "operator"] },
+      { key: "exchangeResources", label: "交换资源", roles: ["super_admin", "reviewer", "operator"] },
+      { key: "assetData", label: "主理人资源", roles: ["super_admin", "reviewer", "operator"] }
+    ]
+  },
+  {
+    label: "配置管理",
+    items: [
+      { key: "priceReferences", label: "估值参考", roles: ["super_admin", "reviewer", "operator"] },
+      { key: "configs", label: "系统配置", roles: ["super_admin"] }
+    ]
+  }
+];
+
+const standaloneNavItems: NavItem[] = [
   { key: "dashboard", label: "仪表盘", roles: ["super_admin", "reviewer", "operator"] },
-  { key: "reviews", label: "审核管理", roles: ["super_admin", "reviewer"] },
-  { key: "assetData", label: "资产数据", roles: ["super_admin", "reviewer", "operator"] },
-  { key: "assetPublish", label: "发布资产", roles: ["super_admin", "reviewer", "operator"] },
-  { key: "dealFollowups", label: "成交跟进", roles: ["super_admin", "reviewer", "operator"] },
-  { key: "messages", label: "消息中心", roles: ["super_admin", "reviewer", "operator"] },
-  { key: "adminUsers", label: "后台用户", roles: ["super_admin"] },
-  { key: "principals", label: "主理人管理", roles: ["super_admin"] },
-  { key: "users", label: "前台用户", roles: ["super_admin"] },
-  { key: "configs", label: "系统配置", roles: ["super_admin"] }
+  { key: "messages", label: "消息中心", roles: ["super_admin", "reviewer", "operator"] }
 ];
 
 const roleLabels: Record<AdminRole, string> = {
@@ -31,7 +61,14 @@ const roleLabels: Record<AdminRole, string> = {
 };
 
 export function AppLayout({ active, role, username, onNavigate, onChangePassword, onLogout, children }: AppLayoutProps) {
-  const visibleNavItems = navItems.filter((item) => item.roles.includes(role));
+  const visibleNavGroups = navGroups
+    .map((group) => ({
+      ...group,
+      items: group.items.filter((item) => item.roles.includes(role))
+    }))
+    .filter((group) => group.items.length > 0);
+  const visibleStandaloneNavItems = standaloneNavItems.filter((item) => item.roles.includes(role));
+  const visibleNavItems = [...visibleNavGroups.flatMap((group) => group.items), ...visibleStandaloneNavItems];
   const current = visibleNavItems.find((item) => item.key === active);
   const initial = username.trim().slice(0, 1).toUpperCase() || "管";
 
@@ -46,9 +83,26 @@ export function AppLayout({ active, role, username, onNavigate, onChangePassword
           </div>
         </div>
         <nav className="nav-list">
-          {visibleNavItems.map((item) => (
+          {visibleNavGroups.map((group) => (
+            <section className="nav-group" key={group.label}>
+              <p className="nav-group-title">{group.label}</p>
+              <div className="nav-group-items">
+                {group.items.map((item) => (
+                  <button
+                    className={active === item.key ? "active" : ""}
+                    key={item.key}
+                    onClick={() => onNavigate(item.key)}
+                    type="button"
+                  >
+                    {item.label}
+                  </button>
+                ))}
+              </div>
+            </section>
+          ))}
+          {visibleStandaloneNavItems.map((item) => (
             <button
-              className={active === item.key ? "active" : ""}
+              className={`nav-standalone ${active === item.key ? "active" : ""}`}
               key={item.key}
               onClick={() => onNavigate(item.key)}
               type="button"

@@ -17,11 +17,17 @@ const priceChangeSubscribeTemplateId = (
   process.env.VITE_PRICE_CHANGE_SUBSCRIBE_TEMPLATE_ID ??
   ""
 ).trim();
+const assetMessageSubscribeTemplateId = (
+  process.env.UNI_APP_ASSET_MESSAGE_SUBSCRIBE_TEMPLATE_ID ??
+  process.env.VITE_ASSET_MESSAGE_SUBSCRIBE_TEMPLATE_ID ??
+  ""
+).trim();
 
 export default defineConfig({
   envPrefix: ["VITE_", "UNI_APP_"],
   define: {
-    __PRICE_CHANGE_SUBSCRIBE_TEMPLATE_ID__: JSON.stringify(priceChangeSubscribeTemplateId)
+    __PRICE_CHANGE_SUBSCRIBE_TEMPLATE_ID__: JSON.stringify(priceChangeSubscribeTemplateId),
+    __ASSET_MESSAGE_SUBSCRIBE_TEMPLATE_ID__: JSON.stringify(assetMessageSubscribeTemplateId)
   },
   plugins: [uni()]
 });

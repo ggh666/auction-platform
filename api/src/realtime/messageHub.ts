@@ -28,10 +28,13 @@ export class MessageHub {
     if ("userId" in event) {
       sendTo(this.userSubscribers.get(event.userId), event);
     }
+    if ("targetUserId" in event && event.targetUserId) {
+      sendTo(this.userSubscribers.get(event.targetUserId), event);
+    }
     if ("principalId" in event && event.principalId) {
       sendTo(this.principalSubscribers.get(event.principalId), event);
+      sendTo(this.allAdminSubscribers, event);
     }
-    sendTo(this.allAdminSubscribers, event);
   }
 }
 

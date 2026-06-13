@@ -35,6 +35,16 @@ import { registerNotificationRoutes } from "./modules/notifications/notification
 import { createInMemoryPrincipalsRepository, type PrincipalsRepository } from "./modules/principals/principals.repository";
 import { createInMemoryDealFollowupsRepository, type DealFollowupsRepository } from "./modules/dealFollowups/dealFollowups.repository";
 import { registerDealFollowupRoutes } from "./modules/dealFollowups/dealFollowups.routes";
+import {
+  createInMemoryExchangeResourcesRepository,
+  type ExchangeResourcesRepository
+} from "./modules/exchangeResources/exchangeResources.repository";
+import { registerExchangeResourceRoutes } from "./modules/exchangeResources/exchangeResources.routes";
+import {
+  createInMemoryDragonBallPriceReferencesRepository,
+  type DragonBallPriceReferencesRepository
+} from "./modules/dragonBallPriceReferences/dragonBallPriceReferences.repository";
+import { registerDragonBallPriceReferenceRoutes } from "./modules/dragonBallPriceReferences/dragonBallPriceReferences.routes";
 import { registerReportRoutes } from "./modules/reports/reports.routes";
 import { createReportsService, type ReportsService } from "./modules/reports/reports.service";
 import {
@@ -46,6 +56,7 @@ import { AuctionHub } from "./realtime/auctionHub";
 import { MessageHub } from "./realtime/messageHub";
 import { attachAuctionWsServer } from "./realtime/wsServer";
 import { attachMessageWsServer } from "./realtime/messageWsServer";
+import { registerRequestTiming } from "./observability/requestTiming";
 
 type FastifyStatusError = Error & { statusCode: number };
 const jsonBodyLimitBytes = 8 * 1024 * 1024;
@@ -98,6 +109,8 @@ export type AppOptions = {
   configsRepository?: SystemConfigsRepository;
   notificationsRepository?: NotificationsRepository;
   dealFollowupsRepository?: DealFollowupsRepository;
+  exchangeResourcesRepository?: ExchangeResourcesRepository;
+  dragonBallPriceReferencesRepository?: DragonBallPriceReferencesRepository;
   imageStorage?: ImageStorage;
   contentSafetyService?: ContentSafetyService;
   subscribeMessageService?: SubscribeMessageService;
@@ -123,6 +136,8 @@ export function buildApp(options: AppOptions = {}) {
       !options.configsRepository ||
       !options.notificationsRepository ||
       !options.dealFollowupsRepository ||
+      !options.exchangeResourcesRepository ||
+      !options.dragonBallPriceReferencesRepository ||
       (env.contentSafetyEnabled && !options.imageSafetyRepository && !options.contentSafetyService))
   ) {
     throw new Error("Production repositories must be explicitly configured; in-memory repositories are development only");
@@ -130,6 +145,7 @@ export function buildApp(options: AppOptions = {}) {
 
   const app = Fastify({ logger: env.nodeEnv === "test" ? false : { level: env.logLevel }, bodyLimit: jsonBodyLimitBytes });
   registerJsonContentParser(app);
+  registerRequestTiming(app, { slowRequestThresholdMs: env.apiSlowRequestThresholdMs });
   const users = options.usersRepository ?? createInMemoryUsersRepository();
   const assets = options.assetsRepository ?? createInMemoryAssetsRepository();
   const admins = options.adminRepository ?? createInMemoryAdminRepository();
@@ -141,6 +157,9 @@ export function buildApp(options: AppOptions = {}) {
   const configs = options.configsRepository ?? createInMemorySystemConfigsRepository();
   const notifications = options.notificationsRepository ?? createInMemoryNotificationsRepository();
   const dealFollowups = options.dealFollowupsRepository ?? createInMemoryDealFollowupsRepository();
+  const exchangeResources = options.exchangeResourcesRepository ?? createInMemoryExchangeResourcesRepository();
+  const dragonBallPriceReferences =
+    options.dragonBallPriceReferencesRepository ?? createInMemoryDragonBallPriceReferencesRepository();
   const imageStorage = options.imageStorage ?? createR2ImageStorage(env);
   const imageSafety = options.imageSafetyRepository ?? createInMemoryImageSafetyRepository();
   const wechatTokenProvider = createWechatAccessTokenProvider({ env });
@@ -164,6 +183,7 @@ export function buildApp(options: AppOptions = {}) {
     options.subscribeMessageService ??
     createWechatSubscribeMessageService({
       priceChangeTemplateId: env.wechatPriceChangeSubscribeTemplateId,
+      assetMessageTemplateId: env.wechatAssetMessageSubscribeTemplateId,
       miniprogramState: env.wechatSubscribeMessageMiniprogramState,
       tokenProvider: wechatTokenProvider
     });
@@ -201,8 +221,18 @@ export function buildApp(options: AppOptions = {}) {
     principals,
     conversations: assetConversations,
     contentSafety,
-    messageHub
+    messageHub,
+    subscribeMessages
   });
+  registerExchangeResourceRoutes(app, {
+    admins,
+    users,
+    configs,
+    contentSafety,
+    exchangeResources,
+    conversations: assetConversations
+  });
+  registerDragonBallPriceReferenceRoutes(app, { admins, priceReferences: dragonBallPriceReferences });
   registerAssetRoutes(app, assets, users, bids, configs, reports, contentSafety, principals, assetFollows);
   registerAdminDashboardRoutes(app, admins, { assets, bids, reports, users, principals });
   registerAdminRoutes(app, admins, assets, bids, users, contentSafety, principals, dealFollowups, imageSafety, imageStorage, notifications, hub);

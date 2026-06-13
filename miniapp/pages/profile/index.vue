@@ -5,7 +5,7 @@
       <view class="top-actions">
         <button class="notification-button" @tap="go('/pages/profile/notifications')">
           通知中心
-          <text v-if="unreadNotifications > 0" class="badge top-badge">{{ unreadNotifications }}</text>
+          <text v-if="hasUnreadNotificationCenter" class="notification-dot"></text>
         </button>
         <button class="home-button" @tap="goHome">返回主页</button>
       </view>
@@ -22,21 +22,14 @@
         <text class="summary">违规记录：{{ user?.violationCount ?? 0 }} 条</text>
       </view>
     </view>
-    <view class="menu-item" @tap="go('/pages/profile/follows')">
-      <text class="menu-title">我的关注</text>
-      <text class="menu-desc">查看关注过的交换信息</text>
+    <view v-if="!user" class="login-panel">
+      <text class="login-title">登录后查看个人记录</text>
+      <text class="login-copy">我的交换、消息中心和客服沟通需要登录后查看。</text>
+      <button class="login-button" @tap="goLogin">立即登录</button>
     </view>
-    <view class="menu-item" @tap="go('/pages/profile/bids')">
-      <text class="menu-title">我的出价</text>
-      <text class="menu-desc">跟踪参与过的交换和当前最高价</text>
-    </view>
-    <view class="menu-item" @tap="go('/pages/profile/assets')">
-      <text class="menu-title">我的资产</text>
-      <text class="menu-desc">查看我发布过的资产和审核状态</text>
-    </view>
-    <view class="menu-item" @tap="go('/pages/profile/results')">
-      <text class="menu-title">成交记录</text>
-      <text class="menu-desc">查看成交、流拍和取消记录</text>
+    <view class="menu-item" @tap="go('/pages/profile/exchanges')">
+      <text class="menu-title">我的交换</text>
+      <text class="menu-desc">查看我发布过的自由交换资源</text>
     </view>
     <button
       v-if="user"
@@ -63,25 +56,28 @@
 import type { UserSummary } from "@auction/shared";
 import { onShow } from "@dcloudio/uni-app";
 import { computed, ref } from "vue";
-import { getProfile, listNotifications } from "../../api/client";
+import { getProfile, listAssetConversations, listNotifications } from "../../api/client";
 import { clearSession, readSessionUser } from "../../auth/session";
+import { loginUrlForRedirect } from "../../utils/authNavigation";
 import { buildProfileCustomerServiceContact } from "../../utils/customerService";
+import { syncCustomTabBarSelected } from "../../utils/tabBar";
 
 const user = ref<UserSummary | null>(readSessionUser());
 const unreadNotifications = ref(0);
+const unreadConversations = ref(0);
 
 const avatarText = computed(() => user.value?.displayName?.slice(0, 1) || "微");
 const profileCustomerServiceContact = computed(() => buildProfileCustomerServiceContact({ userId: user.value?.id }));
+const hasUnreadNotificationCenter = computed(() => unreadNotifications.value > 0 || unreadConversations.value > 0);
 
 onShow(async () => {
+  syncCustomTabBarSelected(1);
   try {
     const response = await getProfile();
     user.value = response.user;
   } catch {
     clearSession();
     user.value = null;
-    uni.showToast({ title: "请先登录", icon: "none" });
-    uni.navigateTo({ url: "/pages/login/login" });
     return;
   }
 
@@ -91,9 +87,20 @@ onShow(async () => {
   } catch {
     unreadNotifications.value = 0;
   }
+
+  try {
+    const conversations = await listAssetConversations({ pageSize: 1 });
+    unreadConversations.value = conversations.unreadCount;
+  } catch {
+    unreadConversations.value = 0;
+  }
 });
 
 function go(url: string) {
+  if (!user.value) {
+    uni.navigateTo({ url: loginUrlForRedirect(url) });
+    return;
+  }
   uni.navigateTo({ url });
 }
 
@@ -106,7 +113,7 @@ function ensureCustomerServiceLogin() {
     return;
   }
   uni.showToast({ title: "请先登录后联系客服", icon: "none" });
-  uni.navigateTo({ url: "/pages/login/login" });
+  goLogin();
 }
 
 function showCreditRules() {
@@ -121,7 +128,13 @@ function showCreditRules() {
 
 function logout() {
   clearSession();
-  uni.navigateTo({ url: "/pages/login/login" });
+  user.value = null;
+  unreadNotifications.value = 0;
+  unreadConversations.value = 0;
+}
+
+function goLogin() {
+  uni.navigateTo({ url: loginUrlForRedirect("/pages/profile/index") });
 }
 </script>
 
@@ -227,6 +240,50 @@ function logout() {
   border-radius: 8rpx;
 }
 
+.login-panel {
+  display: grid;
+  gap: 12rpx;
+  padding: 24rpx;
+  margin-bottom: 18rpx;
+  background: rgba(11, 32, 30, 0.92);
+  border: 1px solid rgba(246, 196, 83, 0.26);
+  border-radius: 8rpx;
+  box-shadow: 0 14rpx 32rpx rgba(0, 0, 0, 0.24);
+}
+
+.login-title,
+.login-copy {
+  display: block;
+}
+
+.login-title {
+  font-size: 28rpx;
+  font-weight: 800;
+  color: #f7e8b6;
+}
+
+.login-copy {
+  font-size: 24rpx;
+  line-height: 1.55;
+  color: #9ab4a8;
+}
+
+.login-button {
+  width: 180rpx;
+  height: 60rpx;
+  margin: 6rpx 0 0;
+  font-size: 24rpx;
+  font-weight: 800;
+  line-height: 60rpx;
+  color: #071112;
+  background: #f6c453;
+  border-radius: 6rpx;
+}
+
+.login-button::after {
+  border: 0;
+}
+
 .avatar,
 .avatar-fallback {
   width: 112rpx;
@@ -279,22 +336,15 @@ function logout() {
   color: #101828;
 }
 
-.badge {
-  min-width: 36rpx;
-  height: 36rpx;
-  padding: 0 10rpx;
-  font-size: 22rpx;
-  line-height: 36rpx;
-  text-align: center;
-  color: #fff;
-  background: #d92d20;
-  border-radius: 18rpx;
-}
-
-.top-badge {
+.notification-dot {
   position: absolute;
-  top: -12rpx;
-  right: -10rpx;
+  top: -8rpx;
+  right: -8rpx;
+  width: 18rpx;
+  height: 18rpx;
+  background: #ef4444;
+  border: 4rpx solid #071112;
+  border-radius: 999rpx;
 }
 
 .menu-desc {
@@ -364,8 +414,9 @@ function logout() {
   border: 1px solid rgba(246, 196, 83, 0.32);
 }
 
-.badge {
-  background: linear-gradient(180deg, #fb7185, #b91c1c);
+.notification-dot {
+  background: linear-gradient(180deg, #fb7185, #dc2626);
+  box-shadow: 0 0 0 4rpx rgba(239, 68, 68, 0.18);
 }
 
 .logout {

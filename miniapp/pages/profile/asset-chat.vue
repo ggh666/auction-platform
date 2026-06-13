@@ -11,7 +11,7 @@
         v-for="message in messages"
         :key="message.id"
         class="message-row"
-        :class="{ mine: message.senderType === 'user' }"
+        :class="{ mine: isMineMessage(message) }"
       >
         <text class="sender">{{ message.senderDisplayName }}</text>
         <text class="bubble">{{ message.content }}</text>
@@ -35,22 +35,36 @@ import {
   readApiBase,
   sendAssetConversationMessage
 } from "../../api/client";
+import { readSessionUser } from "../../auth/session";
 import { connectMessageSocket, type MessageSocketTask } from "../../utils/messageRealtime";
+import { requestAssetMessageSubscription } from "../../utils/subscribeMessage";
 
 const conversationId = ref("");
 const conversation = ref<AssetConversation | null>(null);
 const messages = ref<AssetMessage[]>([]);
 const draft = ref("");
+const currentUserId = ref("");
 const loading = ref(false);
 const sending = ref(false);
 let socket: MessageSocketTask | null = null;
 let reconnectTimer: ReturnType<typeof setTimeout> | null = null;
+let messageRefreshTimer: ReturnType<typeof setInterval> | null = null;
 let realtimeActive = false;
+let refreshingMessages = false;
 
 const conversationTitle = computed(() => conversation.value?.asset.title ?? "资产消息");
-const conversationSubtitle = computed(() =>
-  conversation.value?.principal ? `主理人：${conversation.value.principal.displayName}` : "与主理人沟通"
-);
+const conversationSubtitle = computed(() => {
+  if (!conversation.value) {
+    return "";
+  }
+  if (conversation.value.conversationType === "seller_contact") {
+    if (conversation.value.targetUserId === currentUserId.value) {
+      return `联系方：${conversation.value.user.displayName}`;
+    }
+    return `发布者：${conversation.value.targetUser?.displayName ?? "发布者"}`;
+  }
+  return conversation.value.principal ? `主理人：${conversation.value.principal.displayName}` : "与主理人沟通";
+});
 
 onLoad((query) => {
   const value = query?.conversationId;
@@ -59,14 +73,19 @@ onLoad((query) => {
 });
 
 onShow(() => {
+  currentUserId.value = readSessionUser()?.id ?? currentUserId.value;
+  void refreshConversationMessages();
   connectRealtime();
+  startMessageRefreshPolling();
 });
 
 onHide(() => {
+  stopMessageRefreshPolling();
   closeRealtime();
 });
 
 onUnload(() => {
+  stopMessageRefreshPolling();
   closeRealtime();
 });
 
@@ -90,6 +109,27 @@ async function loadConversation() {
   }
 }
 
+async function refreshConversationMessages() {
+  if (!conversationId.value || loading.value || refreshingMessages) {
+    return;
+  }
+  refreshingMessages = true;
+  try {
+    const [conversationResponse, messageResponse] = await Promise.all([
+      listAssetConversations(),
+      listAssetConversationMessages(conversationId.value)
+    ]);
+    conversation.value = conversationResponse.items.find((item) => item.id === conversationId.value) ?? conversation.value;
+    for (const message of messageResponse.items) {
+      upsertMessage(message);
+    }
+  } catch {
+    // Realtime refresh is a silent fallback; explicit page loading still shows failures.
+  } finally {
+    refreshingMessages = false;
+  }
+}
+
 async function sendMessage() {
   const content = draft.value.trim();
   if (!content) {
@@ -98,6 +138,7 @@ async function sendMessage() {
   }
   sending.value = true;
   try {
+    await requestAssetMessageSubscription();
     const response = await sendAssetConversationMessage(conversationId.value, content);
     conversation.value = response.conversation;
     upsertMessage(response.message);
@@ -107,6 +148,13 @@ async function sendMessage() {
   } finally {
     sending.value = false;
   }
+}
+
+function isMineMessage(message: AssetMessage): boolean {
+  if (message.senderType === "admin") {
+    return false;
+  }
+  return Boolean(currentUserId.value && message.senderUserId === currentUserId.value);
 }
 
 function connectRealtime() {
@@ -123,13 +171,34 @@ function connectRealtime() {
       applyRealtimeEvent(event);
     },
     onClose() {
-      socket = null;
-      scheduleReconnect();
+      handleRealtimeClose();
     },
     onError() {
-      scheduleReconnect();
+      handleRealtimeError();
+    },
+    onOpen() {
+      handleRealtimeOpen();
     }
   });
+  if (socket === null) {
+    scheduleReconnect();
+  }
+}
+
+function handleRealtimeOpen() {
+  void refreshConversationMessages();
+}
+
+function handleRealtimeClose() {
+  socket = null;
+  scheduleReconnect();
+}
+
+function handleRealtimeError() {
+  socket?.close?.({});
+  socket = null;
+  void refreshConversationMessages();
+  scheduleReconnect();
 }
 
 function scheduleReconnect() {
@@ -140,6 +209,23 @@ function scheduleReconnect() {
     reconnectTimer = null;
     connectRealtime();
   }, 5000);
+}
+
+function startMessageRefreshPolling() {
+  if (messageRefreshTimer !== null) {
+    return;
+  }
+  messageRefreshTimer = setInterval(() => {
+    void refreshConversationMessages();
+  }, 3000);
+}
+
+function stopMessageRefreshPolling() {
+  if (messageRefreshTimer === null) {
+    return;
+  }
+  clearInterval(messageRefreshTimer);
+  messageRefreshTimer = null;
 }
 
 function closeRealtime() {

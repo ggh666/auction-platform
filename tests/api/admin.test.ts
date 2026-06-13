@@ -19,6 +19,7 @@ describe("admin permissions", () => {
   it("allows reviewer to review assets but not manage admins", () => {
     expect(canAdmin("reviewer", "asset:review")).toBe(true);
     expect(canAdmin("reviewer", "asset:create")).toBe(true);
+    expect(canAdmin("reviewer", "asset:remove")).toBe(true);
     expect(canAdmin("reviewer", "auction:confirm_deal")).toBe(true);
     expect(canAdmin("reviewer", "admin:manage")).toBe(false);
     expect(canAdmin("reviewer", "user:view")).toBe(false);
@@ -1004,6 +1005,36 @@ describe("admin routes", () => {
       expect(superList.statusCode).toBe(200);
       expect(superList.json()).toMatchObject({ total: 3, page: 2, pageSize: 2 });
       expect(superList.json().items.map((asset: { id: string }) => asset.id)).toEqual([unassigned.id]);
+    } finally {
+      await app.close();
+    }
+  });
+
+  it("lets a reviewer remove active assets in their linked principal scope only", async () => {
+    const assets = createInMemoryAssetsRepository();
+    const own = await assets.createPending({ ...pendingAssetInput(), principalId: "1", title: "本主理人已上架资产" });
+    const other = await assets.createPending({ ...pendingAssetInput(), principalId: "2", title: "其他主理人已上架资产" });
+    await assets.updateStatus(own.id, "active");
+    await assets.updateStatus(other.id, "active");
+    const app = buildApp({ enableMockAuth: true, assetsRepository: assets });
+
+    try {
+      const reviewerToken = await adminLogin(app, "reviewer", "reviewer-pass");
+      const removeOwn = await app.inject({
+        method: "POST",
+        url: `/admin/assets/${own.id}/remove`,
+        headers: { authorization: `Bearer ${reviewerToken}` }
+      });
+      const removeOther = await app.inject({
+        method: "POST",
+        url: `/admin/assets/${other.id}/remove`,
+        headers: { authorization: `Bearer ${reviewerToken}` }
+      });
+
+      expect(removeOwn.statusCode).toBe(200);
+      expect(removeOwn.json().asset).toMatchObject({ id: own.id, status: "removed" });
+      expect(removeOther.statusCode).toBe(404);
+      await expect(assets.findById(other.id)).resolves.toMatchObject({ status: "active" });
     } finally {
       await app.close();
     }
@@ -2282,7 +2313,7 @@ describe("admin routes", () => {
       });
 
       expect(list.statusCode).toBe(200);
-      expect(list.json()).toMatchObject({ total: 7, page: 1, pageSize: 3 });
+      expect(list.json()).toMatchObject({ total: 8, page: 1, pageSize: 3 });
       expect(list.json().items).toEqual([
         expect.objectContaining({ key: "default_min_increment_cents", value: "100" }),
         expect.objectContaining({ key: "extension_window_seconds", value: "300" }),

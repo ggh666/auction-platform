@@ -77,6 +77,9 @@ describe("profile routes", () => {
         async markAllRead() {
           return [];
         },
+        async deleteByUserIds() {
+          return 0;
+        },
         async deleteByBidId() {
           return 0;
         }

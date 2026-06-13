@@ -7,6 +7,7 @@ import { createMysqlBidsRepository } from "../../api/src/modules/bids/bids.mysql
 import { createMysqlSystemConfigsRepository } from "../../api/src/modules/configs/configs.mysql.repository";
 import { createMysqlImageSafetyRepository } from "../../api/src/modules/contentSafety/imageSafety.mysql.repository";
 import { createMysqlDealFollowupsRepository } from "../../api/src/modules/dealFollowups/dealFollowups.mysql.repository";
+import { createMysqlExchangeResourcesRepository } from "../../api/src/modules/exchangeResources/exchangeResources.mysql.repository";
 import { createMysqlNotificationsRepository } from "../../api/src/modules/notifications/notifications.mysql.repository";
 import { createMysqlReportsService } from "../../api/src/modules/reports/reports.mysql.service";
 import { createMysqlUsersRepository } from "../../api/src/modules/users/users.mysql.repository";
@@ -1210,6 +1211,42 @@ function createFixtureTimeMysqlBidsRepository(pool: FakeMysqlPool) {
   return createMysqlBidsRepository(pool, { now: () => new Date("2026-05-25T23:50:00.000Z") });
 }
 
+function legacyExchangeResourceRow() {
+  return {
+    id: 1,
+    publisher_id: 1,
+    publisher_display_name: "历史发布者",
+    publisher_avatar_url: null,
+    publisher_banned_at: null,
+    publisher_violation_count: 0,
+    publisher_credit_score: 100,
+    publisher_credit_reset_at: null,
+    publisher_buyer_unreachable_count: 0,
+    publisher_bid_restricted_until: null,
+    publisher_bid_restricted_permanent: 0,
+    publisher_bid_restriction_reason: null,
+    publisher_bid_restriction_started_at: null,
+    game_name: "塔防精灵",
+    server_name: "",
+    title: "历史发布龙珠",
+    dragon_ball_element: "无",
+    dragon_ball_profession: "战士",
+    dragon_ball_quality: "金",
+    dragon_ball_attributes: "附加伤害+0%，无视冰甲+0%",
+    dragon_ball_amount_cents: null,
+    image_object_key: "",
+    image_url: "",
+    image_mime_type: "image/jpeg",
+    image_size_bytes: 0,
+    desired_exchange: "想换法师龙珠",
+    description: "",
+    status: "active",
+    expires_at: new Date("2099-01-01T00:00:00.000Z"),
+    created_at: new Date("2026-06-01T00:00:00.000Z"),
+    updated_at: new Date("2026-06-01T00:00:00.000Z")
+  };
+}
+
 function activeAssetRow(): FakeAsset {
   return {
     id: 1,
@@ -1257,6 +1294,56 @@ function pendingReportRow(id = 1): FakeReport {
 }
 
 describe("mysql repositories", () => {
+  it("keeps legacy no-image exchange resources visible in public and profile MySQL lists", async () => {
+    const row = legacyExchangeResourceRow();
+    const selectRows = (sql: string, params: unknown[]) => {
+      let rows = [row];
+      if (sql.includes("r.status = 'active'")) {
+        rows = rows.filter((resource) => resource.status === "active");
+      }
+      if (sql.includes("r.image_url <> ''")) {
+        rows = rows.filter((resource) => resource.image_url.trim() !== "");
+      }
+      if (sql.includes("r.expires_at > CURRENT_TIMESTAMP")) {
+        rows = rows.filter((resource) => resource.expires_at.getTime() > new Date("2026-06-10T00:00:00.000Z").getTime());
+      }
+      if (sql.includes("r.publisher_id = ?")) {
+        rows = rows.filter((resource) => resource.publisher_id === Number(params[0]));
+      }
+      return rows;
+    };
+    const pool = {
+      async execute<T>(sql: string, params: unknown[] = []): Promise<[T, unknown[]]> {
+        if (sql.includes("UPDATE exchange_resources")) {
+          return [{ affectedRows: 0, insertId: 0 } as T, []];
+        }
+        if (sql.includes("COUNT(*) AS total") && sql.includes("FROM exchange_resources")) {
+          return [[{ total: selectRows(sql, params).length }] as T, []];
+        }
+        if (sql.includes("FROM exchange_resources")) {
+          const filtered = selectRows(sql, params);
+          const limit = sql.includes("LIMIT ? OFFSET ?") ? Number(params.at(-2)) : filtered.length;
+          const offset = sql.includes("LIMIT ? OFFSET ?") ? Number(params.at(-1)) : 0;
+          return [filtered.slice(offset, offset + limit) as T, []];
+        }
+        throw new Error(`Unhandled SQL in legacy exchange test: ${sql}`);
+      }
+    };
+    const repository = createMysqlExchangeResourcesRepository(pool);
+
+    const publicList = await repository.listActive({ page: 1, pageSize: 20 });
+    const profileList = await repository.listByPublisher("1", { page: 1, pageSize: 20 });
+
+    expect(publicList).toMatchObject({
+      total: 1,
+      items: [expect.objectContaining({ id: "1", title: "历史发布龙珠", imageUrl: "" })]
+    });
+    expect(profileList).toMatchObject({
+      total: 1,
+      items: [expect.objectContaining({ id: "1", title: "历史发布龙珠", imageUrl: "" })]
+    });
+  });
+
   it("upserts WeChat users by openid", async () => {
     const pool = new FakeMysqlPool();
     const users = createMysqlUsersRepository(pool);
