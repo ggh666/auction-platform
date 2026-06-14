@@ -1,0 +1,1 @@
+"use strict";const e={draft:"草稿",pending_review:"审核中",active:"已上架",ended:"已结束",rejected:"已驳回",cancelled:"已取消",removed:"已下架"};function t(e){return"ended"===e.status&&null!==e.currentPriceCents&&Boolean(e.highestBidderId)}exports.assetStatusText=function(s){return"object"==typeof s?t(s)?"已成交":e[s.status]:e[s]},exports.isSoldAsset=t;

@@ -1,0 +1,1 @@
+"use strict";exports.MAX_ASSET_IMAGES=9,exports.appendAssetImagePaths=function(t,e,n=9){const s=Math.max(0,n-t.length),r=e.slice(0,s);return{paths:[...t,...r],rejectedCount:Math.max(0,e.length-r.length)}},exports.removeAssetImagePathAt=function(t,e){return!Number.isInteger(e)||e<0||e>=t.length?[...t]:t.filter((t,n)=>n!==e)};

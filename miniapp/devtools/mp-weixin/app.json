@@ -1,0 +1,39 @@
+{
+  "pages": [
+    "pages/games/index",
+    "pages/auctions/list",
+    "pages/games/mode",
+    "pages/exchange/list",
+    "pages/exchange/detail",
+    "pages/exchange/publish",
+    "pages/priceReference/index",
+    "pages/auctions/detail",
+    "pages/auctions/publish",
+    "pages/profile/index",
+    "pages/profile/assets",
+    "pages/profile/exchanges",
+    "pages/profile/bids",
+    "pages/profile/notifications",
+    "pages/profile/asset-chat",
+    "pages/profile/results",
+    "pages/login/login"
+  ],
+  "tabBar": {
+    "color": "#8aa196",
+    "selectedColor": "#f6c453",
+    "backgroundColor": "#071112",
+    "borderStyle": "black",
+    "custom": true,
+    "list": [
+      {
+        "pagePath": "pages/games/index",
+        "text": "资源"
+      },
+      {
+        "pagePath": "pages/profile/index",
+        "text": "我的"
+      }
+    ]
+  },
+  "usingComponents": {}
+}

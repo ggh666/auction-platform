@@ -1,0 +1,1 @@
+"use strict";exports.mergeAuctionAssetUpdate=function(i,o){return{...o,principal:void 0===o.principal?i.principal:o.principal,sellerViolationCount:void 0===o.sellerViolationCount?i.sellerViolationCount:o.sellerViolationCount,hasPublishedViolation:void 0===o.hasPublishedViolation?i.hasPublishedViolation:o.hasPublishedViolation}};

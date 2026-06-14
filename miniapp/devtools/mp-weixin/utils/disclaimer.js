@@ -1,0 +1,1 @@
+"use strict";const e=require("../common/vendor.js");exports.confirmTradingDisclaimer=function(n=e.index.showModal){return new Promise(e=>{n({title:"风险提示",content:"本平台仅提供信息交换，不涉及任何线上资金交易，请务必走游戏内安全交易渠道，线下转账风险自担",confirmText:"我已知晓",cancelText:"取消",success(n){e(Boolean(n.confirm))},fail(){e(!1)}})})};

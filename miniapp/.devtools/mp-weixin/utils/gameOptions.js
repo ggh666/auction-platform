@@ -1,0 +1,1 @@
+"use strict";const t=["塔防精灵"];exports.defaultGameName="塔防精灵",exports.gameOptions=t,exports.normalizeGameName=function(e){if("string"!=typeof e)return null;const n=function(t){try{return decodeURIComponent(t)}catch{return t}}(e).trim();return t.find(t=>t===n)??null};

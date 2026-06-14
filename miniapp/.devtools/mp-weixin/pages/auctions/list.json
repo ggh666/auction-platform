@@ -1,0 +1,9 @@
+{
+  "navigationBarTitleText": "交换列表",
+  "navigationBarBackgroundColor": "#071112",
+  "navigationBarTextStyle": "white",
+  "backgroundColor": "#071112",
+  "enablePullDownRefresh": true,
+  "onReachBottomDistance": 80,
+  "usingComponents": {}
+}

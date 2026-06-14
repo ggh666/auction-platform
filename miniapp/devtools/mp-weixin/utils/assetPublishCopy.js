@@ -1,0 +1,1 @@
+"use strict";const s="暂未开放用户提交资产",t=[/用户发布资产/];exports.USER_ASSET_SUBMIT_DISABLED_REASON=s,exports.normalizeUserAssetSubmitDisabledReason=function(e){const o=null==e?void 0:e.trim();return o?t.some(s=>s.test(o))?s:o:s};

@@ -1,0 +1,1 @@
+"use strict";exports.assetTypes=["账号","道具"],exports.normalizeAssetType=function(t){if("string"!=typeof t)return null;const e=function(t){try{return decodeURIComponent(t)}catch{return t}}(t).trim();return"账号"===e||"道具"===e?e:null};

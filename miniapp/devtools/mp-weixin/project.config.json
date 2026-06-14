@@ -1,0 +1,53 @@
+{
+  "description": "微信开发者工具请导入 miniapp 源码目录；根目录 app.json 包装稳定编译产物。",
+  "miniprogramRoot": "",
+  "compileType": "miniprogram",
+  "appid": "wx6ef44aa749f07e94",
+  "projectname": "资源交换",
+  "setting": {
+    "urlCheck": true,
+    "es6": true,
+    "postcss": false,
+    "minified": false,
+    "newFeature": true,
+    "bigPackageSizeSupport": true
+  },
+  "packOptions": {
+    "ignore": [
+      {
+        "type": "folder",
+        "value": "dist"
+      },
+      {
+        "type": "folder",
+        "value": ".devtools"
+      },
+      {
+        "type": "folder",
+        "value": "unpackage"
+      },
+      {
+        "type": "folder",
+        "value": "node_modules"
+      }
+    ]
+  },
+  "condition": {
+    "search": {
+      "current": -1,
+      "list": []
+    },
+    "conversation": {
+      "current": -1,
+      "list": []
+    },
+    "game": {
+      "current": -1,
+      "list": []
+    },
+    "miniprogram": {
+      "current": -1,
+      "list": []
+    }
+  }
+}

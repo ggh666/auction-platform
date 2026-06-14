@@ -1,0 +1,1 @@
+"use strict";function t(t){const e=getCurrentPages(),n=e[e.length-1],o="function"==typeof(null==n?void 0:n.getTabBar)?n.getTabBar():null;"function"==typeof(null==o?void 0:o.setData)&&o.setData({selected:t})}exports.syncCustomTabBarSelected=function(e){!Number.isInteger(e)||e<0||(t(e),setTimeout(()=>t(e),50),setTimeout(()=>t(e),150))};
