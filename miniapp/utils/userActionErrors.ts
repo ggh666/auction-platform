@@ -1,15 +1,17 @@
-export type RestrictedUserAction = "bid" | "follow" | "unfollow";
+export type RestrictedUserAction = "bid" | "follow" | "unfollow" | "publish";
 
 const bannedActionMessages: Record<RestrictedUserAction, string> = {
   bid: "账号已被限制，暂不能出价",
   follow: "账号已被限制，暂不能关注",
-  unfollow: "账号已被限制，暂不能取消关注"
+  unfollow: "账号已被限制，暂不能取消关注",
+  publish: "账号已被限制，暂不能提交资产"
 };
 
 const lowCreditActionMessages: Record<RestrictedUserAction, string> = {
   bid: "信誉分不足，暂不能出价",
   follow: "信誉分不足，暂不能关注",
-  unfollow: "信誉分不足，暂不能取消关注"
+  unfollow: "信誉分不足，暂不能取消关注",
+  publish: "信誉分不足，暂不能提交资产"
 };
 
 const contentSafetyFailureMessages = new Set([

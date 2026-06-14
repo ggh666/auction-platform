@@ -2,12 +2,15 @@ import { describe, expect, it } from "vitest";
 import { createHash } from "node:crypto";
 import { buildApp } from "../../api/src/app";
 import { createInMemoryAdminRepository } from "../../api/src/modules/admin/admin.repository";
+import { createInMemoryAssetConversationsRepository } from "../../api/src/modules/assetConversations/assetConversations.repository";
 import { createInMemoryAssetFollowsRepository } from "../../api/src/modules/assetFollows/assetFollows.repository";
 import { createInMemoryAssetsRepository } from "../../api/src/modules/assets/assets.repository";
 import { createInMemoryBidsRepository } from "../../api/src/modules/bids/bids.repository";
 import { createInMemoryImageSafetyRepository } from "../../api/src/modules/contentSafety/imageSafety.repository";
 import { createInMemorySystemConfigsRepository } from "../../api/src/modules/configs/configs.repository";
 import { createInMemoryDealFollowupsRepository } from "../../api/src/modules/dealFollowups/dealFollowups.repository";
+import { createInMemoryDragonBallPriceReferencesRepository } from "../../api/src/modules/dragonBallPriceReferences/dragonBallPriceReferences.repository";
+import { createInMemoryExchangeResourcesRepository } from "../../api/src/modules/exchangeResources/exchangeResources.repository";
 import { createInMemoryNotificationsRepository } from "../../api/src/modules/notifications/notifications.repository";
 import { createInMemoryPrincipalsRepository } from "../../api/src/modules/principals/principals.repository";
 import { createReportsService } from "../../api/src/modules/reports/reports.service";
@@ -45,10 +48,13 @@ function buildProductionTestApp() {
     bidsRepository: createInMemoryBidsRepository((asset) => assetsRepository.save(asset)),
     reportsService: createReportsService(),
     assetFollowsRepository: createInMemoryAssetFollowsRepository(),
+    assetConversationsRepository: createInMemoryAssetConversationsRepository(),
     principalsRepository: createInMemoryPrincipalsRepository(),
     configsRepository: createInMemorySystemConfigsRepository(),
     notificationsRepository: createInMemoryNotificationsRepository(),
     dealFollowupsRepository: createInMemoryDealFollowupsRepository(),
+    exchangeResourcesRepository: createInMemoryExchangeResourcesRepository(),
+    dragonBallPriceReferencesRepository: createInMemoryDragonBallPriceReferencesRepository(),
     imageSafetyRepository: createInMemoryImageSafetyRepository()
   });
 }

@@ -493,6 +493,72 @@ describe("bidding", () => {
     }
   });
 
+  it("deletes selected notifications only from the current user's notification center", async () => {
+    const app = buildApp({ enableMockAuth: true });
+
+    try {
+      const sellerToken = await login(app, "卖家");
+      const firstBidderToken = await login(app, "买家一");
+      const secondBidderToken = await login(app, "买家二");
+      const thirdBidderToken = await login(app, "买家三");
+      const assetId = await createActiveAsset(app, sellerToken);
+
+      await app.inject({
+        method: "POST",
+        url: "/api/bids",
+        headers: { authorization: `Bearer ${firstBidderToken}` },
+        payload: { assetId, amountCents: 10000, commitmentAccepted: true }
+      });
+      await app.inject({
+        method: "POST",
+        url: "/api/bids",
+        headers: { authorization: `Bearer ${secondBidderToken}` },
+        payload: { assetId, amountCents: 10100, commitmentAccepted: true }
+      });
+      await app.inject({
+        method: "POST",
+        url: "/api/bids",
+        headers: { authorization: `Bearer ${thirdBidderToken}` },
+        payload: { assetId, amountCents: 10200, commitmentAccepted: true }
+      });
+
+      const firstBefore = await app.inject({
+        method: "GET",
+        url: "/api/profile/notifications",
+        headers: { authorization: `Bearer ${firstBidderToken}` }
+      });
+      const secondBefore = await app.inject({
+        method: "GET",
+        url: "/api/profile/notifications",
+        headers: { authorization: `Bearer ${secondBidderToken}` }
+      });
+      expect(firstBefore.json().items).toHaveLength(2);
+      expect(secondBefore.json().items).toHaveLength(1);
+
+      const deleted = await app.inject({
+        method: "POST",
+        url: "/api/profile/notifications/delete",
+        headers: { authorization: `Bearer ${firstBidderToken}` },
+        payload: { ids: [firstBefore.json().items[0].id] }
+      });
+
+      expect(deleted.statusCode).toBe(200);
+      expect(deleted.json().items).toHaveLength(1);
+      expect(deleted.json().items.map((item: { id: string }) => item.id)).not.toContain(firstBefore.json().items[0].id);
+      expect(deleted.json().unreadCount).toBe(1);
+
+      const secondAfter = await app.inject({
+        method: "GET",
+        url: "/api/profile/notifications",
+        headers: { authorization: `Bearer ${secondBidderToken}` }
+      });
+      expect(secondAfter.json().items).toHaveLength(1);
+      expect(secondAfter.json().items[0].id).toBe(secondBefore.json().items[0].id);
+    } finally {
+      await app.close();
+    }
+  });
+
   it("sends a WeChat subscribe message to prior bidders when they are outbid", async () => {
     const sentMessages: unknown[] = [];
     const app = buildApp({
@@ -717,6 +783,9 @@ describe("bidding", () => {
         },
         async markAllRead() {
           return [];
+        },
+        async deleteByUserIds() {
+          return 0;
         },
         async deleteByBidId() {
           return 0;

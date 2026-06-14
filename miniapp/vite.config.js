@@ -3,6 +3,7 @@ import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { defineConfig } from "vite";
 import uniModule from "@dcloudio/vite-plugin-uni";
+import { wechatSubscribeTemplates } from "../shared/src/wechatSubscribeTemplates.ts";
 
 const root = dirname(fileURLToPath(import.meta.url));
 const localEsbuildBinary = resolve(root, "node_modules/esbuild/bin/esbuild");
@@ -17,11 +18,20 @@ const priceChangeSubscribeTemplateId = (
   process.env.VITE_PRICE_CHANGE_SUBSCRIBE_TEMPLATE_ID ??
   ""
 ).trim();
+const replyMessageSubscribeTemplateId = (
+  process.env.UNI_APP_REPLY_MESSAGE_SUBSCRIBE_TEMPLATE_ID ??
+  process.env.VITE_REPLY_MESSAGE_SUBSCRIBE_TEMPLATE_ID ??
+  process.env.UNI_APP_ASSET_MESSAGE_SUBSCRIBE_TEMPLATE_ID ??
+  process.env.VITE_ASSET_MESSAGE_SUBSCRIBE_TEMPLATE_ID ??
+  wechatSubscribeTemplates.replyMessage.templateId
+).trim();
 
 export default defineConfig({
   envPrefix: ["VITE_", "UNI_APP_"],
   define: {
-    __PRICE_CHANGE_SUBSCRIBE_TEMPLATE_ID__: JSON.stringify(priceChangeSubscribeTemplateId)
+    __PRICE_CHANGE_SUBSCRIBE_TEMPLATE_ID__: JSON.stringify(priceChangeSubscribeTemplateId),
+    __REPLY_MESSAGE_SUBSCRIBE_TEMPLATE_ID__: JSON.stringify(replyMessageSubscribeTemplateId),
+    __ASSET_MESSAGE_SUBSCRIBE_TEMPLATE_ID__: JSON.stringify(replyMessageSubscribeTemplateId)
   },
   plugins: [uni()]
 });

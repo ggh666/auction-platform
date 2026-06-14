@@ -1,6 +1,8 @@
-import type { DragonBallInfo } from "./dragonBall";
+import type { DragonBallInfo, DragonBallPriceReferenceProfession, DragonBallProfession, DragonBallQuality } from "./dragonBall";
 
 export type AssetStatus = "draft" | "pending_review" | "active" | "ended" | "rejected" | "cancelled" | "removed";
+export type ExchangeResourceStatus = "pending_image_review" | "active" | "closed" | "removed" | "expired";
+export type AssetResourceSource = "auction_asset" | "exchange_resource";
 export type ReportStatus = "pending" | "rejected" | "confirmed";
 export type AuctionResultStatus = "sold" | "unsold" | "cancelled" | "removed";
 export type ImageSafetyStatus = "missing" | "pending" | "pass" | "review" | "risky" | "failed";
@@ -102,6 +104,62 @@ export type AuctionAsset = {
   followedByMe?: boolean;
 };
 
+export type ExchangeResource = {
+  id: string;
+  publisherId: string;
+  publisher?: UserSummary;
+  gameName: string;
+  serverName: string;
+  assetType: "道具";
+  itemCategory: "龙珠";
+  dragonBall: DragonBallInfo;
+  dragonBallAmountCents: number | null;
+  title: string;
+  imageUrl: string;
+  imageObjectKey: string;
+  imageMimeType: string;
+  imageSizeBytes: number;
+  desiredExchange: string;
+  description: string;
+  status: ExchangeResourceStatus;
+  expiresAt: string;
+  createdAt: string;
+  updatedAt: string;
+};
+
+export type DragonBallPriceReferenceItem = {
+  id: string;
+  batchId: string;
+  profession: DragonBallPriceReferenceProfession;
+  quality: DragonBallQuality;
+  minPriceCents: number;
+  maxPriceCents: number;
+  createdAt: string;
+  updatedAt: string;
+};
+
+export type DragonBallPriceReferenceBatch = {
+  id: string;
+  gameName: string;
+  weekStartDate: string;
+  weekEndDate: string;
+  note: string;
+  items: DragonBallPriceReferenceItem[];
+  createdAt: string;
+  updatedAt: string;
+};
+
+export type DragonBallPriceReferenceTrendItem = {
+  batchId: string;
+  gameName: string;
+  weekStartDate: string;
+  weekEndDate: string;
+  profession: DragonBallPriceReferenceProfession;
+  quality: DragonBallQuality;
+  minPriceCents: number;
+  maxPriceCents: number;
+};
+
 export type AdminImageSafetyCheck = {
   publicUrl: string;
   objectKey: string | null;
@@ -139,5 +197,44 @@ export type NotificationItem = {
   assetTitle: string;
   amountCents: number | null;
   readAt: string | null;
+  createdAt: string;
+};
+
+export type AssetConversationType = "principal_contact" | "seller_contact";
+export type AssetMessageSenderType = "user" | "admin";
+
+export type AssetConversation = {
+  id: string;
+  assetId: string;
+  assetSource: AssetResourceSource;
+  conversationType: AssetConversationType;
+  userId: string;
+  principalId: string | null;
+  targetUserId: string | null;
+  asset: Pick<AuctionAsset, "id" | "title" | "gameName" | "serverName" | "assetType">;
+  user: UserSummary;
+  principal: PrincipalSummary | null;
+  targetUser: UserSummary | null;
+  lastMessageText: string | null;
+  lastMessageAt: string | null;
+  lastMessageSenderType: AssetMessageSenderType | null;
+  userUnreadCount: number;
+  adminUnreadCount: number;
+  userReadAt: string | null;
+  adminReadAt: string | null;
+  userDeletedAt: string | null;
+  targetUserDeletedAt: string | null;
+  createdAt: string;
+  updatedAt: string;
+};
+
+export type AssetMessage = {
+  id: string;
+  conversationId: string;
+  senderType: AssetMessageSenderType;
+  senderUserId: string | null;
+  senderAdminId: string | null;
+  senderDisplayName: string;
+  content: string;
   createdAt: string;
 };

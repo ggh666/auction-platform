@@ -6,7 +6,9 @@ export function createPool(env = readEnv()): MysqlPool {
   return mysql.createPool({
     uri: env.mysqlUri,
     waitForConnections: true,
-    connectionLimit: 10,
+    connectionLimit: env.mysqlConnectionLimit,
+    maxIdle: env.mysqlMaxIdle,
+    idleTimeout: env.mysqlIdleTimeoutMs,
     namedPlaceholders: true
   }) as unknown as MysqlPool;
 }

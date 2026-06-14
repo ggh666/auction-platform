@@ -27,7 +27,8 @@ const permissions: Record<AdminRole, AdminPermission[]> = {
     "violation:publish",
     "config:manage"
   ],
-  reviewer: ["asset:create", "asset:view", "asset:review", "auction:confirm_deal", "report:review", "violation:publish"],
+  // reviewerAssetRemove keeps scoped reviewers able to delist assets under their bound principal.
+  reviewer: ["asset:create", "asset:view", "asset:review", "asset:remove", "auction:confirm_deal", "report:review", "violation:publish"],
   operator: ["asset:create", "asset:view", "asset:remove", "auction:confirm_deal"]
 };
 

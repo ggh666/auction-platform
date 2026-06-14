@@ -16,11 +16,35 @@ type AssetListShareInput = {
   keyword?: string;
 };
 
+type GameModeShareInput = {
+  gameName: string;
+};
+
+type ExchangeResourceListShareInput = {
+  gameName: string;
+  dragonBallProfession?: string;
+  dragonBallQuality?: string;
+  keyword?: string;
+};
+
+type PriceReferenceShareInput = {
+  gameName: string;
+  profession?: string;
+  quality?: string;
+};
+
 type AssetDetailShareInput = {
   assetId: string;
   title?: string;
   gameName?: string;
   imageUrls?: string[];
+};
+
+type ExchangeResourceDetailShareInput = {
+  resourceId: string;
+  title?: string;
+  gameName?: string;
+  imageUrl?: string;
 };
 
 function encodeQuery(params: Record<string, string | undefined>): string {
@@ -59,6 +83,39 @@ export function buildAssetListShare(input: AssetListShareInput): ShareAppTarget 
   };
 }
 
+export function buildGameModeShare(input: GameModeShareInput): ShareAppTarget {
+  const gameName = input.gameName.trim() || "塔防精灵";
+  return {
+    title: `${gameName}交换方式`,
+    path: withQuery("/pages/games/mode", { gameName })
+  };
+}
+
+export function buildExchangeResourceListShare(input: ExchangeResourceListShareInput): ShareAppTarget {
+  const gameName = input.gameName.trim() || "塔防精灵";
+  return {
+    title: `${gameName}龙珠自由交换`,
+    path: withQuery("/pages/exchange/list", {
+      gameName,
+      dragonBallProfession: input.dragonBallProfession?.trim(),
+      dragonBallQuality: input.dragonBallQuality?.trim(),
+      keyword: input.keyword?.trim()
+    })
+  };
+}
+
+export function buildPriceReferenceShare(input: PriceReferenceShareInput): ShareAppTarget {
+  const gameName = input.gameName.trim() || "塔防精灵";
+  return {
+    title: `${gameName}龙珠估值参考`,
+    path: withQuery("/pages/priceReference/index", {
+      gameName,
+      profession: input.profession?.trim(),
+      quality: input.quality?.trim()
+    })
+  };
+}
+
 export function buildAssetDetailShare(input: AssetDetailShareInput): ShareAppTarget {
   if (!input.assetId.trim()) {
     return buildHomeShare();
@@ -69,6 +126,20 @@ export function buildAssetDetailShare(input: AssetDetailShareInput): ShareAppTar
   return {
     title: `${title} - ${gameName}交换`,
     path: withQuery("/pages/auctions/detail", { assetId: input.assetId.trim() }),
+    ...(imageUrl ? { imageUrl } : {})
+  };
+}
+
+export function buildExchangeResourceDetailShare(input: ExchangeResourceDetailShareInput): ShareAppTarget {
+  if (!input.resourceId.trim()) {
+    return buildHomeShare();
+  }
+  const title = input.title?.trim() || "自由交换资源";
+  const gameName = input.gameName?.trim() || "塔防精灵";
+  const imageUrl = input.imageUrl?.trim();
+  return {
+    title: `${title} - ${gameName}自由交换`,
+    path: withQuery("/pages/exchange/detail", { resourceId: input.resourceId.trim() }),
     ...(imageUrl ? { imageUrl } : {})
   };
 }

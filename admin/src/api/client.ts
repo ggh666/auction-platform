@@ -104,6 +104,23 @@ export async function adminPatch<T>(path: string, payload: unknown): Promise<T> 
   return response.json() as Promise<T>;
 }
 
+export async function adminPut<T>(path: string, payload: unknown): Promise<T> {
+  const response = await fetch(`${API_BASE}${path}`, {
+    method: "PUT",
+    headers: {
+      authorization: `Bearer ${readAdminToken() ?? ""}`,
+      "content-type": "application/json"
+    },
+    body: JSON.stringify(payload)
+  });
+
+  if (!response.ok) {
+    throw await parseError(response, "操作失败，请稍后重试");
+  }
+
+  return response.json() as Promise<T>;
+}
+
 export async function adminDelete<T>(path: string): Promise<T> {
   const response = await fetch(`${API_BASE}${path}`, {
     method: "DELETE",

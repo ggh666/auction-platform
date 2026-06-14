@@ -6,7 +6,7 @@ type ShowModal = (options: UniApp.ShowModalOptions) => void;
 export function confirmTradingDisclaimer(showModal: ShowModal = uni.showModal): Promise<boolean> {
   return new Promise((resolve) => {
     showModal({
-      title: "交易风险提示",
+      title: "风险提示",
       content: TRADING_DISCLAIMER_MESSAGE,
       confirmText: "我已知晓",
       cancelText: "取消",

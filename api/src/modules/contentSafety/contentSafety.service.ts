@@ -33,6 +33,7 @@ export type ContentSafetyService = {
   assertTextAllowed(input: TextSafetyInput): Promise<void>;
   requestImageCheck(input: ImageSafetyInput): Promise<ImageSafetyRequestResult>;
   assertImageUploadsAllowed(input: ImageUploadSafetyInput): Promise<void>;
+  readImageUploadSafetyStatuses?(input: ImageUploadSafetyInput): Promise<ImageSafetyStatus[]>;
   assertAssetImagesAllowed(assetId: string): Promise<void>;
   handleImageCheckCallback?(input: unknown): Promise<void>;
 };

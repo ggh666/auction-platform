@@ -82,7 +82,7 @@
       </view>
       <button v-if="hasActiveFilters" class="filter-reset" @tap="clearFilters">重置筛选</button>
     </view>
-    <text class="search-privacy">隐私说明：搜索词和筛选条件仅用于本次列表查询；关注操作仅用于生成个人关注记录，不会公开展示。</text>
+    <text class="search-privacy">隐私说明：搜索词和筛选条件仅用于本次列表查询。</text>
 
     <view v-if="loading && assets.length === 0" class="empty">正在加载交换宝贝</view>
     <view v-else-if="assets.length === 0" class="empty">暂无匹配的进行中交换</view>
@@ -91,14 +91,6 @@
       <view v-if="isSoldAsset(asset)" class="sold-stamp">成交</view>
       <view class="asset-heading">
         <text class="asset-title">{{ asset.title }}</text>
-        <button
-          class="follow-button"
-          :class="{ active: asset.followedByMe }"
-          :disabled="isFollowUpdating(asset.id)"
-          @tap.stop="toggleFollow(asset)"
-        >
-          {{ asset.followedByMe ? "已关注" : "关注" }}
-        </button>
       </view>
       <text class="asset-meta">{{ asset.serverName }} / {{ displayAssetType(asset.assetType) }}</text>
       <text v-if="dragonBallLine(asset)" class="dragon-ball-line">{{ dragonBallLine(asset) }}</text>
@@ -128,11 +120,10 @@ import {
 } from "@auction/shared";
 import { onLoad, onPullDownRefresh, onReachBottom, onShareAppMessage, onShareTimeline, onShow } from "@dcloudio/uni-app";
 import { computed, ref } from "vue";
-import { followAsset, listAssets, listNotifications, listPrincipals, unfollowAsset } from "../../api/client";
+import { listAssets, listNotifications, listPrincipals } from "../../api/client";
 import { readToken } from "../../auth/session";
 import { assetTypes, normalizeAssetType, type AssetType } from "../../utils/assetType";
 import { isSoldAsset } from "../../utils/assetStatusText";
-import { restrictedActionFailureMessage } from "../../utils/userActionErrors";
 import { buildAssetListShare, toTimelineShare } from "../../utils/share";
 
 type LoadAssetsOptions = {
@@ -152,7 +143,6 @@ const principalOptions = ref<PrincipalSummary[]>([]);
 const selectedPrincipalId = ref("");
 const selectedDragonBallProfession = ref("");
 const selectedDragonBallQuality = ref("");
-const followUpdatingIds = ref<string[]>([]);
 const unreadNotifications = ref(0);
 const pageSize = 20;
 const dragonBallProfessionFilterLabels = ["全部职业", ...dragonBallProfessionOptions];
@@ -316,62 +306,6 @@ function clearFilters() {
   selectedPrincipalId.value = "";
   resetDragonBallFilters();
   void loadAssets({ reset: true });
-}
-
-function isFollowUpdating(assetId: string) {
-  return followUpdatingIds.value.includes(assetId);
-}
-
-function setFollowUpdating(assetId: string, updating: boolean) {
-  followUpdatingIds.value = updating
-    ? [...new Set([...followUpdatingIds.value, assetId])]
-    : followUpdatingIds.value.filter((id) => id !== assetId);
-}
-
-function setAssetFollowed(asset: AuctionAsset, followed: boolean) {
-  assets.value = assets.value.map((item) => (item.id === asset.id ? { ...item, followedByMe: followed } : item));
-}
-
-function followFailureTitle(error: unknown) {
-  const message = error instanceof Error ? error.message : "";
-  if (message === "Authentication required" || message === "User token required") {
-    return "请先登录后再关注";
-  }
-  const restrictedMessage = restrictedActionFailureMessage(error, "follow", "");
-  if (restrictedMessage) {
-    return restrictedMessage;
-  }
-  if (message === "Asset is not followable") {
-    return "当前信息暂不可关注";
-  }
-  return "关注操作失败";
-}
-
-async function toggleFollow(asset: AuctionAsset) {
-  if (!readToken()) {
-    uni.showToast({ title: "请先登录后再关注", icon: "none" });
-    uni.navigateTo({ url: "/pages/login/login" });
-    return;
-  }
-  if (isFollowUpdating(asset.id)) {
-    return;
-  }
-
-  const nextFollowed = !asset.followedByMe;
-  setFollowUpdating(asset.id, true);
-  try {
-    if (nextFollowed) {
-      await followAsset(asset.id);
-    } else {
-      await unfollowAsset(asset.id);
-    }
-    setAssetFollowed(asset, nextFollowed);
-    uni.showToast({ title: nextFollowed ? "已关注" : "已取消关注", icon: "none" });
-  } catch (error) {
-    uni.showToast({ title: followFailureTitle(error), icon: "none" });
-  } finally {
-    setFollowUpdating(asset.id, false);
-  }
 }
 
 function selectAssetType(type: AssetType) {
@@ -726,28 +660,6 @@ function goHome() {
   color: #101828;
 }
 
-.follow-button {
-  flex: 0 0 auto;
-  min-width: 112rpx;
-  height: 56rpx;
-  margin: 0;
-  padding: 0 16rpx;
-  font-size: 24rpx;
-  line-height: 56rpx;
-  color: #175cd3;
-  background: #eff8ff;
-  border-radius: 8rpx;
-}
-
-.follow-button.active {
-  color: #344054;
-  background: #f2f4f7;
-}
-
-.follow-button::after {
-  border: 0;
-}
-
 .asset-meta {
   margin-top: 8rpx;
   color: #667085;
@@ -963,17 +875,6 @@ function goHome() {
 .asset-price {
   color: #ffd66b;
   font-weight: 800;
-}
-
-.follow-button {
-  color: #f7e8b6;
-  background: rgba(22, 47, 43, 0.9);
-  border: 1px solid rgba(246, 196, 83, 0.30);
-}
-
-.follow-button.active {
-  color: #10201d;
-  background: linear-gradient(180deg, #a7f3d0, #34d399);
 }
 
 .violation-tag {

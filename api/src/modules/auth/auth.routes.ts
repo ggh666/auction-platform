@@ -3,7 +3,6 @@ import type { AuctionAsset, ProfileResultItem, ProfileResultsResponse } from "@a
 import { createSettlementService } from "../settlement/settlement.service";
 import type { Env } from "../../config/env";
 import { requireUser } from "../../http/auth";
-import { gone } from "../../http/errors";
 import { createAuthService, type WechatCodeSessionExchanger } from "./auth.service";
 import { paginateItems, readPagination, type PageQuery } from "../admin/pagination";
 import type { AssetsRepository } from "../assets/assets.repository";
@@ -84,8 +83,11 @@ export function registerProfileRoutes(
 ): void {
   const settlement = createSettlementService();
 
-  app.get("/api/profile/assets", async () => {
-    throw gone("user_asset_records_disabled", "Miniapp user published asset records are disabled");
+  app.get<{ Querystring: PageQuery }>("/api/profile/assets", { preHandler: requireUser }, async (request) => {
+    const { page, pageSize } = readPagination(request.query);
+    const items = (await deps.assets.listBySeller(request.user.id)).sort(sortResultAssets);
+    const result = paginateItems(items, page, pageSize);
+    return { ...result, nextCursor: null, hasMore: result.page * result.pageSize < result.total };
   });
 
   app.get("/api/profile/bids", { preHandler: requireUser }, async (request) => {

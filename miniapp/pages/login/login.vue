@@ -37,13 +37,16 @@
     </view>
 
     <button class="primary-action" :loading="loading" :disabled="loading" @tap="login">进入平台</button>
+    <button class="secondary-action" :disabled="loading" @tap="cancelLogin">暂不登录，返回浏览</button>
   </view>
 </template>
 
 <script setup lang="ts">
+import { onLoad } from "@dcloudio/uni-app";
 import { nextTick, ref } from "vue";
 import { wechatLogin } from "../../api/client";
 import { saveSession } from "../../auth/session";
+import { navigateAfterLogin, safeLoginRedirect } from "../../utils/authNavigation";
 
 type ChooseAvatarEvent = { detail?: { avatarUrl?: unknown } };
 
@@ -53,6 +56,11 @@ const nicknameDraft = ref("");
 const nicknameInputFocused = ref(false);
 const nicknameLocked = ref(false);
 const loading = ref(false);
+const redirectUrl = ref("/pages/games/index");
+
+onLoad((query) => {
+  redirectUrl.value = safeLoginRedirect(query?.redirect);
+});
 
 function getWeixinLoginCode(): Promise<string> {
   return new Promise((resolve, reject) => {
@@ -183,12 +191,16 @@ async function login() {
       avatarUrl: persistentAvatarUrl()
     });
     saveSession(result);
-    uni.switchTab({ url: "/pages/games/index" });
+    navigateAfterLogin(redirectUrl.value);
   } catch (error) {
     uni.showToast({ title: readErrorMessage(error), icon: "none" });
   } finally {
     loading.value = false;
   }
+}
+
+function cancelLogin() {
+  navigateAfterLogin(redirectUrl.value);
 }
 </script>
 
@@ -352,6 +364,21 @@ async function login() {
 }
 
 .nickname-reset::after {
+  border: 0;
+}
+
+.secondary-action {
+  width: 100%;
+  min-height: 76rpx;
+  margin-top: 18rpx;
+  font-weight: 800;
+  color: #f7e8b6;
+  background: rgba(11, 32, 30, 0.92);
+  border: 1px solid rgba(246, 196, 83, 0.28);
+  border-radius: 10rpx;
+}
+
+.secondary-action::after {
   border: 0;
 }
 

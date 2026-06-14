@@ -1,0 +1,39 @@
+{
+  "pages": [
+    "devtools/mp-weixin/pages/games/index",
+    "devtools/mp-weixin/pages/auctions/list",
+    "devtools/mp-weixin/pages/games/mode",
+    "devtools/mp-weixin/pages/exchange/list",
+    "devtools/mp-weixin/pages/exchange/detail",
+    "devtools/mp-weixin/pages/exchange/publish",
+    "devtools/mp-weixin/pages/priceReference/index",
+    "devtools/mp-weixin/pages/auctions/detail",
+    "devtools/mp-weixin/pages/auctions/publish",
+    "devtools/mp-weixin/pages/profile/index",
+    "devtools/mp-weixin/pages/profile/assets",
+    "devtools/mp-weixin/pages/profile/exchanges",
+    "devtools/mp-weixin/pages/profile/bids",
+    "devtools/mp-weixin/pages/profile/notifications",
+    "devtools/mp-weixin/pages/profile/asset-chat",
+    "devtools/mp-weixin/pages/profile/results",
+    "devtools/mp-weixin/pages/login/login"
+  ],
+  "tabBar": {
+    "color": "#8aa196",
+    "selectedColor": "#f6c453",
+    "backgroundColor": "#071112",
+    "borderStyle": "black",
+    "custom": true,
+    "list": [
+      {
+        "pagePath": "devtools/mp-weixin/pages/games/index",
+        "text": "资源"
+      },
+      {
+        "pagePath": "devtools/mp-weixin/pages/profile/index",
+        "text": "我的"
+      }
+    ]
+  },
+  "usingComponents": {}
+}

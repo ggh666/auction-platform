@@ -1,5 +1,5 @@
 {
-  "description": "微信开发者工具配置。HBuilderX 会在编译产物目录中读取同名配置。",
+  "description": "微信开发者工具请导入 miniapp 源码目录；根目录 app.json 包装稳定编译产物。",
   "miniprogramRoot": "",
   "compileType": "miniprogram",
   "appid": "wx6ef44aa749f07e94",
@@ -13,7 +13,24 @@
     "bigPackageSizeSupport": true
   },
   "packOptions": {
-    "ignore": []
+    "ignore": [
+      {
+        "type": "folder",
+        "value": "dist"
+      },
+      {
+        "type": "folder",
+        "value": ".devtools"
+      },
+      {
+        "type": "folder",
+        "value": "unpackage"
+      },
+      {
+        "type": "folder",
+        "value": "node_modules"
+      }
+    ]
   },
   "condition": {
     "search": {

@@ -1,5 +1,5 @@
 import { useState } from "react";
-import type { AdminAssetCopyDraft, AdminAssetCopyDraftResponse } from "@auction/shared";
+import type { AdminAssetCopyDraft, AdminAssetCopyDraftResponse, AdminRole } from "@auction/shared";
 import { adminGet } from "./api/client";
 import { clearAdminToken, readAdminSession, readAdminToken, type AdminSession } from "./auth/session";
 import { AppLayout } from "./components/AppLayout";
@@ -11,8 +11,11 @@ import { AssetPublishPage } from "./pages/AssetPublishPage";
 import { ConfigPage } from "./pages/ConfigPage";
 import { DashboardPage } from "./pages/DashboardPage";
 import { DealFollowupPage } from "./pages/DealFollowupPage";
+import { ExchangeResourcePage } from "./pages/ExchangeResourcePage";
 import { LoginPage } from "./pages/LoginPage";
+import { MessageCenterPage } from "./pages/MessageCenterPage";
 import { PrincipalManagementPage } from "./pages/PrincipalManagementPage";
+import { PriceReferencePage } from "./pages/PriceReferencePage";
 import { ReviewCenterPage } from "./pages/ReviewCenterPage";
 import { UserManagementPage } from "./pages/UserManagementPage";
 
@@ -21,7 +24,10 @@ type PageKey =
   | "reviews"
   | "assetData"
   | "assetPublish"
+  | "exchangeResources"
+  | "priceReferences"
   | "dealFollowups"
+  | "messages"
   | "adminUsers"
   | "principals"
   | "users"
@@ -31,6 +37,7 @@ function renderPage(
   page: PageKey,
   onOpenAsset: (assetId: string) => void,
   currentAdminId: string,
+  currentRole: AdminRole,
   copyDraft: AdminAssetCopyDraft | null,
   onCopyAsset: (assetId: string) => Promise<void>
 ) {
@@ -41,8 +48,14 @@ function renderPage(
       return <AssetDataPage onCopyAsset={onCopyAsset} onOpenAsset={onOpenAsset} />;
     case "assetPublish":
       return <AssetPublishPage copyDraft={copyDraft} onOpenAsset={onOpenAsset} />;
+    case "exchangeResources":
+      return <ExchangeResourcePage />;
+    case "priceReferences":
+      return <PriceReferencePage />;
     case "dealFollowups":
       return <DealFollowupPage onOpenAsset={onOpenAsset} />;
+    case "messages":
+      return <MessageCenterPage role={currentRole} />;
     case "adminUsers":
       return <AdminUserManagementPage currentAdminId={currentAdminId} />;
     case "users":
@@ -117,7 +130,7 @@ export function App() {
       {detailAssetId ? (
         <AssetDetailPage assetId={detailAssetId} onBack={() => setDetailAssetId(null)} />
       ) : (
-        renderPage(page, setDetailAssetId, admin.id, assetPublishDraft, copyAssetToPublish)
+        renderPage(page, setDetailAssetId, admin.id, admin.role, assetPublishDraft, copyAssetToPublish)
       )}
       {passwordDialogOpen ? (
         <ChangePasswordDialog onChanged={handlePasswordChanged} onClose={() => setPasswordDialogOpen(false)} />

@@ -19,13 +19,26 @@ export type PriceChangeSubscribeMessageInput = {
   changedAt: string;
 };
 
+export type AssetMessageSubscribeMessageInput = {
+  touserOpenid: string | null;
+  recipientUserId: string;
+  conversationId: string;
+  assetTitle: string;
+  senderDisplayName: string;
+  content: string;
+  sentAt: string;
+};
+
 export type SubscribeMessageService = {
   sendPriceChange(input: PriceChangeSubscribeMessageInput): Promise<void>;
+  sendAssetMessage(input: AssetMessageSubscribeMessageInput): Promise<void>;
 };
 
 type WechatSubscribeMessageServiceOptions = {
   templateId?: string;
   priceChangeTemplateId?: string;
+  replyMessageTemplateId?: string;
+  assetMessageTemplateId?: string;
   miniprogramState: "developer" | "trial" | "formal";
   tokenProvider: WechatAccessTokenProvider;
   fetchImpl?: FetchLike;
@@ -49,9 +62,19 @@ function formatWechatTime(value: string): string {
   return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())} ${pad(date.getHours())}:${pad(date.getMinutes())}`;
 }
 
+function formatWechatDateTime(value: string): string {
+  const date = new Date(value);
+  const normalizedDate = Number.isNaN(date.getTime()) ? new Date() : date;
+  const pad = (input: number) => String(input).padStart(2, "0");
+  return `${normalizedDate.getFullYear()}-${pad(normalizedDate.getMonth() + 1)}-${pad(normalizedDate.getDate())} ${pad(normalizedDate.getHours())}:${pad(normalizedDate.getMinutes())}:${pad(normalizedDate.getSeconds())}`;
+}
+
 export function createNoopSubscribeMessageService(): SubscribeMessageService {
   return {
     async sendPriceChange() {
+      return;
+    },
+    async sendAssetMessage() {
       return;
     }
   };
@@ -106,6 +129,20 @@ export function createWechatSubscribeMessageService(options: WechatSubscribeMess
           amount4: { value: formatTemplateAmount(input.amountCents) },
           thing15: { value: truncateThing(input.assetTitle) },
           time11: { value: formatWechatTime(input.changedAt) }
+        }
+      });
+    },
+
+    async sendAssetMessage(input) {
+      await sendTemplate({
+        touserOpenid: input.touserOpenid,
+        templateId: options.replyMessageTemplateId ?? options.assetMessageTemplateId ?? "",
+        page: `pages/profile/asset-chat?conversationId=${encodeURIComponent(input.conversationId)}`,
+        data: {
+          thing1: { value: truncateThing(input.assetTitle) },
+          name2: { value: truncateThing(input.senderDisplayName, 10) },
+          thing5: { value: truncateThing(input.content, 20) },
+          date4: { value: formatWechatDateTime(input.sentAt) }
         }
       });
     }

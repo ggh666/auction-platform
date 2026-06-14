@@ -1,7 +1,10 @@
 import { describe, expect, it } from "vitest";
+import { wechatSubscribeTemplates } from "@auction/shared";
 import {
+  requestAssetMessageSubscription,
   requestBidRelatedSubscriptions,
   requestPriceChangeSubscription,
+  readAssetMessageSubscribeTemplateId,
   readPriceChangeSubscribeTemplateId
 } from "./subscribeMessage";
 
@@ -17,6 +20,36 @@ describe("miniapp subscribe message helpers", () => {
   it("reads the configured price change template id", () => {
     expect(readPriceChangeSubscribeTemplateId({ UNI_APP_PRICE_CHANGE_SUBSCRIBE_TEMPLATE_ID: " tmpl-1 " })).toBe("tmpl-1");
     expect(readPriceChangeSubscribeTemplateId({})).toBe("xnfSOrsId25WJBEWJkbG8UDRp4PD8pyHAx2F_47_2X0");
+  });
+
+  it("reads and requests the configured reply message template id", async () => {
+    const requestedTemplateIds: string[][] = [];
+    expect(readAssetMessageSubscribeTemplateId({ UNI_APP_REPLY_MESSAGE_SUBSCRIBE_TEMPLATE_ID: " tmpl-reply " })).toBe(
+      "tmpl-reply"
+    );
+    expect(
+      readAssetMessageSubscribeTemplateId({
+        UNI_APP_ASSET_MESSAGE_SUBSCRIBE_TEMPLATE_ID: " tmpl-legacy-asset-message "
+      })
+    ).toBe("tmpl-legacy-asset-message");
+    expect(
+      readAssetMessageSubscribeTemplateId({
+        UNI_APP_REPLY_MESSAGE_SUBSCRIBE_TEMPLATE_ID: " tmpl-reply ",
+        UNI_APP_ASSET_MESSAGE_SUBSCRIBE_TEMPLATE_ID: " tmpl-legacy-asset-message "
+      })
+    ).toBe("tmpl-reply");
+    expect(readAssetMessageSubscribeTemplateId({})).toBe(wechatSubscribeTemplates.replyMessage.templateId);
+
+    const result = await requestAssetMessageSubscription({
+      assetMessageTemplateId: "tmpl-reply",
+      requestSubscribeMessage(options) {
+        requestedTemplateIds.push(options.tmplIds);
+        options.success({ "tmpl-reply": "accept" });
+      }
+    });
+
+    expect(requestedTemplateIds).toEqual([["tmpl-reply"]]);
+    expect(result).toBe("accepted");
   });
 
   it("skips subscription requests when no template id is configured", async () => {

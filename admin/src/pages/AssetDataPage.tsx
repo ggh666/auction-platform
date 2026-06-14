@@ -179,7 +179,7 @@ export function AssetDataPage({ onOpenAsset, onCopyAsset }: AssetDataPageProps) 
       setPage(response.page);
       setSelectedAssetIds([]);
     } catch (loadError) {
-      setError(loadError instanceof Error ? loadError.message : "加载资产数据失败");
+      setError(loadError instanceof Error ? loadError.message : "加载主理人资源失败");
     } finally {
       setLoading(false);
     }
@@ -305,7 +305,7 @@ export function AssetDataPage({ onOpenAsset, onCopyAsset }: AssetDataPageProps) 
       link.remove();
       URL.revokeObjectURL(url);
     } catch (exportError) {
-      setError(exportError instanceof Error ? exportError.message : "导出资产数据失败");
+      setError(exportError instanceof Error ? exportError.message : "导出主理人资源失败");
     } finally {
       setExporting(false);
     }
@@ -316,7 +316,7 @@ export function AssetDataPage({ onOpenAsset, onCopyAsset }: AssetDataPageProps) 
       <div className="panel">
         <div className="panel-heading">
           <div>
-            <h3>资产数据</h3>
+            <h3>主理人资源</h3>
             <p>查看全部状态资产，按运营条件筛选并分页核对。</p>
           </div>
           <div className="inline-actions">
@@ -418,7 +418,7 @@ export function AssetDataPage({ onOpenAsset, onCopyAsset }: AssetDataPageProps) 
             { key: "createdAt", label: "创建时间" },
             { key: "actions", label: "操作", align: "center" }
           ]}
-          emptyText={loading ? "正在加载..." : "暂无资产数据"}
+          emptyText={loading ? "正在加载..." : "暂无主理人资源"}
           getRowKey={(row) => row.id}
           rows={assets}
           renderCell={(row, column) => {

@@ -9,6 +9,11 @@ import { registerAdminDashboardRoutes } from "./modules/admin/adminDashboard.rou
 import { registerAdminRoutes } from "./modules/admin/admin.routes";
 import { registerAdminUserRoutes } from "./modules/admin/adminUsers.routes";
 import { createInMemoryAssetFollowsRepository, type AssetFollowsRepository } from "./modules/assetFollows/assetFollows.repository";
+import {
+  createInMemoryAssetConversationsRepository,
+  type AssetConversationsRepository
+} from "./modules/assetConversations/assetConversations.repository";
+import { registerAssetConversationRoutes } from "./modules/assetConversations/assetConversations.routes";
 import { createInMemoryAssetsRepository, type AssetsRepository } from "./modules/assets/assets.repository";
 import { registerAssetRoutes } from "./modules/assets/assets.routes";
 import { createInMemoryBidsRepository, type BidsRepository } from "./modules/bids/bids.repository";
@@ -30,6 +35,16 @@ import { registerNotificationRoutes } from "./modules/notifications/notification
 import { createInMemoryPrincipalsRepository, type PrincipalsRepository } from "./modules/principals/principals.repository";
 import { createInMemoryDealFollowupsRepository, type DealFollowupsRepository } from "./modules/dealFollowups/dealFollowups.repository";
 import { registerDealFollowupRoutes } from "./modules/dealFollowups/dealFollowups.routes";
+import {
+  createInMemoryExchangeResourcesRepository,
+  type ExchangeResourcesRepository
+} from "./modules/exchangeResources/exchangeResources.repository";
+import { registerExchangeResourceRoutes } from "./modules/exchangeResources/exchangeResources.routes";
+import {
+  createInMemoryDragonBallPriceReferencesRepository,
+  type DragonBallPriceReferencesRepository
+} from "./modules/dragonBallPriceReferences/dragonBallPriceReferences.repository";
+import { registerDragonBallPriceReferenceRoutes } from "./modules/dragonBallPriceReferences/dragonBallPriceReferences.routes";
 import { registerReportRoutes } from "./modules/reports/reports.routes";
 import { createReportsService, type ReportsService } from "./modules/reports/reports.service";
 import {
@@ -38,7 +53,10 @@ import {
 } from "./modules/subscribeMessages/subscribeMessage.service";
 import { createInMemoryUsersRepository, type UsersRepository } from "./modules/users/users.repository";
 import { AuctionHub } from "./realtime/auctionHub";
+import { MessageHub } from "./realtime/messageHub";
 import { attachAuctionWsServer } from "./realtime/wsServer";
+import { attachMessageWsServer } from "./realtime/messageWsServer";
+import { registerRequestTiming } from "./observability/requestTiming";
 
 type FastifyStatusError = Error & { statusCode: number };
 const jsonBodyLimitBytes = 8 * 1024 * 1024;
@@ -86,15 +104,19 @@ export type AppOptions = {
   bidsRepository?: BidsRepository;
   reportsService?: ReportsService;
   assetFollowsRepository?: AssetFollowsRepository;
+  assetConversationsRepository?: AssetConversationsRepository;
   principalsRepository?: PrincipalsRepository;
   configsRepository?: SystemConfigsRepository;
   notificationsRepository?: NotificationsRepository;
   dealFollowupsRepository?: DealFollowupsRepository;
+  exchangeResourcesRepository?: ExchangeResourcesRepository;
+  dragonBallPriceReferencesRepository?: DragonBallPriceReferencesRepository;
   imageStorage?: ImageStorage;
   contentSafetyService?: ContentSafetyService;
   subscribeMessageService?: SubscribeMessageService;
   imageSafetyRepository?: ImageSafetyRepository;
   hub?: Pick<AuctionHub, "publish">;
+  messageHub?: MessageHub;
   env?: NodeJS.ProcessEnv;
   wechatCodeSessionExchanger?: WechatCodeSessionExchanger;
 };
@@ -109,10 +131,13 @@ export function buildApp(options: AppOptions = {}) {
       !options.bidsRepository ||
       !options.reportsService ||
       !options.assetFollowsRepository ||
+      !options.assetConversationsRepository ||
       !options.principalsRepository ||
       !options.configsRepository ||
       !options.notificationsRepository ||
       !options.dealFollowupsRepository ||
+      !options.exchangeResourcesRepository ||
+      !options.dragonBallPriceReferencesRepository ||
       (env.contentSafetyEnabled && !options.imageSafetyRepository && !options.contentSafetyService))
   ) {
     throw new Error("Production repositories must be explicitly configured; in-memory repositories are development only");
@@ -120,16 +145,21 @@ export function buildApp(options: AppOptions = {}) {
 
   const app = Fastify({ logger: env.nodeEnv === "test" ? false : { level: env.logLevel }, bodyLimit: jsonBodyLimitBytes });
   registerJsonContentParser(app);
+  registerRequestTiming(app, { slowRequestThresholdMs: env.apiSlowRequestThresholdMs });
   const users = options.usersRepository ?? createInMemoryUsersRepository();
   const assets = options.assetsRepository ?? createInMemoryAssetsRepository();
   const admins = options.adminRepository ?? createInMemoryAdminRepository();
   const reports = options.reportsService ?? createReportsService();
   const assetFollows = options.assetFollowsRepository ?? createInMemoryAssetFollowsRepository();
+  const assetConversations = options.assetConversationsRepository ?? createInMemoryAssetConversationsRepository();
   const principals = options.principalsRepository ?? createInMemoryPrincipalsRepository();
   const bids = options.bidsRepository ?? createInMemoryBidsRepository((asset) => assets.save(asset), (assetId) => assets.findById(assetId));
   const configs = options.configsRepository ?? createInMemorySystemConfigsRepository();
   const notifications = options.notificationsRepository ?? createInMemoryNotificationsRepository();
   const dealFollowups = options.dealFollowupsRepository ?? createInMemoryDealFollowupsRepository();
+  const exchangeResources = options.exchangeResourcesRepository ?? createInMemoryExchangeResourcesRepository();
+  const dragonBallPriceReferences =
+    options.dragonBallPriceReferencesRepository ?? createInMemoryDragonBallPriceReferencesRepository();
   const imageStorage = options.imageStorage ?? createR2ImageStorage(env);
   const imageSafety = options.imageSafetyRepository ?? createInMemoryImageSafetyRepository();
   const wechatTokenProvider = createWechatAccessTokenProvider({ env });
@@ -153,11 +183,14 @@ export function buildApp(options: AppOptions = {}) {
     options.subscribeMessageService ??
     createWechatSubscribeMessageService({
       priceChangeTemplateId: env.wechatPriceChangeSubscribeTemplateId,
+      replyMessageTemplateId: env.wechatReplyMessageSubscribeTemplateId,
+      assetMessageTemplateId: env.wechatAssetMessageSubscribeTemplateId,
       miniprogramState: env.wechatSubscribeMessageMiniprogramState,
       tokenProvider: wechatTokenProvider
     });
   const auctionHub = new AuctionHub();
   const hub = options.hub ?? auctionHub;
+  const messageHub = options.messageHub ?? new MessageHub();
   const enableMockAuth = env.nodeEnv !== "production" && (options.enableMockAuth ?? env.nodeEnv === "development");
 
   app.register(cors, { origin: env.corsAllowedOrigins });
@@ -180,7 +213,27 @@ export function buildApp(options: AppOptions = {}) {
     principals,
     users
   });
-  registerImageRoutes(app, imageStorage, users, contentSafety);
+  registerImageRoutes(app, imageStorage, users, contentSafety, configs);
+  registerAssetConversationRoutes(app, {
+    admins,
+    assets,
+    bids,
+    users,
+    principals,
+    conversations: assetConversations,
+    contentSafety,
+    messageHub,
+    subscribeMessages
+  });
+  registerExchangeResourceRoutes(app, {
+    admins,
+    users,
+    configs,
+    contentSafety,
+    exchangeResources,
+    conversations: assetConversations
+  });
+  registerDragonBallPriceReferenceRoutes(app, { admins, priceReferences: dragonBallPriceReferences });
   registerAssetRoutes(app, assets, users, bids, configs, reports, contentSafety, principals, assetFollows);
   registerAdminDashboardRoutes(app, admins, { assets, bids, reports, users, principals });
   registerAdminRoutes(app, admins, assets, bids, users, contentSafety, principals, dealFollowups, imageSafety, imageStorage, notifications, hub);
@@ -193,6 +246,12 @@ export function buildApp(options: AppOptions = {}) {
     const wss = attachAuctionWsServer(app.server, auctionHub);
     app.addHook("onClose", (_instance, done) => {
       wss.close(done);
+    });
+  }
+  if (!options.messageHub) {
+    const messageWss = attachMessageWsServer(app, { admins, users, principals, hub: messageHub });
+    app.addHook("onClose", (_instance, done) => {
+      messageWss.close(done);
     });
   }
 

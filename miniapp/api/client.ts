@@ -1,7 +1,20 @@
 import type {
+  AssetCreateResponse,
+  AssetConversation,
+  AssetConversationListResponse,
+  AssetConversationMessageResponse,
+  AssetConversationMessagesResponse,
+  AssetConversationResponse,
   AssetDetailResponse,
   AssetListResponse,
+  AssetPublishContextResponse,
   AuctionAsset,
+  DragonBallPriceReferenceLatestResponse,
+  DragonBallPriceReferenceTrendResponse,
+  ExchangeResourceContextResponse,
+  ExchangeResourceCreateRequest,
+  ExchangeResourceListResponse,
+  ExchangeResourceResponse,
   LoginResponse,
   NotificationActionResponse,
   NotificationBulkActionResponse,
@@ -10,6 +23,7 @@ import type {
   PlaceBidResponse,
   PrincipalListResponse,
   ProfileResultsResponse,
+  UploadedImageResponse,
   UserSummary,
   WechatLoginRequest
 } from "@auction/shared";
@@ -84,7 +98,7 @@ export function request<T>(path: string, options: RequestOptionsWithoutUrl = {})
         }
 
         const errorPayload = readErrorPayload(response.data);
-        reject(Object.assign(new Error(errorPayload.message), { details: errorPayload.details }));
+        reject(Object.assign(new Error(errorPayload.message), { details: errorPayload.details, statusCode: response.statusCode }));
       },
       fail(error) {
         reject(error);
@@ -130,6 +144,10 @@ export function listMyResults(query: Pick<AssetListQuery, "page" | "pageSize"> =
   return request<ProfileResultsResponse>(`/api/profile/results${queryString(query)}`);
 }
 
+export function listMyAssets(query: Pick<AssetListQuery, "page" | "pageSize"> = {}): Promise<AssetListResponse> {
+  return request<AssetListResponse>(`/api/profile/assets${queryString(query)}`);
+}
+
 export function listNotifications(): Promise<NotificationListResponse> {
   return request<NotificationListResponse>("/api/profile/notifications");
 }
@@ -144,6 +162,96 @@ export function markAllNotificationsRead(): Promise<NotificationBulkActionRespon
   return request<NotificationBulkActionResponse>("/api/profile/notifications/read-all", {
     method: "POST"
   });
+}
+
+export function deleteNotifications(ids: string[]): Promise<NotificationBulkActionResponse> {
+  return request<NotificationBulkActionResponse>("/api/profile/notifications/delete", {
+    method: "POST",
+    data: { ids }
+  });
+}
+
+export type AssetConversationItem = AssetConversation;
+
+export function createPrincipalConversation(assetId: string): Promise<AssetConversationResponse> {
+  return request<AssetConversationResponse>(`/api/assets/${assetId}/conversations/principal`, {
+    method: "POST"
+  });
+}
+
+export function createSellerConversation(resourceId: string): Promise<AssetConversationResponse> {
+  return request<AssetConversationResponse>(`/api/exchange-resources/${resourceId}/conversations/seller`, {
+    method: "POST"
+  });
+}
+
+export function listAssetConversations(query: Pick<AssetListQuery, "page" | "pageSize"> = {}): Promise<AssetConversationListResponse> {
+  return request<AssetConversationListResponse>(`/api/profile/asset-conversations${queryString(query)}`);
+}
+
+export function deleteAssetConversations(ids: string[]): Promise<AssetConversationListResponse> {
+  return request<AssetConversationListResponse>("/api/profile/asset-conversations/delete", {
+    method: "POST",
+    data: { ids }
+  });
+}
+
+export function listAssetConversationMessages(
+  conversationId: string,
+  query: Pick<AssetListQuery, "page" | "pageSize"> = {}
+): Promise<AssetConversationMessagesResponse> {
+  return request<AssetConversationMessagesResponse>(
+    `/api/profile/asset-conversations/${conversationId}/messages${queryString(query)}`
+  );
+}
+
+export function sendAssetConversationMessage(conversationId: string, content: string): Promise<AssetConversationMessageResponse> {
+  return request<AssetConversationMessageResponse>(`/api/profile/asset-conversations/${conversationId}/messages`, {
+    method: "POST",
+    data: { content }
+  });
+}
+
+export function getExchangeResourceContext(gameName?: string): Promise<ExchangeResourceContextResponse> {
+  return request<ExchangeResourceContextResponse>(`/api/exchange-resources/context${queryString({ gameName })}`);
+}
+
+export function listExchangeResources(query: Pick<AssetListQuery, "gameName" | "dragonBallProfession" | "dragonBallQuality" | "keyword" | "page" | "pageSize"> = {}): Promise<ExchangeResourceListResponse> {
+  return request<ExchangeResourceListResponse>(`/api/exchange-resources${queryString(query)}`);
+}
+
+export function getExchangeResourceDetail(resourceId: string): Promise<ExchangeResourceResponse> {
+  return request<ExchangeResourceResponse>(`/api/exchange-resources/${resourceId}`);
+}
+
+export function createExchangeResource(input: ExchangeResourceCreateRequest): Promise<ExchangeResourceResponse> {
+  return request<ExchangeResourceResponse>("/api/exchange-resources", {
+    method: "POST",
+    data: input
+  });
+}
+
+export function listMyExchangeResources(query: Pick<AssetListQuery, "page" | "pageSize"> = {}): Promise<ExchangeResourceListResponse> {
+  return request<ExchangeResourceListResponse>(`/api/profile/exchange-resources${queryString(query)}`);
+}
+
+export function closeExchangeResource(resourceId: string): Promise<ExchangeResourceResponse> {
+  return request<ExchangeResourceResponse>(`/api/profile/exchange-resources/${resourceId}/close`, {
+    method: "POST"
+  });
+}
+
+export function getDragonBallPriceReferenceLatest(gameName?: string): Promise<DragonBallPriceReferenceLatestResponse> {
+  return request<DragonBallPriceReferenceLatestResponse>(`/api/dragon-ball-price-references/latest${queryString({ gameName })}`);
+}
+
+export function getDragonBallPriceReferenceTrend(query: {
+  gameName?: string;
+  profession: string;
+  quality: string;
+  limit?: number;
+}): Promise<DragonBallPriceReferenceTrendResponse> {
+  return request<DragonBallPriceReferenceTrendResponse>(`/api/dragon-ball-price-references/trend${queryString(query)}`);
 }
 
 export type AssetListQuery = {
@@ -176,6 +284,46 @@ export function listAssets(query: AssetListQuery = {}): Promise<AssetListRespons
 
 export function listPrincipals(): Promise<PrincipalListResponse> {
   return request<PrincipalListResponse>("/api/principals");
+}
+
+export function getAssetPublishContext(): Promise<AssetPublishContextResponse> {
+  return request<AssetPublishContextResponse>("/api/asset-publish-context");
+}
+
+export type UploadedAssetImage = UploadedImageResponse["image"];
+
+export function uploadAssetImage(input: {
+  assetType: string;
+  mimeType: UploadedAssetImage["mimeType"];
+  base64Data: string;
+  usage?: "asset" | "exchange_resource";
+}): Promise<UploadedImageResponse> {
+  return request<UploadedImageResponse>("/api/images", {
+    method: "POST",
+    data: input
+  });
+}
+
+export type CreateAssetInput = {
+  principalId: string;
+  sellerGameId?: string;
+  gameName: string;
+  serverName: string;
+  assetType: string;
+  itemCategory?: string | null;
+  dragonBall?: unknown;
+  title: string;
+  description: string;
+  startingPriceCents: number;
+  minIncrementCents: number;
+  images: Array<Pick<UploadedAssetImage, "objectKey" | "publicUrl" | "mimeType" | "sizeBytes">>;
+};
+
+export function createAsset(input: CreateAssetInput): Promise<AssetCreateResponse> {
+  return request<AssetCreateResponse>("/api/assets", {
+    method: "POST",
+    data: input
+  });
 }
 
 export function listFollowedAssets(query: Pick<AssetListQuery, "page" | "pageSize"> = {}): Promise<AssetListResponse> {

@@ -4,11 +4,14 @@ import { readEnv, type Env } from "./config/env";
 import { createPool } from "./db/pool";
 import type { MysqlPool } from "./db/mysqlTypes";
 import { createMysqlAdminRepository } from "./modules/admin/admin.mysql.repository";
+import { createMysqlAssetConversationsRepository } from "./modules/assetConversations/assetConversations.mysql.repository";
 import { createMysqlAssetFollowsRepository } from "./modules/assetFollows/assetFollows.mysql.repository";
 import { createMysqlAssetsRepository } from "./modules/assets/assets.mysql.repository";
 import { createMysqlBidsRepository } from "./modules/bids/bids.mysql.repository";
 import { createMysqlImageSafetyRepository } from "./modules/contentSafety/imageSafety.mysql.repository";
 import { createMysqlSystemConfigsRepository } from "./modules/configs/configs.mysql.repository";
+import { createMysqlDragonBallPriceReferencesRepository } from "./modules/dragonBallPriceReferences/dragonBallPriceReferences.mysql.repository";
+import { createMysqlExchangeResourcesRepository } from "./modules/exchangeResources/exchangeResources.mysql.repository";
 import { createMysqlNotificationsRepository } from "./modules/notifications/notifications.mysql.repository";
 import { createMysqlPrincipalsRepository } from "./modules/principals/principals.mysql.repository";
 import { createMysqlDealFollowupsRepository } from "./modules/dealFollowups/dealFollowups.mysql.repository";
@@ -42,8 +45,11 @@ export function buildRuntimeApp(options: RuntimeAppOptions = {}): RuntimeApp {
     bidsRepository: createMysqlBidsRepository(pool),
     reportsService: createMysqlReportsService(pool),
     assetFollowsRepository: createMysqlAssetFollowsRepository(pool),
+    assetConversationsRepository: createMysqlAssetConversationsRepository(pool),
     principalsRepository: createMysqlPrincipalsRepository(pool),
     configsRepository: createMysqlSystemConfigsRepository(pool),
+    exchangeResourcesRepository: createMysqlExchangeResourcesRepository(pool),
+    dragonBallPriceReferencesRepository: createMysqlDragonBallPriceReferencesRepository(pool),
     notificationsRepository: createMysqlNotificationsRepository(pool),
     dealFollowupsRepository: createMysqlDealFollowupsRepository(pool),
     imageSafetyRepository: createMysqlImageSafetyRepository(pool)

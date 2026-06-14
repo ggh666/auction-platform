@@ -21,9 +21,65 @@
       }
     },
     {
+      "path": "pages/games/mode",
+      "style": {
+        "navigationBarTitleText": "选择模式",
+        "navigationBarBackgroundColor": "#071112",
+        "navigationBarTextStyle": "white",
+        "backgroundColor": "#071112"
+      }
+    },
+    {
+      "path": "pages/exchange/list",
+      "style": {
+        "navigationBarTitleText": "自由交换",
+        "navigationBarBackgroundColor": "#071112",
+        "navigationBarTextStyle": "white",
+        "backgroundColor": "#071112",
+        "enablePullDownRefresh": true,
+        "onReachBottomDistance": 80
+      }
+    },
+    {
+      "path": "pages/exchange/detail",
+      "style": {
+        "navigationBarTitleText": "交换详情",
+        "navigationBarBackgroundColor": "#071112",
+        "navigationBarTextStyle": "white",
+        "backgroundColor": "#071112"
+      }
+    },
+    {
+      "path": "pages/exchange/publish",
+      "style": {
+        "navigationBarTitleText": "自由交换",
+        "navigationBarBackgroundColor": "#071112",
+        "navigationBarTextStyle": "white",
+        "backgroundColor": "#071112"
+      }
+    },
+    {
+      "path": "pages/priceReference/index",
+      "style": {
+        "navigationBarTitleText": "估值参考",
+        "navigationBarBackgroundColor": "#071112",
+        "navigationBarTextStyle": "white",
+        "backgroundColor": "#071112"
+      }
+    },
+    {
       "path": "pages/auctions/detail",
       "style": {
         "navigationBarTitleText": "交换详情",
+        "navigationBarBackgroundColor": "#071112",
+        "navigationBarTextStyle": "white",
+        "backgroundColor": "#071112"
+      }
+    },
+    {
+      "path": "pages/auctions/publish",
+      "style": {
+        "navigationBarTitleText": "提交资产",
         "navigationBarBackgroundColor": "#071112",
         "navigationBarTextStyle": "white",
         "backgroundColor": "#071112"
@@ -39,9 +95,20 @@
       }
     },
     {
-      "path": "pages/profile/follows",
+      "path": "pages/profile/assets",
       "style": {
-        "navigationBarTitleText": "我的关注",
+        "navigationBarTitleText": "我的资产",
+        "navigationBarBackgroundColor": "#071112",
+        "navigationBarTextStyle": "white",
+        "backgroundColor": "#071112",
+        "enablePullDownRefresh": true,
+        "onReachBottomDistance": 80
+      }
+    },
+    {
+      "path": "pages/profile/exchanges",
+      "style": {
+        "navigationBarTitleText": "我的交换",
         "navigationBarBackgroundColor": "#071112",
         "navigationBarTextStyle": "white",
         "backgroundColor": "#071112",
@@ -61,7 +128,16 @@
     {
       "path": "pages/profile/notifications",
       "style": {
-        "navigationBarTitleText": "消息通知",
+        "navigationBarTitleText": "通知中心",
+        "navigationBarBackgroundColor": "#071112",
+        "navigationBarTextStyle": "white",
+        "backgroundColor": "#071112"
+      }
+    },
+    {
+      "path": "pages/profile/asset-chat",
+      "style": {
+        "navigationBarTitleText": "资产消息",
         "navigationBarBackgroundColor": "#071112",
         "navigationBarTextStyle": "white",
         "backgroundColor": "#071112"

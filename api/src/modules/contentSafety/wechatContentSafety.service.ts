@@ -398,6 +398,26 @@ export function createWechatContentSafetyService(options: WechatContentSafetyOpt
       }
     },
 
+    async readImageUploadSafetyStatuses(input: ImageUploadSafetyInput) {
+      if (!options.enabled) {
+        return normalizeImageUploadCandidates(input.images).map(() => "pass" as const);
+      }
+      const images = normalizeImageUploadCandidates(input.images);
+      if (images.length === 0) {
+        return [];
+      }
+
+      const records = await options.imageSafetyRepository.findByPublicUrls(images.map((image) => image.publicUrl));
+      const recordsByUrl = new Map(records.map((record) => [record.publicUrl, record]));
+      return images.map((image) => {
+        const record = recordsByUrl.get(image.publicUrl);
+        if (!record || record.userId !== input.userId || record.objectKey !== image.objectKey) {
+          throw badRequest("invalid_asset_images", "Asset images must be uploaded by current user");
+        }
+        return record.status;
+      });
+    },
+
     async assertAssetImagesAllowed(assetId: string) {
       if (!options.enabled) {
         return;
