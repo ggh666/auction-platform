@@ -21,6 +21,52 @@
       }
     },
     {
+      "path": "pages/guides/index",
+      "style": {
+        "navigationBarTitleText": "攻略",
+        "navigationBarBackgroundColor": "#071112",
+        "navigationBarTextStyle": "white",
+        "backgroundColor": "#071112"
+      }
+    },
+    {
+      "path": "pages/guides/redeem-codes",
+      "style": {
+        "navigationBarTitleText": "兑换码",
+        "navigationBarBackgroundColor": "#071112",
+        "navigationBarTextStyle": "white",
+        "backgroundColor": "#071112",
+        "enablePullDownRefresh": true
+      }
+    },
+    {
+      "path": "pages/guides/dragon-ball-system",
+      "style": {
+        "navigationBarTitleText": "龙珠体系",
+        "navigationBarBackgroundColor": "#071112",
+        "navigationBarTextStyle": "white",
+        "backgroundColor": "#071112"
+      }
+    },
+    {
+      "path": "pages/guides/deep-sea-battle",
+      "style": {
+        "navigationBarTitleText": "深海之战",
+        "navigationBarBackgroundColor": "#071112",
+        "navigationBarTextStyle": "white",
+        "backgroundColor": "#071112"
+      }
+    },
+    {
+      "path": "pages/guides/deep-sea-boss",
+      "style": {
+        "navigationBarTitleText": "深海详情",
+        "navigationBarBackgroundColor": "#071112",
+        "navigationBarTextStyle": "white",
+        "backgroundColor": "#071112"
+      }
+    },
+    {
       "path": "pages/games/mode",
       "style": {
         "navigationBarTitleText": "选择模式",
@@ -171,6 +217,7 @@
     "custom": true,
     "list": [
       { "pagePath": "pages/games/index", "text": "资源" },
+      { "pagePath": "pages/guides/index", "text": "攻略" },
       { "pagePath": "pages/profile/index", "text": "我的" }
     ]
   }

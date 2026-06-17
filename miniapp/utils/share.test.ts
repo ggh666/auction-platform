@@ -1,12 +1,17 @@
 import { describe, expect, it } from "vitest";
 import {
   buildAssetDetailShare,
+  buildDeepSeaBattleShare,
+  buildDeepSeaBossShare,
+  buildDragonBallSystemShare,
   buildAssetListShare,
   buildExchangeResourceDetailShare,
   buildExchangeResourceListShare,
   buildGameModeShare,
+  buildGuidesShare,
   buildHomeShare,
   buildPriceReferenceShare,
+  buildRedeemCodesShare,
   toTimelineShare
 } from "./share";
 
@@ -53,6 +58,29 @@ describe("miniapp share helpers", () => {
     ).toEqual({
       title: "塔防精灵龙珠估值参考",
       path: "/pages/priceReference/index?gameName=%E5%A1%94%E9%98%B2%E7%B2%BE%E7%81%B5&profession=%E6%B3%95%E5%B8%88&quality=%E8%93%9D"
+    });
+  });
+
+  it("builds guides and redeem code share targets", () => {
+    expect(buildGuidesShare()).toEqual({
+      title: "塔防精灵攻略工具",
+      path: "/pages/guides/index"
+    });
+    expect(buildRedeemCodesShare()).toEqual({
+      title: "塔防精灵兑换码",
+      path: "/pages/guides/redeem-codes"
+    });
+    expect(buildDragonBallSystemShare()).toEqual({
+      title: "塔防精灵龙珠体系",
+      path: "/pages/guides/dragon-ball-system"
+    });
+    expect(buildDeepSeaBattleShare()).toEqual({
+      title: "塔防精灵深海之战",
+      path: "/pages/guides/deep-sea-battle"
+    });
+    expect(buildDeepSeaBossShare({ section: 4, level: 80 })).toEqual({
+      title: "深海之战·乌贼80关",
+      path: "/pages/guides/deep-sea-boss?section=4&level=80"
     });
   });
 

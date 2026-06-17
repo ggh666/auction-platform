@@ -13,6 +13,7 @@ import { createInMemoryDragonBallPriceReferencesRepository } from "../../api/src
 import { createInMemoryExchangeResourcesRepository } from "../../api/src/modules/exchangeResources/exchangeResources.repository";
 import { createInMemoryNotificationsRepository } from "../../api/src/modules/notifications/notifications.repository";
 import { createInMemoryPrincipalsRepository } from "../../api/src/modules/principals/principals.repository";
+import { createInMemoryRedeemCodeSettingsRepository } from "../../api/src/modules/redeemCodes/redeemCodeSettings.repository";
 import { createReportsService } from "../../api/src/modules/reports/reports.service";
 import { createInMemoryUsersRepository } from "../../api/src/modules/users/users.repository";
 
@@ -55,6 +56,7 @@ function buildProductionTestApp() {
     dealFollowupsRepository: createInMemoryDealFollowupsRepository(),
     exchangeResourcesRepository: createInMemoryExchangeResourcesRepository(),
     dragonBallPriceReferencesRepository: createInMemoryDragonBallPriceReferencesRepository(),
+    redeemCodeSettingsRepository: createInMemoryRedeemCodeSettingsRepository(),
     imageSafetyRepository: createInMemoryImageSafetyRepository()
   });
 }

@@ -40,6 +40,7 @@ describe("miniapp build configuration", () => {
     expect(rootAppJson.pages?.every((page) => page.startsWith("devtools/mp-weixin/pages/"))).toBe(true);
     expect(rootAppJson.tabBar?.list?.map((item) => item.pagePath)).toEqual([
       "devtools/mp-weixin/pages/games/index",
+      "devtools/mp-weixin/pages/guides/index",
       "devtools/mp-weixin/pages/profile/index"
     ]);
     const rootAppJs = readFileSync(rootAppJsPath, "utf8");
@@ -104,6 +105,32 @@ describe("miniapp build configuration", () => {
     expect(syncScript).toContain("outputRootPrefixFor");
     expect(syncScript).toContain('projectConfig.miniprogramRoot = ""');
     expect(syncScript).toContain("app.json");
+  });
+
+  it("does not leave new guide pages as generated WeChat placeholder output", () => {
+    const generatedRoot = resolve(import.meta.dirname, "devtools/mp-weixin");
+    const deepSeaBattleWxmlPath = resolve(generatedRoot, "pages/guides/deep-sea-battle.wxml");
+    const deepSeaBossWxmlPath = resolve(generatedRoot, "pages/guides/deep-sea-boss.wxml");
+    if (!existsSync(deepSeaBattleWxmlPath) || !existsSync(deepSeaBossWxmlPath)) {
+      return;
+    }
+
+    const deepSeaBattleWxml = readFileSync(
+      deepSeaBattleWxmlPath,
+      "utf8"
+    );
+    const deepSeaBossWxml = readFileSync(
+      deepSeaBossWxmlPath,
+      "utf8"
+    );
+
+    expect(deepSeaBattleWxml).toContain("深海之战地图");
+    expect(deepSeaBattleWxml).toContain("map-grid");
+    expect(deepSeaBattleWxml).not.toContain("<text>pages/guides/deep-sea-battle.wxml</text>");
+    expect(deepSeaBossWxml).toContain("boss-hero");
+    expect(deepSeaBossWxml).toContain("普通伤害");
+    expect(deepSeaBossWxml).toContain("战车血量");
+    expect(deepSeaBossWxml).not.toContain("<text>pages/guides/deep-sea-boss.wxml</text>");
   });
 
   it("clears generated miniprogramRoot before validating output app.json", () => {

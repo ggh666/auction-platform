@@ -23,6 +23,7 @@ import type {
   PlaceBidResponse,
   PrincipalListResponse,
   ProfileResultsResponse,
+  RedeemCodeListResponse,
   UploadedImageResponse,
   UserSummary,
   WechatLoginRequest
@@ -222,6 +223,10 @@ export function listExchangeResources(query: Pick<AssetListQuery, "gameName" | "
 
 export function getExchangeResourceDetail(resourceId: string): Promise<ExchangeResourceResponse> {
   return request<ExchangeResourceResponse>(`/api/exchange-resources/${resourceId}`);
+}
+
+export function listRedeemCodes(): Promise<RedeemCodeListResponse> {
+  return request<RedeemCodeListResponse>("/api/redeem-codes");
 }
 
 export function createExchangeResource(input: ExchangeResourceCreateRequest): Promise<ExchangeResourceResponse> {

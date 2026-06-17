@@ -16,6 +16,7 @@ import { createMysqlNotificationsRepository } from "./modules/notifications/noti
 import { createMysqlPrincipalsRepository } from "./modules/principals/principals.mysql.repository";
 import { createMysqlDealFollowupsRepository } from "./modules/dealFollowups/dealFollowups.mysql.repository";
 import { createMysqlReportsService } from "./modules/reports/reports.mysql.service";
+import { createMysqlRedeemCodeSettingsRepository } from "./modules/redeemCodes/redeemCodeSettings.mysql.repository";
 import { createMysqlUsersRepository } from "./modules/users/users.mysql.repository";
 
 export type RuntimeApp = {
@@ -50,6 +51,7 @@ export function buildRuntimeApp(options: RuntimeAppOptions = {}): RuntimeApp {
     configsRepository: createMysqlSystemConfigsRepository(pool),
     exchangeResourcesRepository: createMysqlExchangeResourcesRepository(pool),
     dragonBallPriceReferencesRepository: createMysqlDragonBallPriceReferencesRepository(pool),
+    redeemCodeSettingsRepository: createMysqlRedeemCodeSettingsRepository(pool),
     notificationsRepository: createMysqlNotificationsRepository(pool),
     dealFollowupsRepository: createMysqlDealFollowupsRepository(pool),
     imageSafetyRepository: createMysqlImageSafetyRepository(pool)

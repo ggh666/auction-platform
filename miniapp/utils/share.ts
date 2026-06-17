@@ -116,6 +116,61 @@ export function buildPriceReferenceShare(input: PriceReferenceShareInput): Share
   };
 }
 
+export function buildGuidesShare(): ShareAppTarget {
+  return {
+    title: "塔防精灵攻略工具",
+    path: "/pages/guides/index"
+  };
+}
+
+export function buildRedeemCodesShare(): ShareAppTarget {
+  return {
+    title: "塔防精灵兑换码",
+    path: "/pages/guides/redeem-codes"
+  };
+}
+
+export function buildDragonBallSystemShare(): ShareAppTarget {
+  return {
+    title: "塔防精灵龙珠体系",
+    path: "/pages/guides/dragon-ball-system"
+  };
+}
+
+export function buildDeepSeaBattleShare(): ShareAppTarget {
+  return {
+    title: "塔防精灵深海之战",
+    path: "/pages/guides/deep-sea-battle"
+  };
+}
+
+export function buildDeepSeaBossShare(input: { section: number; level: number; bossName?: string }): ShareAppTarget {
+  const section = Number.isFinite(input.section) ? String(input.section) : "";
+  const level = Number.isFinite(input.level) ? String(input.level) : "";
+  const bossName = input.bossName?.trim() || deepSeaBossShareName(input.section);
+  return {
+    title: `深海之战·${bossName}${level ? `${level}关` : ""}`,
+    path: withQuery("/pages/guides/deep-sea-boss", { section, level })
+  };
+}
+
+function deepSeaBossShareName(section: number): string {
+  const names: Record<number, string> = {
+    1: "魔鬼",
+    2: "典狱长",
+    3: "禁卫",
+    4: "乌贼",
+    5: "异兽",
+    6: "魅影",
+    7: "公主",
+    8: "刺豚",
+    9: "怪人",
+    10: "简",
+    11: "王城"
+  };
+  return names[section] ?? "BOSS";
+}
+
 export function buildAssetDetailShare(input: AssetDetailShareInput): ShareAppTarget {
   if (!input.assetId.trim()) {
     return buildHomeShare();

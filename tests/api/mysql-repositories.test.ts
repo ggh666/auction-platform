@@ -10,6 +10,7 @@ import { createMysqlDealFollowupsRepository } from "../../api/src/modules/dealFo
 import { createMysqlExchangeResourcesRepository } from "../../api/src/modules/exchangeResources/exchangeResources.mysql.repository";
 import { createMysqlNotificationsRepository } from "../../api/src/modules/notifications/notifications.mysql.repository";
 import { createMysqlReportsService } from "../../api/src/modules/reports/reports.mysql.service";
+import { createMysqlRedeemCodeSettingsRepository } from "../../api/src/modules/redeemCodes/redeemCodeSettings.mysql.repository";
 import { createMysqlUsersRepository } from "../../api/src/modules/users/users.mysql.repository";
 
 type FakeUser = {
@@ -159,6 +160,13 @@ type FakeSystemConfig = {
   updated_at: Date;
 };
 
+type FakeRedeemCodeSetting = {
+  id: number;
+  raw_text: string;
+  updated_by: number | null;
+  updated_at: Date;
+};
+
 type FakeAdminUser = {
   id: number;
   username: string;
@@ -207,6 +215,7 @@ class FakeMysqlPool {
   images: FakeImage[] = [];
   imageSafety: FakeImageSafety[] = [];
   configs: FakeSystemConfig[] = [];
+  redeemCodeSettings: FakeRedeemCodeSetting[] = [];
   adminUsers: FakeAdminUser[] = [];
   adminLogs: Array<{ admin_id: number; action: string; target_type: string; target_id: number; detail_json: string | null }> = [];
   lastConnection: FakeMysqlConnection | null = null;
@@ -512,6 +521,27 @@ class FakeMysqlPool {
 
     if (sql.includes("FROM system_configs")) {
       return [[...this.configs].sort((left, right) => left.config_key.localeCompare(right.config_key)) as T, []];
+    }
+
+    if (sql.includes("INSERT INTO redeem_code_settings")) {
+      const existing = this.redeemCodeSettings[0];
+      if (existing) {
+        existing.raw_text = params[1] as string;
+        existing.updated_by = Number(params[2]);
+        existing.updated_at = new Date("2026-05-25T15:30:00.000Z");
+      } else {
+        this.redeemCodeSettings.push({
+          id: Number(params[0]),
+          raw_text: params[1] as string,
+          updated_by: Number(params[2]),
+          updated_at: new Date("2026-05-25T15:30:00.000Z")
+        });
+      }
+      return [{ affectedRows: 1, insertId: 1 } as T, []];
+    }
+
+    if (sql.includes("FROM redeem_code_settings")) {
+      return [[this.redeemCodeSettings[0]].filter(Boolean) as T, []];
     }
 
     if (sql.includes("INSERT INTO admin_users")) {
@@ -1535,6 +1565,27 @@ describe("mysql repositories", () => {
       updatedBy: 3,
       updatedAt: "2026-05-25T15:00:00.000Z"
     });
+  });
+
+  it("reads and updates redeem code settings from MySQL rows", async () => {
+    const pool = new FakeMysqlPool();
+    const repository = createMysqlRedeemCodeSettingsRepository(pool);
+
+    await expect(repository.read()).resolves.toMatchObject({
+      rawText: "",
+      updatedBy: null,
+      items: []
+    });
+
+    const updated = await repository.update("TFJL520|随机金卡|永久", 3);
+
+    expect(updated).toMatchObject({
+      rawText: "TFJL520|随机金卡|永久",
+      updatedBy: 3,
+      updatedAt: "2026-05-25T15:30:00.000Z",
+      items: [{ code: "TFJL520", description: "随机金卡", validity: "永久" }]
+    });
+    await expect(repository.read()).resolves.toMatchObject(updated);
   });
 
   it("persists admin operation logs", async () => {

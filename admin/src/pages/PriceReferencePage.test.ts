@@ -22,6 +22,11 @@ describe("admin dragon ball price reference page", () => {
     expect(page).toContain("adminDelete<DragonBallPriceReferenceBatchResponse>");
     expect(page).toContain("/admin/dragon-ball-price-reference-batches");
     expect(page).toContain("周估值参考");
+    expect(page).toContain("parsePriceReferenceImportText");
+    expect(page).toContain("handleImportText");
+    expect(page).toContain("批量解析");
+    expect(page).toContain("粘贴职业、品质、低价");
+    expect(page).toContain("解析并填入最低价");
     expect(page).toContain("copyBatchToCurrentWeek");
     expect(page).toContain("setSelectedBatch(null)");
     expect(page).toContain("setWeekStartDate(currentWeekStartDate())");

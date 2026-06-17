@@ -19,6 +19,7 @@ import type {
   SystemConfig,
   UserSummary
 } from "./domain";
+import type { RedeemCodeItem } from "./redeemCodes";
 
 export type ApiErrorResponse = {
   error: { code: string; message: string; details?: unknown };
@@ -105,6 +106,21 @@ export type ExchangeResourceListResponse = {
 
 export type ExchangeResourceResponse = {
   resource: ExchangeResource;
+};
+
+export type RedeemCodeListResponse = {
+  items: RedeemCodeItem[];
+};
+
+export type RedeemCodeConfigResponse = {
+  rawText: string;
+  items: RedeemCodeItem[];
+  updatedBy: number | null;
+  updatedAt: string | null;
+};
+
+export type RedeemCodeConfigUpdateRequest = {
+  rawText?: unknown;
 };
 
 export type DragonBallPriceReferenceItemInput = {

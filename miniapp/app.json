@@ -2,6 +2,11 @@
   "pages": [
     "devtools/mp-weixin/pages/games/index",
     "devtools/mp-weixin/pages/auctions/list",
+    "devtools/mp-weixin/pages/guides/index",
+    "devtools/mp-weixin/pages/guides/redeem-codes",
+    "devtools/mp-weixin/pages/guides/dragon-ball-system",
+    "devtools/mp-weixin/pages/guides/deep-sea-battle",
+    "devtools/mp-weixin/pages/guides/deep-sea-boss",
     "devtools/mp-weixin/pages/games/mode",
     "devtools/mp-weixin/pages/exchange/list",
     "devtools/mp-weixin/pages/exchange/detail",
@@ -28,6 +33,10 @@
       {
         "pagePath": "devtools/mp-weixin/pages/games/index",
         "text": "资源"
+      },
+      {
+        "pagePath": "devtools/mp-weixin/pages/guides/index",
+        "text": "攻略"
       },
       {
         "pagePath": "devtools/mp-weixin/pages/profile/index",

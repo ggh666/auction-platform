@@ -71,7 +71,7 @@ const profileCustomerServiceContact = computed(() => buildProfileCustomerService
 const hasUnreadNotificationCenter = computed(() => unreadNotifications.value > 0 || unreadConversations.value > 0);
 
 onShow(async () => {
-  syncCustomTabBarSelected(1);
+  syncCustomTabBarSelected(2);
   try {
     const response = await getProfile();
     user.value = response.user;

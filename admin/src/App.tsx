@@ -16,6 +16,7 @@ import { LoginPage } from "./pages/LoginPage";
 import { MessageCenterPage } from "./pages/MessageCenterPage";
 import { PrincipalManagementPage } from "./pages/PrincipalManagementPage";
 import { PriceReferencePage } from "./pages/PriceReferencePage";
+import { RedeemCodeSettingsPage } from "./pages/RedeemCodeSettingsPage";
 import { ReviewCenterPage } from "./pages/ReviewCenterPage";
 import { UserManagementPage } from "./pages/UserManagementPage";
 
@@ -26,6 +27,7 @@ type PageKey =
   | "assetPublish"
   | "exchangeResources"
   | "priceReferences"
+  | "redeemCodes"
   | "dealFollowups"
   | "messages"
   | "adminUsers"
@@ -52,6 +54,8 @@ function renderPage(
       return <ExchangeResourcePage />;
     case "priceReferences":
       return <PriceReferencePage />;
+    case "redeemCodes":
+      return <RedeemCodeSettingsPage />;
     case "dealFollowups":
       return <DealFollowupPage onOpenAsset={onOpenAsset} />;
     case "messages":

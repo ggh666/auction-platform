@@ -14,6 +14,11 @@ describe("miniapp page configuration", () => {
     expect(paths).toContain("pages/auctions/publish");
     expect(paths).toContain("pages/profile/assets");
     expect(paths).toContain("pages/profile/exchanges");
+    expect(paths).toContain("pages/guides/index");
+    expect(paths).toContain("pages/guides/redeem-codes");
+    expect(paths).toContain("pages/guides/dragon-ball-system");
+    expect(paths).toContain("pages/guides/deep-sea-battle");
+    expect(paths).toContain("pages/guides/deep-sea-boss");
   });
 
   it("renders the custom tab bar labels with regular miniapp views", () => {
@@ -43,11 +48,13 @@ describe("miniapp page configuration", () => {
 
   it("syncs the custom tab bar selected state from tab pages on show", () => {
     const gamesPage = readFileSync(resolve(import.meta.dirname, "games/index.vue"), "utf8");
+    const guidesPage = readFileSync(resolve(import.meta.dirname, "guides/index.vue"), "utf8");
     const profilePage = readFileSync(resolve(import.meta.dirname, "profile/index.vue"), "utf8");
     const tabBarUtil = readFileSync(resolve(import.meta.dirname, "../utils/tabBar.ts"), "utf8");
 
     expect(gamesPage).toContain("syncCustomTabBarSelected(0)");
-    expect(profilePage).toContain("syncCustomTabBarSelected(1)");
+    expect(guidesPage).toContain("syncCustomTabBarSelected(1)");
+    expect(profilePage).toContain("syncCustomTabBarSelected(2)");
     expect(tabBarUtil).toContain("getTabBar");
     expect(tabBarUtil).toContain("setTimeout");
   });

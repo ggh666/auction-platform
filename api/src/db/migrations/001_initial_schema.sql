@@ -5,6 +5,7 @@ SET FOREIGN_KEY_CHECKS = 0;
 
 DROP TABLE IF EXISTS admin_operation_logs;
 DROP TABLE IF EXISTS system_configs;
+DROP TABLE IF EXISTS redeem_code_settings;
 DROP TABLE IF EXISTS violation_records;
 DROP TABLE IF EXISTS reports;
 DROP TABLE IF EXISTS auction_results;
@@ -386,6 +387,14 @@ CREATE TABLE system_configs (
   updated_by BIGINT UNSIGNED NULL,
   updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
   CONSTRAINT fk_system_configs_updater FOREIGN KEY (updated_by) REFERENCES admin_users(id)
+);
+
+CREATE TABLE redeem_code_settings (
+  id TINYINT UNSIGNED PRIMARY KEY,
+  raw_text TEXT NOT NULL,
+  updated_by BIGINT UNSIGNED NULL,
+  updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  CONSTRAINT fk_redeem_code_settings_updater FOREIGN KEY (updated_by) REFERENCES admin_users(id)
 );
 
 INSERT INTO system_configs (config_key, config_value) VALUES

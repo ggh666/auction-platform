@@ -44,6 +44,7 @@ const navGroups: NavGroup[] = [
     label: "配置管理",
     items: [
       { key: "priceReferences", label: "估值参考", roles: ["super_admin", "reviewer", "operator"] },
+      { key: "redeemCodes", label: "兑换码设置", roles: ["super_admin", "reviewer", "operator"] },
       { key: "configs", label: "系统配置", roles: ["super_admin"] }
     ]
   }

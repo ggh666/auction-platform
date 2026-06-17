@@ -861,6 +861,43 @@ button:disabled {
   gap: 14px;
 }
 
+.price-reference-import {
+  display: grid;
+  gap: 10px;
+  padding: 12px;
+  border: 1px solid #d8e0ec;
+  border-radius: 7px;
+  background: #f8fbff;
+}
+
+.price-reference-import h4,
+.price-reference-import p {
+  margin: 0;
+}
+
+.price-reference-import h4 {
+  color: #18202f;
+  font-size: 15px;
+}
+
+.price-reference-import p {
+  color: #66758f;
+  font-size: 13px;
+  line-height: 1.55;
+}
+
+.price-reference-import textarea {
+  width: 100%;
+  min-height: 112px;
+  border: 1px solid #cbd5e1;
+  border-radius: 7px;
+  padding: 10px 12px;
+  color: #18202f;
+  background: #fff;
+  resize: vertical;
+  line-height: 1.55;
+}
+
 .price-reference-editor .table-wrap input {
   width: 100%;
   min-width: 90px;
@@ -869,6 +906,37 @@ button:disabled {
   padding: 7px 9px;
   background: #fff;
   color: #18202f;
+}
+
+.redeem-code-settings {
+  display: grid;
+  gap: 14px;
+  padding: 14px 18px 18px;
+}
+
+.panel-subheading {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+  padding-top: 4px;
+}
+
+.panel-subheading h4,
+.panel-subheading p {
+  margin: 0;
+}
+
+.panel-subheading h4 {
+  color: #18202f;
+  font-size: 15px;
+}
+
+.panel-subheading p {
+  margin-top: 4px;
+  color: #66758f;
+  font-size: 13px;
+  line-height: 1.55;
 }
 
 .form-actions {

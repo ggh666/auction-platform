@@ -1,0 +1,7 @@
+CREATE TABLE IF NOT EXISTS redeem_code_settings (
+  id TINYINT UNSIGNED PRIMARY KEY,
+  raw_text TEXT NOT NULL,
+  updated_by BIGINT UNSIGNED NULL,
+  updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  CONSTRAINT fk_redeem_code_settings_updater FOREIGN KEY (updated_by) REFERENCES admin_users(id)
+);

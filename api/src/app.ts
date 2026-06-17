@@ -33,6 +33,11 @@ import { createR2ImageStorage, type ImageStorage } from "./modules/images/r2Stor
 import { createInMemoryNotificationsRepository, type NotificationsRepository } from "./modules/notifications/notifications.repository";
 import { registerNotificationRoutes } from "./modules/notifications/notifications.routes";
 import { createInMemoryPrincipalsRepository, type PrincipalsRepository } from "./modules/principals/principals.repository";
+import {
+  createInMemoryRedeemCodeSettingsRepository,
+  type RedeemCodeSettingsRepository
+} from "./modules/redeemCodes/redeemCodeSettings.repository";
+import { registerRedeemCodeRoutes } from "./modules/redeemCodes/redeemCodes.routes";
 import { createInMemoryDealFollowupsRepository, type DealFollowupsRepository } from "./modules/dealFollowups/dealFollowups.repository";
 import { registerDealFollowupRoutes } from "./modules/dealFollowups/dealFollowups.routes";
 import {
@@ -111,6 +116,7 @@ export type AppOptions = {
   dealFollowupsRepository?: DealFollowupsRepository;
   exchangeResourcesRepository?: ExchangeResourcesRepository;
   dragonBallPriceReferencesRepository?: DragonBallPriceReferencesRepository;
+  redeemCodeSettingsRepository?: RedeemCodeSettingsRepository;
   imageStorage?: ImageStorage;
   contentSafetyService?: ContentSafetyService;
   subscribeMessageService?: SubscribeMessageService;
@@ -138,6 +144,7 @@ export function buildApp(options: AppOptions = {}) {
       !options.dealFollowupsRepository ||
       !options.exchangeResourcesRepository ||
       !options.dragonBallPriceReferencesRepository ||
+      !options.redeemCodeSettingsRepository ||
       (env.contentSafetyEnabled && !options.imageSafetyRepository && !options.contentSafetyService))
   ) {
     throw new Error("Production repositories must be explicitly configured; in-memory repositories are development only");
@@ -160,6 +167,7 @@ export function buildApp(options: AppOptions = {}) {
   const exchangeResources = options.exchangeResourcesRepository ?? createInMemoryExchangeResourcesRepository();
   const dragonBallPriceReferences =
     options.dragonBallPriceReferencesRepository ?? createInMemoryDragonBallPriceReferencesRepository();
+  const redeemCodeSettings = options.redeemCodeSettingsRepository ?? createInMemoryRedeemCodeSettingsRepository();
   const imageStorage = options.imageStorage ?? createR2ImageStorage(env);
   const imageSafety = options.imageSafetyRepository ?? createInMemoryImageSafetyRepository();
   const wechatTokenProvider = createWechatAccessTokenProvider({ env });
@@ -193,7 +201,10 @@ export function buildApp(options: AppOptions = {}) {
   const messageHub = options.messageHub ?? new MessageHub();
   const enableMockAuth = env.nodeEnv !== "production" && (options.enableMockAuth ?? env.nodeEnv === "development");
 
-  app.register(cors, { origin: env.corsAllowedOrigins });
+  app.register(cors, {
+    origin: env.corsAllowedOrigins,
+    methods: ["GET", "HEAD", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"]
+  });
   app.register(jwt, { secret: env.jwtSecret });
 
   app.get("/health", async () => ({ ok: true, service: "auction-api" }));
@@ -234,6 +245,7 @@ export function buildApp(options: AppOptions = {}) {
     conversations: assetConversations
   });
   registerDragonBallPriceReferenceRoutes(app, { admins, priceReferences: dragonBallPriceReferences });
+  registerRedeemCodeRoutes(app, { admins, settings: redeemCodeSettings });
   registerAssetRoutes(app, assets, users, bids, configs, reports, contentSafety, principals, assetFollows);
   registerAdminDashboardRoutes(app, admins, { assets, bids, reports, users, principals });
   registerAdminRoutes(app, admins, assets, bids, users, contentSafety, principals, dealFollowups, imageSafety, imageStorage, notifications, hub);
