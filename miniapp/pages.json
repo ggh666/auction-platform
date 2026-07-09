@@ -10,6 +10,16 @@
       }
     },
     {
+      "path": "pages/anchors/index",
+      "style": {
+        "navigationBarTitleText": "主播推荐",
+        "navigationBarBackgroundColor": "#071112",
+        "navigationBarTextStyle": "white",
+        "backgroundColor": "#071112",
+        "enablePullDownRefresh": true
+      }
+    },
+    {
       "path": "pages/auctions/list",
       "style": {
         "navigationBarTitleText": "交换列表",
@@ -61,6 +71,87 @@
       "path": "pages/guides/deep-sea-boss",
       "style": {
         "navigationBarTitleText": "深海详情",
+        "navigationBarBackgroundColor": "#071112",
+        "navigationBarTextStyle": "white",
+        "backgroundColor": "#071112"
+      }
+    },
+    {
+      "path": "pages/guides/maelstrom",
+      "style": {
+        "navigationBarTitleText": "大漩涡",
+        "navigationBarBackgroundColor": "#071112",
+        "navigationBarTextStyle": "white",
+        "backgroundColor": "#071112"
+      }
+    },
+    {
+      "path": "pages/guides/maelstrom-boss",
+      "style": {
+        "navigationBarTitleText": "大漩涡详情",
+        "navigationBarBackgroundColor": "#071112",
+        "navigationBarTextStyle": "white",
+        "backgroundColor": "#071112"
+      }
+    },
+    {
+      "path": "pages/guides/sky-tower",
+      "style": {
+        "navigationBarTitleText": "天空塔",
+        "navigationBarBackgroundColor": "#071112",
+        "navigationBarTextStyle": "white",
+        "backgroundColor": "#071112"
+      }
+    },
+    {
+      "path": "pages/guides/dungeon-materials",
+      "style": {
+        "navigationBarTitleText": "活动材料",
+        "navigationBarBackgroundColor": "#071112",
+        "navigationBarTextStyle": "white",
+        "backgroundColor": "#071112"
+      }
+    },
+    {
+      "path": "pages/guides/dungeon-guide",
+      "style": {
+        "navigationBarTitleText": "活动攻略",
+        "navigationBarBackgroundColor": "#071112",
+        "navigationBarTextStyle": "white",
+        "backgroundColor": "#071112"
+      }
+    },
+    {
+      "path": "pages/guides/card-upgrade",
+      "style": {
+        "navigationBarTitleText": "卡牌升级",
+        "navigationBarBackgroundColor": "#071112",
+        "navigationBarTextStyle": "white",
+        "backgroundColor": "#071112"
+      }
+    },
+    {
+      "path": "pages/guides/season-challenge",
+      "style": {
+        "navigationBarTitleText": "赛季挑战",
+        "navigationBarBackgroundColor": "#071112",
+        "navigationBarTextStyle": "white",
+        "backgroundColor": "#071112"
+      }
+    },
+    {
+      "path": "pages/guides/health-calculator",
+      "style": {
+        "navigationBarTitleText": "血量计算",
+        "navigationBarBackgroundColor": "#071112",
+        "navigationBarTextStyle": "white",
+        "backgroundColor": "#071112"
+      }
+    },
+    {
+      "path": "pages/guides/additional-calculator",
+      "style": {
+        "navigationBarTitleText": "附加伤害计算",
         "navigationBarBackgroundColor": "#071112",
         "navigationBarTextStyle": "white",
         "backgroundColor": "#071112"

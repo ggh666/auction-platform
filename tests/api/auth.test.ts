@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import { createHash } from "node:crypto";
 import { buildApp } from "../../api/src/app";
 import { createInMemoryAdminRepository } from "../../api/src/modules/admin/admin.repository";
+import { createInMemoryAnchorRecommendationsRepository } from "../../api/src/modules/anchorRecommendations/anchorRecommendations.repository";
 import { createInMemoryAssetConversationsRepository } from "../../api/src/modules/assetConversations/assetConversations.repository";
 import { createInMemoryAssetFollowsRepository } from "../../api/src/modules/assetFollows/assetFollows.repository";
 import { createInMemoryAssetsRepository } from "../../api/src/modules/assets/assets.repository";
@@ -15,6 +16,7 @@ import { createInMemoryNotificationsRepository } from "../../api/src/modules/not
 import { createInMemoryPrincipalsRepository } from "../../api/src/modules/principals/principals.repository";
 import { createInMemoryRedeemCodeSettingsRepository } from "../../api/src/modules/redeemCodes/redeemCodeSettings.repository";
 import { createReportsService } from "../../api/src/modules/reports/reports.service";
+import { createInMemorySkyTowerSettingsRepository } from "../../api/src/modules/skyTower/skyTowerSettings.repository";
 import { createInMemoryUsersRepository } from "../../api/src/modules/users/users.repository";
 
 const invalidDisplayNameError = {
@@ -55,8 +57,10 @@ function buildProductionTestApp() {
     notificationsRepository: createInMemoryNotificationsRepository(),
     dealFollowupsRepository: createInMemoryDealFollowupsRepository(),
     exchangeResourcesRepository: createInMemoryExchangeResourcesRepository(),
+    anchorRecommendationsRepository: createInMemoryAnchorRecommendationsRepository(),
     dragonBallPriceReferencesRepository: createInMemoryDragonBallPriceReferencesRepository(),
     redeemCodeSettingsRepository: createInMemoryRedeemCodeSettingsRepository(),
+    skyTowerSettingsRepository: createInMemorySkyTowerSettingsRepository(),
     imageSafetyRepository: createInMemoryImageSafetyRepository()
   });
 }

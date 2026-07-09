@@ -1,6 +1,7 @@
 import type { SystemConfig } from "@auction/shared";
 
 export type SystemConfigsRepository = {
+  findByKey(key: string): Promise<SystemConfig | null>;
   list(): Promise<SystemConfig[]>;
   update(key: string, value: string, updatedBy: number): Promise<SystemConfig>;
 };
@@ -13,7 +14,10 @@ const defaultConfigs: SystemConfig[] = [
   { key: "max_image_size_bytes", value: "5242880", updatedBy: null, updatedAt: new Date(0).toISOString() },
   { key: "default_daily_publish_limit", value: "3", updatedBy: null, updatedAt: new Date(0).toISOString() },
   { key: "user_asset_publish_enabled", value: "true", updatedBy: null, updatedAt: new Date(0).toISOString() },
-  { key: "free_exchange_publish_enabled", value: "true", updatedBy: null, updatedAt: new Date(0).toISOString() }
+  { key: "free_exchange_publish_enabled", value: "true", updatedBy: null, updatedAt: new Date(0).toISOString() },
+  { key: "check_in_url", value: "-", updatedBy: null, updatedAt: new Date(0).toISOString() },
+  { key: "dungeon_material_image_url", value: "-", updatedBy: null, updatedAt: new Date(0).toISOString() },
+  { key: "dungeon_guide_image_url", value: "-", updatedBy: null, updatedAt: new Date(0).toISOString() }
 ];
 
 function cloneConfig(config: SystemConfig): SystemConfig {
@@ -24,6 +28,11 @@ export function createInMemorySystemConfigsRepository(): SystemConfigsRepository
   const configs = new Map(defaultConfigs.map((config) => [config.key, cloneConfig(config)]));
 
   return {
+    async findByKey(key) {
+      const config = configs.get(key);
+      return config ? cloneConfig(config) : null;
+    },
+
     async list() {
       return defaultConfigs.map((config) => cloneConfig(configs.get(config.key) ?? config));
     },

@@ -1282,7 +1282,8 @@ button:disabled {
 }
 
 .principal-form input,
-.principal-form select {
+.principal-form select,
+.principal-form textarea {
   min-height: 42px;
   width: 100%;
   min-width: 0;
@@ -1291,6 +1292,14 @@ button:disabled {
   padding: 9px 11px;
   color: #172033;
   background: #fff;
+}
+
+.principal-form textarea {
+  resize: vertical;
+}
+
+.anchor-form {
+  grid-template-columns: minmax(180px, 0.7fr) minmax(260px, 1fr) minmax(280px, 1.2fr) auto;
 }
 
 .admin-user-form {

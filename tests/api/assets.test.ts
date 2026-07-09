@@ -424,7 +424,7 @@ describe("asset workflow", () => {
     }
   });
 
-  it("defaults public browsing to seven days and keyword searches to sixty days", async () => {
+  it("includes active historical assets by default and only filters by creation time when requested", async () => {
     const assets = createInMemoryAssetsRepository();
     const oldAccount = await assets.createPending({
       sellerId: "1",
@@ -459,13 +459,26 @@ describe("asset workflow", () => {
 
       expect(list.statusCode).toBe(200);
       expect(list.json()).toMatchObject({
-        total: 1,
-        items: [expect.objectContaining({ id: recentAccount.id, title: "新账号" })]
+        total: 2,
+        items: [
+          expect.objectContaining({ id: recentAccount.id, title: "新账号" }),
+          expect.objectContaining({ id: oldAccount.id, title: "旧账号" })
+        ]
       });
       expect(search.statusCode).toBe(200);
       expect(search.json()).toMatchObject({
         total: 1,
         items: [expect.objectContaining({ id: oldAccount.id, title: "旧账号" })]
+      });
+      const recentOnly = await app.inject({
+        method: "GET",
+        url:
+          "/api/assets?gameName=%E5%A1%94%E9%98%B2%E7%B2%BE%E7%81%B5&assetType=%E8%B4%A6%E5%8F%B7&createdWithinDays=7"
+      });
+      expect(recentOnly.statusCode).toBe(200);
+      expect(recentOnly.json()).toMatchObject({
+        total: 1,
+        items: [expect.objectContaining({ id: recentAccount.id, title: "新账号" })]
       });
     } finally {
       await app.close();

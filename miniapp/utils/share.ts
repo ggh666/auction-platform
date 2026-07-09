@@ -70,6 +70,13 @@ export function buildHomeShare(): ShareAppTarget {
   };
 }
 
+export function buildAnchorRecommendationsShare(): ShareAppTarget {
+  return {
+    title: "塔防精灵主播推荐",
+    path: "/pages/anchors/index"
+  };
+}
+
 export function buildAssetListShare(input: AssetListShareInput): ShareAppTarget {
   const gameName = input.gameName.trim() || "塔防精灵";
   const assetType = input.assetType?.trim();
@@ -167,6 +174,97 @@ function deepSeaBossShareName(section: number): string {
     9: "怪人",
     10: "简",
     11: "王城"
+  };
+  return names[section] ?? "BOSS";
+}
+
+export function buildMaelstromShare(): ShareAppTarget {
+  return {
+    title: "塔防精灵大漩涡",
+    path: "/pages/guides/maelstrom"
+  };
+}
+
+export function buildMaelstromBossShare(input: { section: number; bossName?: string }): ShareAppTarget {
+  const section = Number.isFinite(input.section) ? String(input.section) : "";
+  const bossName = input.bossName?.trim() || maelstromBossShareName(input.section);
+  return {
+    title: `大漩涡·${bossName}${section ? `${section}关` : ""}`,
+    path: withQuery("/pages/guides/maelstrom-boss", { section })
+  };
+}
+
+export function buildSkyTowerShare(floor?: number): ShareAppTarget {
+  const shareFloor = typeof floor === "number" && Number.isFinite(floor) ? floor : null;
+  if (shareFloor === null) {
+    return {
+      title: "塔防精灵天空塔",
+      path: "/pages/guides/sky-tower"
+    };
+  }
+  const normalizedFloor = Math.min(40, Math.max(1, Math.trunc(shareFloor)));
+  return {
+    title: `天空塔${normalizedFloor}层阵容攻略`,
+    path: withQuery("/pages/guides/sky-tower", { floor: String(normalizedFloor) })
+  };
+}
+
+export function buildHealthCalculatorShare(): ShareAppTarget {
+  return {
+    title: "塔防精灵血量计算",
+    path: "/pages/guides/health-calculator"
+  };
+}
+
+export function buildAdditionalCalculatorShare(): ShareAppTarget {
+  return {
+    title: "塔防精灵附加伤害计算",
+    path: "/pages/guides/additional-calculator"
+  };
+}
+
+export function buildCardUpgradeShare(): ShareAppTarget {
+  return {
+    title: "塔防精灵卡牌升级",
+    path: "/pages/guides/card-upgrade"
+  };
+}
+
+export function buildSeasonChallengeShare(): ShareAppTarget {
+  return {
+    title: "塔防精灵赛季挑战",
+    path: "/pages/guides/season-challenge"
+  };
+}
+
+export function buildDungeonMaterialsShare(): ShareAppTarget {
+  return {
+    title: "塔防精灵活动材料",
+    path: "/pages/guides/dungeon-materials"
+  };
+}
+
+export function buildDungeonGuideShare(): ShareAppTarget {
+  return {
+    title: "塔防精灵活动攻略",
+    path: "/pages/guides/dungeon-guide"
+  };
+}
+
+function maelstromBossShareName(section: number): string {
+  const names: Record<number, string> = {
+    10: "深海·乌贼",
+    20: "深海·魔鬼",
+    30: "深海·异兽",
+    40: "海军元帅·简",
+    50: "深海科学家·雷神",
+    60: "深海·王宫守卫",
+    70: "深海典狱长",
+    80: "深海刺豚",
+    90: "深海公主",
+    100: "深海·水母",
+    110: "龙族·红龙",
+    120: "龙族·黑龙"
   };
   return names[section] ?? "BOSS";
 }

@@ -11,6 +11,7 @@ import { createMysqlExchangeResourcesRepository } from "../../api/src/modules/ex
 import { createMysqlNotificationsRepository } from "../../api/src/modules/notifications/notifications.mysql.repository";
 import { createMysqlReportsService } from "../../api/src/modules/reports/reports.mysql.service";
 import { createMysqlRedeemCodeSettingsRepository } from "../../api/src/modules/redeemCodes/redeemCodeSettings.mysql.repository";
+import { createMysqlSkyTowerSettingsRepository } from "../../api/src/modules/skyTower/skyTowerSettings.mysql.repository";
 import { createMysqlUsersRepository } from "../../api/src/modules/users/users.mysql.repository";
 
 type FakeUser = {
@@ -167,6 +168,13 @@ type FakeRedeemCodeSetting = {
   updated_at: Date;
 };
 
+type FakeSkyTowerSetting = {
+  id: number;
+  raw_text: string;
+  updated_by: number | null;
+  updated_at: Date;
+};
+
 type FakeAdminUser = {
   id: number;
   username: string;
@@ -216,6 +224,7 @@ class FakeMysqlPool {
   imageSafety: FakeImageSafety[] = [];
   configs: FakeSystemConfig[] = [];
   redeemCodeSettings: FakeRedeemCodeSetting[] = [];
+  skyTowerSettings: FakeSkyTowerSetting[] = [];
   adminUsers: FakeAdminUser[] = [];
   adminLogs: Array<{ admin_id: number; action: string; target_type: string; target_id: number; detail_json: string | null }> = [];
   lastConnection: FakeMysqlConnection | null = null;
@@ -542,6 +551,27 @@ class FakeMysqlPool {
 
     if (sql.includes("FROM redeem_code_settings")) {
       return [[this.redeemCodeSettings[0]].filter(Boolean) as T, []];
+    }
+
+    if (sql.includes("INSERT INTO sky_tower_settings")) {
+      const existing = this.skyTowerSettings[0];
+      if (existing) {
+        existing.raw_text = params[1] as string;
+        existing.updated_by = Number(params[2]);
+        existing.updated_at = new Date("2026-05-25T15:40:00.000Z");
+      } else {
+        this.skyTowerSettings.push({
+          id: Number(params[0]),
+          raw_text: params[1] as string,
+          updated_by: Number(params[2]),
+          updated_at: new Date("2026-05-25T15:40:00.000Z")
+        });
+      }
+      return [{ affectedRows: 1, insertId: 1 } as T, []];
+    }
+
+    if (sql.includes("FROM sky_tower_settings")) {
+      return [[this.skyTowerSettings[0]].filter(Boolean) as T, []];
     }
 
     if (sql.includes("INSERT INTO admin_users")) {
@@ -1586,6 +1616,54 @@ describe("mysql repositories", () => {
       items: [{ code: "TFJL520", description: "随机金卡", validity: "永久" }]
     });
     await expect(repository.read()).resolves.toMatchObject(updated);
+  });
+
+  it("reads and updates sky tower settings from MySQL rows", async () => {
+    const pool = new FakeMysqlPool();
+    const repository = createMysqlSkyTowerSettingsRepository(pool);
+
+    const initial = await repository.read();
+    expect(initial).toMatchObject({ rawText: "", updatedBy: null });
+    expect(initial.floors).toHaveLength(40);
+    expect(initial.floors[0]).toMatchObject({ floor: 1, formationSummary: "资料待补充" });
+
+    const rawText = "1|前车猴子|猴子|咕咕|前车1:猴子:orange|先开猴子";
+    const updated = await repository.update(rawText, 3);
+
+    expect(updated).toMatchObject({
+      rawText,
+      updatedBy: 3,
+      updatedAt: "2026-05-25T15:40:00.000Z"
+    });
+    expect(updated.floors[0]).toMatchObject({
+      floor: 1,
+      formationSummary: "前车猴子",
+      frontChariot: ["猴子"],
+      backChariot: ["咕咕"],
+      tactics: ["先开猴子"]
+    });
+    await expect(repository.read()).resolves.toMatchObject(updated);
+  });
+
+  it("falls back to default sky tower floors when stored MySQL text is invalid", async () => {
+    const pool = new FakeMysqlPool();
+    pool.skyTowerSettings.push({
+      id: 1,
+      raw_text: "楼层|阵容说明|前车",
+      updated_by: 3,
+      updated_at: new Date("2026-05-25T15:40:00.000Z")
+    });
+    const repository = createMysqlSkyTowerSettingsRepository(pool);
+
+    const config = await repository.read();
+
+    expect(config).toMatchObject({
+      rawText: "楼层|阵容说明|前车",
+      updatedBy: 3,
+      updatedAt: "2026-05-25T15:40:00.000Z",
+      items: []
+    });
+    expect(config.floors[0]).toMatchObject({ floor: 1, formationSummary: "资料待补充" });
   });
 
   it("persists admin operation logs", async () => {

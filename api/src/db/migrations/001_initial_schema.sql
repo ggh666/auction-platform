@@ -5,6 +5,7 @@ SET FOREIGN_KEY_CHECKS = 0;
 
 DROP TABLE IF EXISTS admin_operation_logs;
 DROP TABLE IF EXISTS system_configs;
+DROP TABLE IF EXISTS sky_tower_settings;
 DROP TABLE IF EXISTS redeem_code_settings;
 DROP TABLE IF EXISTS violation_records;
 DROP TABLE IF EXISTS reports;
@@ -383,7 +384,7 @@ CREATE TABLE admin_operation_logs (
 
 CREATE TABLE system_configs (
   config_key VARCHAR(80) PRIMARY KEY,
-  config_value VARCHAR(500) NOT NULL,
+  config_value TEXT NOT NULL,
   updated_by BIGINT UNSIGNED NULL,
   updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
   CONSTRAINT fk_system_configs_updater FOREIGN KEY (updated_by) REFERENCES admin_users(id)
@@ -397,6 +398,16 @@ CREATE TABLE redeem_code_settings (
   CONSTRAINT fk_redeem_code_settings_updater FOREIGN KEY (updated_by) REFERENCES admin_users(id)
 );
 
+CREATE TABLE sky_tower_settings (
+  id TINYINT UNSIGNED NOT NULL PRIMARY KEY,
+  raw_text MEDIUMTEXT NOT NULL,
+  updated_by BIGINT UNSIGNED NULL,
+  updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  CONSTRAINT fk_sky_tower_settings_updated_by
+    FOREIGN KEY (updated_by) REFERENCES admin_users(id)
+    ON DELETE SET NULL
+);
+
 INSERT INTO system_configs (config_key, config_value) VALUES
   ('default_min_increment_cents', '100'),
   ('extension_window_seconds', '300'),
@@ -405,7 +416,10 @@ INSERT INTO system_configs (config_key, config_value) VALUES
   ('max_image_size_bytes', '5242880'),
   ('default_daily_publish_limit', '3'),
   ('user_asset_publish_enabled', 'true'),
-  ('free_exchange_publish_enabled', 'true');
+  ('free_exchange_publish_enabled', 'true'),
+  ('check_in_url', '-'),
+  ('dungeon_material_image_url', '-'),
+  ('dungeon_guide_image_url', '-');
 
 INSERT INTO dragon_ball_price_reference_batches (game_name, week_start_date, week_end_date, note)
 VALUES ('塔防精灵', '2026-06-01', '2026-06-06', '6月1日-6日龙珠品类成交价区间统计');

@@ -1,17 +1,27 @@
 import { describe, expect, it } from "vitest";
 import {
+  buildAnchorRecommendationsShare,
   buildAssetDetailShare,
+  buildAdditionalCalculatorShare,
+  buildCardUpgradeShare,
   buildDeepSeaBattleShare,
   buildDeepSeaBossShare,
+  buildDungeonGuideShare,
+  buildDungeonMaterialsShare,
   buildDragonBallSystemShare,
+  buildMaelstromBossShare,
+  buildMaelstromShare,
+  buildSkyTowerShare,
   buildAssetListShare,
   buildExchangeResourceDetailShare,
   buildExchangeResourceListShare,
   buildGameModeShare,
   buildGuidesShare,
+  buildHealthCalculatorShare,
   buildHomeShare,
   buildPriceReferenceShare,
   buildRedeemCodesShare,
+  buildSeasonChallengeShare,
   toTimelineShare
 } from "./share";
 
@@ -20,6 +30,13 @@ describe("miniapp share helpers", () => {
     expect(buildHomeShare()).toEqual({
       title: "塔防精灵账号与道具交换",
       path: "/pages/games/index"
+    });
+  });
+
+  it("builds an anchor recommendations share target", () => {
+    expect(buildAnchorRecommendationsShare()).toEqual({
+      title: "塔防精灵主播推荐",
+      path: "/pages/anchors/index"
     });
   });
 
@@ -81,6 +98,46 @@ describe("miniapp share helpers", () => {
     expect(buildDeepSeaBossShare({ section: 4, level: 80 })).toEqual({
       title: "深海之战·乌贼80关",
       path: "/pages/guides/deep-sea-boss?section=4&level=80"
+    });
+    expect(buildMaelstromShare()).toEqual({
+      title: "塔防精灵大漩涡",
+      path: "/pages/guides/maelstrom"
+    });
+    expect(buildMaelstromBossShare({ section: 110, bossName: "龙族·红龙" })).toEqual({
+      title: "大漩涡·龙族·红龙110关",
+      path: "/pages/guides/maelstrom-boss?section=110"
+    });
+    expect(buildSkyTowerShare()).toEqual({
+      title: "塔防精灵天空塔",
+      path: "/pages/guides/sky-tower"
+    });
+    expect(buildSkyTowerShare(20)).toEqual({
+      title: "天空塔20层阵容攻略",
+      path: "/pages/guides/sky-tower?floor=20"
+    });
+    expect(buildHealthCalculatorShare()).toEqual({
+      title: "塔防精灵血量计算",
+      path: "/pages/guides/health-calculator"
+    });
+    expect(buildAdditionalCalculatorShare()).toEqual({
+      title: "塔防精灵附加伤害计算",
+      path: "/pages/guides/additional-calculator"
+    });
+    expect(buildCardUpgradeShare()).toEqual({
+      title: "塔防精灵卡牌升级",
+      path: "/pages/guides/card-upgrade"
+    });
+    expect(buildSeasonChallengeShare()).toEqual({
+      title: "塔防精灵赛季挑战",
+      path: "/pages/guides/season-challenge"
+    });
+    expect(buildDungeonMaterialsShare()).toEqual({
+      title: "塔防精灵活动材料",
+      path: "/pages/guides/dungeon-materials"
+    });
+    expect(buildDungeonGuideShare()).toEqual({
+      title: "塔防精灵活动攻略",
+      path: "/pages/guides/dungeon-guide"
     });
   });
 

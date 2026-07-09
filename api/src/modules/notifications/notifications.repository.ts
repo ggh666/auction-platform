@@ -14,6 +14,7 @@ export type CreateNotificationInput = {
 export type NotificationsRepository = {
   createMany(input: CreateNotificationInput[]): Promise<NotificationItem[]>;
   listByUser(userId: string, limit?: number): Promise<NotificationItem[]>;
+  countUnreadByUser(userId: string): Promise<number>;
   markRead(userId: string, notificationId: string): Promise<NotificationItem | null>;
   markAllRead(userId: string): Promise<NotificationItem[]>;
   deleteByUserIds(userId: string, notificationIds: string[]): Promise<number>;
@@ -58,6 +59,10 @@ export function createInMemoryNotificationsRepository(): NotificationsRepository
 
     async listByUser(userId, limit = 50) {
       return listUserNotifications(userId, limit);
+    },
+
+    async countUnreadByUser(userId) {
+      return notifications.filter((notification) => notification.userId === userId && notification.readAt === null).length;
     },
 
     async markRead(userId, notificationId) {

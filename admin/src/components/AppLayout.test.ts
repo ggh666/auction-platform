@@ -23,6 +23,7 @@ describe("admin app layout navigation", () => {
     expect(layout).toContain('label: "审核管理"');
     expect(layout).toContain('label: "发布资产"');
     expect(layout).toContain('label: "交换资源"');
+    expect(layout).toContain('label: "主播推荐"');
     expect(layout).toContain('label: "主理人资源"');
     expect(layout).toContain('label: "估值参考"');
     expect(layout).toContain('label: "系统配置"');

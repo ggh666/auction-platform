@@ -195,6 +195,8 @@ onShow(() => {
 });
 
 async function loadContext() {
+  publishEnabled.value = false;
+  loginRequired.value = false;
   try {
     const response = await getExchangeResourceContext(form.gameName);
     if (!response.enabled) {

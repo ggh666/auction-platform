@@ -59,8 +59,12 @@ if (!rootAppJson.tabBar?.list?.every((item) => item.pagePath?.startsWith("devtoo
 const rootAppJsPath = resolve(root, "app.js");
 if (existsSync(rootAppJsPath)) {
   const rootAppJs = readFileSync(rootAppJsPath, "utf8");
-  if (!rootAppJs.includes("patchPageNavigationUrls") || !rootAppJs.includes('require("./devtools/mp-weixin/app.js")')) {
-    issues.push("root app.js must patch generated page navigation URLs before requiring devtools/mp-weixin/app.js");
+  if (
+    !rootAppJs.includes("patchPageNavigationUrls") ||
+    !rootAppJs.includes("patchUniNavigationUrls") ||
+    !rootAppJs.includes('require("./devtools/mp-weixin/app.js")')
+  ) {
+    issues.push("root app.js must patch generated wx and uni page navigation URLs before requiring devtools/mp-weixin/app.js");
   }
 }
 

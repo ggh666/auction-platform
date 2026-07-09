@@ -8,6 +8,11 @@ import { registerAdminConfigRoutes } from "./modules/admin/adminConfigs.routes";
 import { registerAdminDashboardRoutes } from "./modules/admin/adminDashboard.routes";
 import { registerAdminRoutes } from "./modules/admin/admin.routes";
 import { registerAdminUserRoutes } from "./modules/admin/adminUsers.routes";
+import {
+  createInMemoryAnchorRecommendationsRepository,
+  type AnchorRecommendationsRepository
+} from "./modules/anchorRecommendations/anchorRecommendations.repository";
+import { registerAnchorRecommendationRoutes } from "./modules/anchorRecommendations/anchorRecommendations.routes";
 import { createInMemoryAssetFollowsRepository, type AssetFollowsRepository } from "./modules/assetFollows/assetFollows.repository";
 import {
   createInMemoryAssetConversationsRepository,
@@ -38,6 +43,11 @@ import {
   type RedeemCodeSettingsRepository
 } from "./modules/redeemCodes/redeemCodeSettings.repository";
 import { registerRedeemCodeRoutes } from "./modules/redeemCodes/redeemCodes.routes";
+import {
+  createInMemorySkyTowerSettingsRepository,
+  type SkyTowerSettingsRepository
+} from "./modules/skyTower/skyTowerSettings.repository";
+import { registerSkyTowerRoutes } from "./modules/skyTower/skyTower.routes";
 import { createInMemoryDealFollowupsRepository, type DealFollowupsRepository } from "./modules/dealFollowups/dealFollowups.repository";
 import { registerDealFollowupRoutes } from "./modules/dealFollowups/dealFollowups.routes";
 import {
@@ -115,8 +125,10 @@ export type AppOptions = {
   notificationsRepository?: NotificationsRepository;
   dealFollowupsRepository?: DealFollowupsRepository;
   exchangeResourcesRepository?: ExchangeResourcesRepository;
+  anchorRecommendationsRepository?: AnchorRecommendationsRepository;
   dragonBallPriceReferencesRepository?: DragonBallPriceReferencesRepository;
   redeemCodeSettingsRepository?: RedeemCodeSettingsRepository;
+  skyTowerSettingsRepository?: SkyTowerSettingsRepository;
   imageStorage?: ImageStorage;
   contentSafetyService?: ContentSafetyService;
   subscribeMessageService?: SubscribeMessageService;
@@ -143,8 +155,10 @@ export function buildApp(options: AppOptions = {}) {
       !options.notificationsRepository ||
       !options.dealFollowupsRepository ||
       !options.exchangeResourcesRepository ||
+      !options.anchorRecommendationsRepository ||
       !options.dragonBallPriceReferencesRepository ||
       !options.redeemCodeSettingsRepository ||
+      !options.skyTowerSettingsRepository ||
       (env.contentSafetyEnabled && !options.imageSafetyRepository && !options.contentSafetyService))
   ) {
     throw new Error("Production repositories must be explicitly configured; in-memory repositories are development only");
@@ -165,9 +179,12 @@ export function buildApp(options: AppOptions = {}) {
   const notifications = options.notificationsRepository ?? createInMemoryNotificationsRepository();
   const dealFollowups = options.dealFollowupsRepository ?? createInMemoryDealFollowupsRepository();
   const exchangeResources = options.exchangeResourcesRepository ?? createInMemoryExchangeResourcesRepository();
+  const anchorRecommendations =
+    options.anchorRecommendationsRepository ?? createInMemoryAnchorRecommendationsRepository();
   const dragonBallPriceReferences =
     options.dragonBallPriceReferencesRepository ?? createInMemoryDragonBallPriceReferencesRepository();
   const redeemCodeSettings = options.redeemCodeSettingsRepository ?? createInMemoryRedeemCodeSettingsRepository();
+  const skyTowerSettings = options.skyTowerSettingsRepository ?? createInMemorySkyTowerSettingsRepository();
   const imageStorage = options.imageStorage ?? createR2ImageStorage(env);
   const imageSafety = options.imageSafetyRepository ?? createInMemoryImageSafetyRepository();
   const wechatTokenProvider = createWechatAccessTokenProvider({ env });
@@ -244,8 +261,10 @@ export function buildApp(options: AppOptions = {}) {
     exchangeResources,
     conversations: assetConversations
   });
+  registerAnchorRecommendationRoutes(app, { admins, anchors: anchorRecommendations });
   registerDragonBallPriceReferenceRoutes(app, { admins, priceReferences: dragonBallPriceReferences });
   registerRedeemCodeRoutes(app, { admins, settings: redeemCodeSettings });
+  registerSkyTowerRoutes(app, { admins, settings: skyTowerSettings });
   registerAssetRoutes(app, assets, users, bids, configs, reports, contentSafety, principals, assetFollows);
   registerAdminDashboardRoutes(app, admins, { assets, bids, reports, users, principals });
   registerAdminRoutes(app, admins, assets, bids, users, contentSafety, principals, dealFollowups, imageSafety, imageStorage, notifications, hub);

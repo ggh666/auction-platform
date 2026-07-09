@@ -88,6 +88,16 @@ export function createMysqlNotificationsRepository(db: MysqlExecutor): Notificat
       return listByUser(userId, limit);
     },
 
+    async countUnreadByUser(userId) {
+      const [rows] = await db.execute<Array<{ unread_count: number | string }>>(
+        `SELECT COUNT(*) AS unread_count
+         FROM station_notifications
+         WHERE user_id = ? AND read_at IS NULL`,
+        [Number(userId)]
+      );
+      return Number(firstRow<{ unread_count: number | string }>(rows)?.unread_count ?? 0);
+    },
+
     async markRead(userId, notificationId) {
       const [result] = await db.execute<MysqlResultHeader>(
         `UPDATE station_notifications

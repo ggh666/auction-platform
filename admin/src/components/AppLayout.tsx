@@ -37,6 +37,7 @@ const navGroups: NavGroup[] = [
       { key: "reviews", label: "审核管理", roles: ["super_admin", "reviewer"] },
       { key: "assetPublish", label: "发布资产", roles: ["super_admin", "reviewer", "operator"] },
       { key: "exchangeResources", label: "交换资源", roles: ["super_admin", "reviewer", "operator"] },
+      { key: "anchorRecommendations", label: "主播推荐", roles: ["super_admin", "reviewer", "operator"] },
       { key: "assetData", label: "主理人资源", roles: ["super_admin", "reviewer", "operator"] }
     ]
   },
@@ -45,6 +46,7 @@ const navGroups: NavGroup[] = [
     items: [
       { key: "priceReferences", label: "估值参考", roles: ["super_admin", "reviewer", "operator"] },
       { key: "redeemCodes", label: "兑换码设置", roles: ["super_admin", "reviewer", "operator"] },
+      { key: "skyTower", label: "天空塔设置", roles: ["super_admin", "reviewer", "operator"] },
       { key: "configs", label: "系统配置", roles: ["super_admin"] }
     ]
   }
