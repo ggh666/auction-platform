@@ -40,13 +40,20 @@ describe("miniapp build configuration", () => {
     expect(rootAppJson.pages?.every((page) => page.startsWith("devtools/mp-weixin/pages/"))).toBe(true);
     expect(rootAppJson.tabBar?.list?.map((item) => item.pagePath)).toEqual([
       "devtools/mp-weixin/pages/games/index",
+      "devtools/mp-weixin/pages/guides/index",
       "devtools/mp-weixin/pages/profile/index"
     ]);
     const rootAppJs = readFileSync(rootAppJsPath, "utf8");
     expect(rootAppJs).toContain("patchPageNavigationUrls");
+    expect(rootAppJs).toContain("patchUniNavigationUrls");
     expect(rootAppJs).toContain('"/devtools/mp-weixin/pages/"');
+    expect(rootAppJs).toContain("globalThis.uni");
     expect(rootAppJs).toContain('require("./devtools/mp-weixin/app.js")');
-    expect(readFileSync(rootAppWxssPath, "utf8")).toContain('@import "devtools/mp-weixin/app.wxss";');
+    const rootAppWxss = readFileSync(rootAppWxssPath, "utf8");
+    expect(rootAppWxss).toContain('@import "devtools/mp-weixin/app.wxss";');
+    expect(rootAppWxss).toContain('@import "devtools/mp-weixin/pages/games/index.wxss";');
+    expect(rootAppWxss).toContain('@import "devtools/mp-weixin/pages/guides/index.wxss";');
+    expect(rootAppWxss).toContain('@import "devtools/mp-weixin/pages/guides/season-challenge.wxss";');
   });
 
   it("excludes stale build folders without excluding the active mini program root", () => {
@@ -92,18 +99,117 @@ describe("miniapp build configuration", () => {
     expect(patchScript).toContain("--assert");
     expect(packageJson.scripts?.["build:mp-weixin"]).toContain("patch-mp-weixin-project-config.mjs --assert");
     expect(packageJson.scripts?.["build:mp-weixin"]).toContain("sync-mp-weixin-devtools-output.mjs --source dist/build/mp-weixin --assert");
+    expect(packageJson.scripts?.["build:mp-weixin"]).toContain("--destination unpackage/dist/dev/mp-weixin");
+    expect(packageJson.scripts?.["build:mp-weixin"]).toContain("--skip-root-wrapper");
     expect(packageJson.scripts?.["dev:mp-weixin"]).toBe("node scripts/dev-mp-weixin.mjs");
     expect(devRunner).toContain("patch-mp-weixin-project-config.mjs");
     expect(devRunner).toContain("sync-mp-weixin-devtools-output.mjs");
     expect(devRunner).toContain("dist/dev/mp-weixin");
+    expect(devRunner).toContain("unpackage/dist/dev/mp-weixin");
+    expect(devRunner).toContain("--skip-root-wrapper");
     expect(devRunner).toContain("--allow-missing-app-json");
     expect(devRunner).toContain("--allow-missing");
     expect(devRunner).toContain("setInterval");
     expect(syncScript).toContain("devtools/mp-weixin");
     expect(syncScript).toContain("writeRootWrapper");
+    expect(syncScript).toContain("skipRootWrapper");
     expect(syncScript).toContain("outputRootPrefixFor");
+    expect(syncScript).toContain("patchUniNavigationUrls");
     expect(syncScript).toContain('projectConfig.miniprogramRoot = ""');
     expect(syncScript).toContain("app.json");
+  });
+
+  it("checks that the WeChat DevTools wrapper patches wx and uni navigation URLs", () => {
+    const layoutCheckScript = readFileSync(
+      resolve(import.meta.dirname, "scripts/check-hbuilderx-layout.mjs"),
+      "utf8"
+    );
+
+    expect(layoutCheckScript).toContain("patchPageNavigationUrls");
+    expect(layoutCheckScript).toContain("patchUniNavigationUrls");
+    expect(layoutCheckScript).toContain("generated wx and uni page navigation URLs");
+  });
+
+  it("does not leave new guide pages as generated WeChat placeholder output", () => {
+    const generatedRoots = [
+      "devtools/mp-weixin",
+      "dist/build/mp-weixin",
+      "unpackage/dist/dev/mp-weixin"
+    ];
+    for (const generatedRootRelativePath of generatedRoots) {
+      const generatedRoot = resolve(import.meta.dirname, generatedRootRelativePath);
+    const deepSeaBattleWxmlPath = resolve(generatedRoot, "pages/guides/deep-sea-battle.wxml");
+    const deepSeaBossWxmlPath = resolve(generatedRoot, "pages/guides/deep-sea-boss.wxml");
+    const maelstromWxmlPath = resolve(generatedRoot, "pages/guides/maelstrom.wxml");
+    const maelstromBossWxmlPath = resolve(generatedRoot, "pages/guides/maelstrom-boss.wxml");
+    const skyTowerWxmlPath = resolve(generatedRoot, "pages/guides/sky-tower.wxml");
+    const cardUpgradeWxmlPath = resolve(generatedRoot, "pages/guides/card-upgrade.wxml");
+    const seasonChallengeWxmlPath = resolve(generatedRoot, "pages/guides/season-challenge.wxml");
+    if (
+      !existsSync(deepSeaBattleWxmlPath) ||
+      !existsSync(deepSeaBossWxmlPath) ||
+      !existsSync(maelstromWxmlPath) ||
+      !existsSync(maelstromBossWxmlPath) ||
+      !existsSync(skyTowerWxmlPath) ||
+      !existsSync(cardUpgradeWxmlPath) ||
+      !existsSync(seasonChallengeWxmlPath)
+    ) {
+      continue;
+    }
+
+    const deepSeaBattleWxml = readFileSync(
+      deepSeaBattleWxmlPath,
+      "utf8"
+    );
+    const deepSeaBossWxml = readFileSync(
+      deepSeaBossWxmlPath,
+      "utf8"
+    );
+    const maelstromWxml = readFileSync(
+      maelstromWxmlPath,
+      "utf8"
+    );
+    const maelstromBossWxml = readFileSync(
+      maelstromBossWxmlPath,
+      "utf8"
+    );
+    const skyTowerWxml = readFileSync(
+      skyTowerWxmlPath,
+      "utf8"
+    );
+    const cardUpgradeWxml = readFileSync(
+      cardUpgradeWxmlPath,
+      "utf8"
+    );
+    const seasonChallengeWxml = readFileSync(
+      seasonChallengeWxmlPath,
+      "utf8"
+    );
+
+    expect(deepSeaBattleWxml).toContain("深海之战地图");
+    expect(deepSeaBattleWxml).toContain("map-grid");
+    expect(deepSeaBattleWxml).not.toContain("<text>pages/guides/deep-sea-battle.wxml</text>");
+    expect(deepSeaBossWxml).toContain("boss-hero");
+    expect(deepSeaBossWxml).toContain("普通伤害");
+    expect(deepSeaBossWxml).toContain("战车血量");
+    expect(deepSeaBossWxml).not.toContain("<text>pages/guides/deep-sea-boss.wxml</text>");
+    expect(maelstromWxml).toContain("大漩涡");
+    expect(maelstromWxml).toContain("section-grid");
+    expect(maelstromWxml).not.toContain("<text>pages/guides/maelstrom.wxml</text>");
+    expect(maelstromBossWxml).toContain("Boss 属性");
+    expect(maelstromBossWxml).toContain("伤害演算");
+    expect(maelstromBossWxml).not.toContain("<text>pages/guides/maelstrom-boss.wxml</text>");
+    expect(skyTowerWxml).toContain("天空塔");
+    expect(skyTowerWxml).toContain("floor-selector");
+    expect(skyTowerWxml).toContain("奖励信息");
+    expect(skyTowerWxml).not.toContain("<text>pages/guides/sky-tower.wxml</text>");
+    expect(cardUpgradeWxml).toContain("卡牌升级");
+    expect(cardUpgradeWxml).toContain("还需卡牌");
+    expect(cardUpgradeWxml).not.toContain("<text>pages/guides/card-upgrade.wxml</text>");
+    expect(seasonChallengeWxml).toContain("赛季挑战");
+    expect(seasonChallengeWxml).toContain("总积分");
+    expect(seasonChallengeWxml).not.toContain("<text>pages/guides/season-challenge.wxml</text>");
+    }
   });
 
   it("clears generated miniprogramRoot before validating output app.json", () => {

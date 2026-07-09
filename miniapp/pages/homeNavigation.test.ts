@@ -25,4 +25,16 @@ describe("miniapp home navigation", () => {
     expect(assetListPage).toContain("返回主页");
     expect(assetListPage).toContain(homeSwitchCall);
   });
+
+  it("defers the home notification count request and uses the lightweight summary API", () => {
+    const homePage = readPage("pages/games/index.vue");
+    const apiClient = readPage("api/client.ts");
+
+    expect(homePage).toContain("scheduleUnreadNotificationRefresh()");
+    expect(homePage).toContain("setTimeout(() => {");
+    expect(homePage).toContain("getNotificationSummary");
+    expect(homePage).not.toContain("listNotifications");
+    expect(apiClient).toContain("getNotificationSummary");
+    expect(apiClient).toContain("/api/profile/notification-summary");
+  });
 });

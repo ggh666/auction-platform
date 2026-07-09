@@ -21,23 +21,37 @@
       </view>
       <text class="game-action">进入</text>
     </view>
+
+    <view class="game-card" @tap="openAnchors">
+      <view class="game-mark">播</view>
+      <view class="game-copy">
+        <text class="game-title">主播推荐</text>
+        <text class="game-desc">主播与攻略内容推荐</text>
+      </view>
+      <text class="game-action">进入</text>
+    </view>
   </view>
 </template>
 
 <script setup lang="ts">
-import { onShareAppMessage, onShareTimeline, onShow } from "@dcloudio/uni-app";
+import { onHide, onShareAppMessage, onShareTimeline, onShow } from "@dcloudio/uni-app";
 import { ref } from "vue";
-import { listNotifications } from "../../api/client";
+import { getNotificationSummary } from "../../api/client";
 import { readToken } from "../../auth/session";
 import { buildHomeShare, toTimelineShare } from "../../utils/share";
 import { syncCustomTabBarSelected } from "../../utils/tabBar";
 
 const unreadNotifications = ref(0);
+let unreadRefreshTimer: ReturnType<typeof setTimeout> | null = null;
 
 onShow(() => {
   syncCustomTabBarSelected(0);
   uni.showShareMenu({ withShareTicket: true, menus: ["shareAppMessage", "shareTimeline"] });
-  void refreshUnreadNotifications();
+  scheduleUnreadNotificationRefresh();
+});
+
+onHide(() => {
+  clearUnreadNotificationRefresh();
 });
 
 onShareAppMessage(() => buildHomeShare());
@@ -51,15 +65,34 @@ async function refreshUnreadNotifications() {
   }
 
   try {
-    const response = await listNotifications();
+    const response = await getNotificationSummary();
     unreadNotifications.value = response.unreadCount;
   } catch {
     unreadNotifications.value = 0;
   }
 }
 
+function scheduleUnreadNotificationRefresh() {
+  clearUnreadNotificationRefresh();
+  unreadRefreshTimer = setTimeout(() => {
+    unreadRefreshTimer = null;
+    void refreshUnreadNotifications();
+  }, 600);
+}
+
+function clearUnreadNotificationRefresh() {
+  if (unreadRefreshTimer !== null) {
+    clearTimeout(unreadRefreshTimer);
+    unreadRefreshTimer = null;
+  }
+}
+
 function openGame(gameName: string) {
   uni.navigateTo({ url: `/pages/games/mode?gameName=${encodeURIComponent(gameName)}` });
+}
+
+function openAnchors() {
+  uni.navigateTo({ url: "/pages/anchors/index" });
 }
 
 function openNotifications() {
@@ -130,6 +163,10 @@ function openNotifications() {
   background: #fff;
   border: 1px solid #eaecf0;
   border-radius: 8rpx;
+}
+
+.game-card + .game-card {
+  margin-top: 18rpx;
 }
 
 .game-mark {

@@ -32,6 +32,8 @@ export function createMysqlSystemConfigsRepository(db: MysqlExecutor): SystemCon
   }
 
   return {
+    findByKey,
+
     async list() {
       const [rows] = await db.execute<SystemConfigDbRow[]>(`${configSelect} ORDER BY config_key ASC`);
       return rows.map(toSystemConfig);

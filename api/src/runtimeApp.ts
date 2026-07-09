@@ -4,6 +4,7 @@ import { readEnv, type Env } from "./config/env";
 import { createPool } from "./db/pool";
 import type { MysqlPool } from "./db/mysqlTypes";
 import { createMysqlAdminRepository } from "./modules/admin/admin.mysql.repository";
+import { createMysqlAnchorRecommendationsRepository } from "./modules/anchorRecommendations/anchorRecommendations.mysql.repository";
 import { createMysqlAssetConversationsRepository } from "./modules/assetConversations/assetConversations.mysql.repository";
 import { createMysqlAssetFollowsRepository } from "./modules/assetFollows/assetFollows.mysql.repository";
 import { createMysqlAssetsRepository } from "./modules/assets/assets.mysql.repository";
@@ -16,6 +17,8 @@ import { createMysqlNotificationsRepository } from "./modules/notifications/noti
 import { createMysqlPrincipalsRepository } from "./modules/principals/principals.mysql.repository";
 import { createMysqlDealFollowupsRepository } from "./modules/dealFollowups/dealFollowups.mysql.repository";
 import { createMysqlReportsService } from "./modules/reports/reports.mysql.service";
+import { createMysqlRedeemCodeSettingsRepository } from "./modules/redeemCodes/redeemCodeSettings.mysql.repository";
+import { createMysqlSkyTowerSettingsRepository } from "./modules/skyTower/skyTowerSettings.mysql.repository";
 import { createMysqlUsersRepository } from "./modules/users/users.mysql.repository";
 
 export type RuntimeApp = {
@@ -49,7 +52,10 @@ export function buildRuntimeApp(options: RuntimeAppOptions = {}): RuntimeApp {
     principalsRepository: createMysqlPrincipalsRepository(pool),
     configsRepository: createMysqlSystemConfigsRepository(pool),
     exchangeResourcesRepository: createMysqlExchangeResourcesRepository(pool),
+    anchorRecommendationsRepository: createMysqlAnchorRecommendationsRepository(pool),
     dragonBallPriceReferencesRepository: createMysqlDragonBallPriceReferencesRepository(pool),
+    redeemCodeSettingsRepository: createMysqlRedeemCodeSettingsRepository(pool),
+    skyTowerSettingsRepository: createMysqlSkyTowerSettingsRepository(pool),
     notificationsRepository: createMysqlNotificationsRepository(pool),
     dealFollowupsRepository: createMysqlDealFollowupsRepository(pool),
     imageSafetyRepository: createMysqlImageSafetyRepository(pool)

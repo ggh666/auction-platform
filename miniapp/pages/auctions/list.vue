@@ -243,7 +243,6 @@ async function loadAssets(options: LoadAssetsOptions = {}) {
       dragonBallProfession: selectedAssetType.value === "道具" ? selectedDragonBallProfession.value || undefined : undefined,
       dragonBallQuality: selectedAssetType.value === "道具" ? selectedDragonBallQuality.value || undefined : undefined,
       keyword: keyword || undefined,
-      createdWithinDays: keyword ? 60 : 7,
       page: requestedPage,
       pageSize
     });

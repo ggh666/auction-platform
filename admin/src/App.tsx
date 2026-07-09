@@ -5,6 +5,7 @@ import { clearAdminToken, readAdminSession, readAdminToken, type AdminSession } 
 import { AppLayout } from "./components/AppLayout";
 import { ChangePasswordDialog } from "./components/ChangePasswordDialog";
 import { AdminUserManagementPage } from "./pages/AdminUserManagementPage";
+import { AnchorRecommendationPage } from "./pages/AnchorRecommendationPage";
 import { AssetDataPage } from "./pages/AssetDataPage";
 import { AssetDetailPage } from "./pages/AssetDetailPage";
 import { AssetPublishPage } from "./pages/AssetPublishPage";
@@ -16,7 +17,9 @@ import { LoginPage } from "./pages/LoginPage";
 import { MessageCenterPage } from "./pages/MessageCenterPage";
 import { PrincipalManagementPage } from "./pages/PrincipalManagementPage";
 import { PriceReferencePage } from "./pages/PriceReferencePage";
+import { RedeemCodeSettingsPage } from "./pages/RedeemCodeSettingsPage";
 import { ReviewCenterPage } from "./pages/ReviewCenterPage";
+import { SkyTowerSettingsPage } from "./pages/SkyTowerSettingsPage";
 import { UserManagementPage } from "./pages/UserManagementPage";
 
 type PageKey =
@@ -25,7 +28,10 @@ type PageKey =
   | "assetData"
   | "assetPublish"
   | "exchangeResources"
+  | "anchorRecommendations"
   | "priceReferences"
+  | "redeemCodes"
+  | "skyTower"
   | "dealFollowups"
   | "messages"
   | "adminUsers"
@@ -50,8 +56,14 @@ function renderPage(
       return <AssetPublishPage copyDraft={copyDraft} onOpenAsset={onOpenAsset} />;
     case "exchangeResources":
       return <ExchangeResourcePage />;
+    case "anchorRecommendations":
+      return <AnchorRecommendationPage />;
     case "priceReferences":
       return <PriceReferencePage />;
+    case "redeemCodes":
+      return <RedeemCodeSettingsPage />;
+    case "skyTower":
+      return <SkyTowerSettingsPage />;
     case "dealFollowups":
       return <DealFollowupPage onOpenAsset={onOpenAsset} />;
     case "messages":

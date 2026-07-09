@@ -1,4 +1,10 @@
-import type { BulkDeleteRequest, NotificationActionResponse, NotificationBulkActionResponse, NotificationListResponse } from "@auction/shared";
+import type {
+  BulkDeleteRequest,
+  NotificationActionResponse,
+  NotificationBulkActionResponse,
+  NotificationListResponse,
+  NotificationSummaryResponse
+} from "@auction/shared";
 import type { FastifyInstance } from "fastify";
 import { requireActiveUser, requireUser } from "../../http/auth";
 import { badRequest, notFound } from "../../http/errors";
@@ -6,6 +12,15 @@ import type { UsersRepository } from "../users/users.repository";
 import type { NotificationsRepository } from "./notifications.repository";
 
 export function registerNotificationRoutes(app: FastifyInstance, notifications: NotificationsRepository, users: UsersRepository): void {
+  app.get<{ Reply: NotificationSummaryResponse }>("/api/profile/notification-summary", { preHandler: requireUser }, async (request) => {
+    try {
+      return { unreadCount: await notifications.countUnreadByUser(request.user.id) };
+    } catch (error) {
+      request.log.error({ err: error }, "failed to count profile notifications");
+      return { unreadCount: 0 };
+    }
+  });
+
   app.get<{ Reply: NotificationListResponse }>("/api/profile/notifications", { preHandler: requireUser }, async (request) => {
     let items: NotificationListResponse["items"];
     try {

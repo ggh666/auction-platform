@@ -4,6 +4,7 @@ import { readEnv } from "../../api/src/config/env";
 import { HttpError } from "../../api/src/http/errors";
 import { createRequestTimingHooks } from "../../api/src/observability/requestTiming";
 import { createInMemoryAdminRepository } from "../../api/src/modules/admin/admin.repository";
+import { createInMemoryAnchorRecommendationsRepository } from "../../api/src/modules/anchorRecommendations/anchorRecommendations.repository";
 import { createInMemoryAssetConversationsRepository } from "../../api/src/modules/assetConversations/assetConversations.repository";
 import { createInMemoryAssetFollowsRepository } from "../../api/src/modules/assetFollows/assetFollows.repository";
 import { createInMemoryAssetsRepository } from "../../api/src/modules/assets/assets.repository";
@@ -15,7 +16,9 @@ import { createInMemoryDragonBallPriceReferencesRepository } from "../../api/src
 import { createInMemoryExchangeResourcesRepository } from "../../api/src/modules/exchangeResources/exchangeResources.repository";
 import { createInMemoryNotificationsRepository } from "../../api/src/modules/notifications/notifications.repository";
 import { createInMemoryPrincipalsRepository } from "../../api/src/modules/principals/principals.repository";
+import { createInMemoryRedeemCodeSettingsRepository } from "../../api/src/modules/redeemCodes/redeemCodeSettings.repository";
 import { createReportsService } from "../../api/src/modules/reports/reports.service";
+import { createInMemorySkyTowerSettingsRepository } from "../../api/src/modules/skyTower/skyTowerSettings.repository";
 import { createInMemoryUsersRepository } from "../../api/src/modules/users/users.repository";
 import { wechatSubscribeTemplates } from "@auction/shared";
 
@@ -48,7 +51,10 @@ function buildProductionApp(env: NodeJS.ProcessEnv = productionEnv) {
     notificationsRepository: createInMemoryNotificationsRepository(),
     dealFollowupsRepository: createInMemoryDealFollowupsRepository(),
     exchangeResourcesRepository: createInMemoryExchangeResourcesRepository(),
+    anchorRecommendationsRepository: createInMemoryAnchorRecommendationsRepository(),
     dragonBallPriceReferencesRepository: createInMemoryDragonBallPriceReferencesRepository(),
+    redeemCodeSettingsRepository: createInMemoryRedeemCodeSettingsRepository(),
+    skyTowerSettingsRepository: createInMemorySkyTowerSettingsRepository(),
     imageSafetyRepository: createInMemoryImageSafetyRepository()
   });
 }
@@ -279,6 +285,33 @@ describe("api app", () => {
 
       expect(allowed.headers["access-control-allow-origin"]).toBe("https://admin.example.com");
       expect(denied.headers["access-control-allow-origin"]).toBeUndefined();
+    } finally {
+      await app.close();
+    }
+  });
+
+  it("allows admin write methods in CORS preflight responses", async () => {
+    const app = buildProductionApp({
+      ...productionEnv,
+      CORS_ALLOWED_ORIGINS: "https://admin.example.com"
+    });
+
+    try {
+      const response = await app.inject({
+        method: "OPTIONS",
+        url: "/admin/redeem-codes/config",
+        headers: {
+          origin: "https://admin.example.com",
+          "access-control-request-method": "PUT",
+          "access-control-request-headers": "authorization,content-type"
+        }
+      });
+
+      expect(response.statusCode).toBe(204);
+      expect(response.headers["access-control-allow-origin"]).toBe("https://admin.example.com");
+      expect(response.headers["access-control-allow-methods"]).toContain("PUT");
+      expect(response.headers["access-control-allow-headers"]).toContain("authorization");
+      expect(response.headers["access-control-allow-headers"]).toContain("content-type");
     } finally {
       await app.close();
     }

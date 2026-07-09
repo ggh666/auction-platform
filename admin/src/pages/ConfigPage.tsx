@@ -14,7 +14,13 @@ const configLabels: Record<string, { label: string; hint: string }> = {
   max_image_size_bytes: { label: "单张图片大小", hint: "单位：字节，例如 5242880 表示 5MB" },
   default_daily_publish_limit: { label: "默认每日发布次数", hint: "未单独设置用户时，每个用户每天可发布的资产数量" },
   user_asset_publish_enabled: { label: "用户发布开关", hint: "true 表示开放用户自主发布；false 表示临时关闭发布入口和提交接口" },
-  free_exchange_publish_enabled: { label: "自由交换发布开关", hint: "true 表示开放自由交换发布；false 表示临时关闭自由交换提交入口" }
+  free_exchange_publish_enabled: { label: "自由交换发布开关", hint: "true 表示开放自由交换发布；false 表示临时关闭自由交换提交入口" },
+  check_in_url: { label: "签到链接", hint: "小程序攻略页签到入口复制地址；未配置时填 -，用户点击会提示暂未配置" },
+  dungeon_material_image_url: { label: "活动材料", hint: "活动材料页展示的图片地址；未配置时填 -" },
+  dungeon_guide_image_url: {
+    label: "活动攻略",
+    hint: "活动攻略页展示的图片地址；多个图片链接可用换行、逗号或分号分隔；未配置时填 -"
+  }
 };
 
 function configName(key: string): string {
@@ -67,7 +73,7 @@ export function ConfigPage() {
   }
 
   async function updateConfig(config: SystemConfig) {
-    const value = window.prompt(`请输入「${configName(config.key)}」的新值`, config.value)?.trim();
+    const value = window.prompt(`请输入「${configName(config.key)}」的新值\n${configHint(config.key)}`, config.value)?.trim();
     if (value === undefined) {
       return;
     }

@@ -127,6 +127,15 @@ export type ExchangeResource = {
   updatedAt: string;
 };
 
+export type AnchorRecommendation = {
+  id: string;
+  name: string;
+  intro: string;
+  imageUrl: string;
+  createdAt: string;
+  updatedAt: string;
+};
+
 export type DragonBallPriceReferenceItem = {
   id: string;
   batchId: string;

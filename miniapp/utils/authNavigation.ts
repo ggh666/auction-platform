@@ -49,7 +49,7 @@ export function requireLoginForAction(message: string, redirectUrl: string = cur
 
 export function navigateAfterLogin(redirectUrl: string) {
   const targetUrl = safeLoginRedirect(redirectUrl);
-  const tabPaths = ["/pages/games/index", "/pages/profile/index"];
+  const tabPaths = ["/pages/games/index", "/pages/guides/index", "/pages/profile/index"];
   if (tabPaths.includes(targetUrl)) {
     uni.switchTab({ url: targetUrl });
     return;

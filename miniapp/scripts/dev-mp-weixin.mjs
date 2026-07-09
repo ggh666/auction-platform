@@ -26,9 +26,26 @@ function syncStableDevtoolsOutput(args = ["--source", "dist/dev/mp-weixin", "--q
   });
 }
 
+function syncHBuilderXDevOutput(args = [
+  "--source",
+  "dist/dev/mp-weixin",
+  "--destination",
+  "unpackage/dist/dev/mp-weixin",
+  "--skip-root-wrapper",
+  "--quiet",
+  "--allow-missing"
+]) {
+  spawnSync(process.execPath, [syncScript, ...args], {
+    cwd: root,
+    env,
+    stdio: "inherit"
+  });
+}
+
 function refreshDevtoolsOutput() {
   patchGeneratedConfigs();
   syncStableDevtoolsOutput();
+  syncHBuilderXDevOutput();
 }
 
 refreshDevtoolsOutput();

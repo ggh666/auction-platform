@@ -78,6 +78,17 @@ function numberQuery(value: unknown, fallback: number, max: number): number {
   return Math.min(parsed, max);
 }
 
+function optionalNumberQuery(value: unknown, max: number): number | undefined {
+  if (value === undefined || value === null || value === "") {
+    return undefined;
+  }
+  const parsed = Number(value);
+  if (!Number.isInteger(parsed) || parsed <= 0) {
+    return undefined;
+  }
+  return Math.min(parsed, max);
+}
+
 function daysAgoIso(days: number, now = new Date()): string {
   return new Date(now.getTime() - days * 24 * 60 * 60 * 1000).toISOString();
 }
@@ -227,7 +238,7 @@ export function registerAssetRoutes(
     const keyword = stringQuery(request.query.keyword);
     const page = numberQuery(request.query.page, 1, 100000);
     const pageSize = numberQuery(request.query.pageSize, 20, 100);
-    const createdWithinDays = numberQuery(request.query.createdWithinDays, keyword ? 60 : 7, 365);
+    const createdWithinDays = optionalNumberQuery(request.query.createdWithinDays, 365);
     const result = await service.listActive({
       gameName: stringQuery(request.query.gameName),
       assetType: stringQuery(request.query.assetType),
@@ -235,7 +246,7 @@ export function registerAssetRoutes(
       dragonBallProfession: dragonBallProfessionQuery(request.query.dragonBallProfession),
       dragonBallQuality: dragonBallQualityQuery(request.query.dragonBallQuality),
       keyword,
-      createdSince: daysAgoIso(createdWithinDays),
+      createdSince: createdWithinDays ? daysAgoIso(createdWithinDays) : undefined,
       page,
       pageSize
     });

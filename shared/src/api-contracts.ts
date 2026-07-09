@@ -4,6 +4,7 @@ import type {
   AdminManagedUser,
   AdminPrincipal,
   AdminRole,
+  AnchorRecommendation,
   AssetConversation,
   AuctionAsset,
   AuctionResultStatus,
@@ -19,6 +20,8 @@ import type {
   SystemConfig,
   UserSummary
 } from "./domain";
+import type { RedeemCodeItem } from "./redeemCodes";
+import type { SkyTowerFloorInfo, SkyTowerFloorOverride, SkyTowerRewardItem } from "./skyTower";
 
 export type ApiErrorResponse = {
   error: { code: string; message: string; details?: unknown };
@@ -105,6 +108,58 @@ export type ExchangeResourceListResponse = {
 
 export type ExchangeResourceResponse = {
   resource: ExchangeResource;
+};
+
+export type AnchorRecommendationListResponse = {
+  items: AnchorRecommendation[];
+};
+
+export type AnchorRecommendationResponse = {
+  anchor: AnchorRecommendation;
+};
+
+export type AnchorRecommendationUpsertRequest = {
+  name: string;
+  intro: string;
+  imageUrl: string;
+};
+
+export type RedeemCodeListResponse = {
+  items: RedeemCodeItem[];
+};
+
+export type RedeemCodeConfigResponse = {
+  rawText: string;
+  items: RedeemCodeItem[];
+  updatedBy: number | null;
+  updatedAt: string | null;
+};
+
+export type RedeemCodeConfigUpdateRequest = {
+  rawText?: unknown;
+};
+
+export type SkyTowerListResponse = {
+  floors: SkyTowerFloorInfo[];
+  rewards: SkyTowerRewardItem[];
+};
+
+export type SkyTowerConfigResponse = SkyTowerListResponse & {
+  rawText: string;
+  items: SkyTowerFloorOverride[];
+  updatedBy: number | null;
+  updatedAt: string | null;
+};
+
+export type SkyTowerConfigUpdateRequest = {
+  rawText?: unknown;
+};
+
+export type AppConfigResponse = {
+  checkInUrl: string;
+  dungeonMaterialImageUrl: string;
+  dungeonGuideImageUrl: string;
+  dungeonGuideImageUrls: string[];
 };
 
 export type DragonBallPriceReferenceItemInput = {
@@ -401,6 +456,10 @@ export type PlaceBidResponse = {
 
 export type NotificationListResponse = {
   items: NotificationItem[];
+  unreadCount: number;
+};
+
+export type NotificationSummaryResponse = {
   unreadCount: number;
 };
 

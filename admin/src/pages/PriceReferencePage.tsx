@@ -11,6 +11,7 @@ import {
 import { adminDelete, adminGet, adminPost, adminPut } from "../api/client";
 import { DataTable } from "../components/DataTable";
 import { PaginationBar } from "../components/PaginationBar";
+import { parsePriceReferenceImportText } from "./priceReferenceImport";
 
 type PriceReferenceRow = {
   key: string;
@@ -78,6 +79,7 @@ export function PriceReferencePage() {
   const [weekStartDate, setWeekStartDate] = useState(currentWeekStartDate);
   const [note, setNote] = useState("");
   const [rows, setRows] = useState<PriceReferenceRow[]>(() => rowsFromBatch(null));
+  const [importText, setImportText] = useState("");
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -145,6 +147,37 @@ export function PriceReferencePage() {
 
   function updateRow(rowKey: string, field: "minPriceYuan" | "maxPriceYuan", value: string) {
     setRows((current) => current.map((row) => (row.key === rowKey ? { ...row, [field]: value } : row)));
+  }
+
+  function handleImportText() {
+    const result = parsePriceReferenceImportText(importText);
+    if (result.errors.length > 0) {
+      setError(`解析失败：${result.errors.slice(0, 5).join("；")}`);
+      setNotice(null);
+      return;
+    }
+    if (result.entries.length === 0) {
+      setError("请粘贴职业、品质、低价数据。");
+      setNotice(null);
+      return;
+    }
+
+    const minPriceByRowKey = new Map(
+      result.entries.map((entry) => [`${entry.profession}-${entry.quality}`, entry.minPriceYuan])
+    );
+    const currentRowKeys = new Set(rows.map((row) => row.key));
+    const filledCount = result.entries.filter((entry) => currentRowKeys.has(`${entry.profession}-${entry.quality}`)).length;
+    setRows((current) =>
+      current.map((row) => {
+        const minPriceYuan = minPriceByRowKey.get(row.key);
+        if (!minPriceYuan) {
+          return row;
+        }
+        return { ...row, minPriceYuan };
+      })
+    );
+    setError(null);
+    setNotice(`已解析 ${result.entries.length} 条数据，填入 ${filledCount} 条最低价；最高价请确认后填写。`);
   }
 
   function buildPayload(): DragonBallPriceReferenceBatchUpsertRequest {
@@ -303,6 +336,24 @@ export function PriceReferencePage() {
             </div>
 
             {!hasFilledRows ? <p className="notice">请填写至少一组职业/品质的最低价和最高价。</p> : null}
+
+            <div className="price-reference-import">
+              <div>
+                <h4>批量解析</h4>
+                <p>粘贴职业、品质、低价三列数据，也支持“金色牧师 300”格式；解析后会填入对应最低价。</p>
+              </div>
+              <textarea
+                onChange={(event) => setImportText(event.target.value)}
+                placeholder={`职业,品质,低价\n牧师,蓝色,30\n金色牧师 300`}
+                rows={5}
+                value={importText}
+              />
+              <div className="inline-actions">
+                <button className="ghost-button" disabled={saving} onClick={handleImportText} type="button">
+                  解析并填入最低价
+                </button>
+              </div>
+            </div>
 
             <DataTable
               columns={[

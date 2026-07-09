@@ -8,6 +8,8 @@ import type {
   AssetDetailResponse,
   AssetListResponse,
   AssetPublishContextResponse,
+  AnchorRecommendationListResponse,
+  AppConfigResponse,
   AuctionAsset,
   DragonBallPriceReferenceLatestResponse,
   DragonBallPriceReferenceTrendResponse,
@@ -19,10 +21,13 @@ import type {
   NotificationActionResponse,
   NotificationBulkActionResponse,
   NotificationListResponse,
+  NotificationSummaryResponse,
   PlaceBidRequest,
   PlaceBidResponse,
   PrincipalListResponse,
   ProfileResultsResponse,
+  RedeemCodeListResponse,
+  SkyTowerListResponse,
   UploadedImageResponse,
   UserSummary,
   WechatLoginRequest
@@ -152,6 +157,10 @@ export function listNotifications(): Promise<NotificationListResponse> {
   return request<NotificationListResponse>("/api/profile/notifications");
 }
 
+export function getNotificationSummary(): Promise<NotificationSummaryResponse> {
+  return request<NotificationSummaryResponse>("/api/profile/notification-summary");
+}
+
 export function markNotificationRead(notificationId: string): Promise<NotificationActionResponse> {
   return request<NotificationActionResponse>(`/api/profile/notifications/${notificationId}/read`, {
     method: "POST"
@@ -223,6 +232,27 @@ export function listExchangeResources(query: Pick<AssetListQuery, "gameName" | "
 export function getExchangeResourceDetail(resourceId: string): Promise<ExchangeResourceResponse> {
   return request<ExchangeResourceResponse>(`/api/exchange-resources/${resourceId}`);
 }
+
+export function listAnchorRecommendations(): Promise<AnchorRecommendationListResponse> {
+  return request<AnchorRecommendationListResponse>("/api/anchor-recommendations");
+}
+
+export function listRedeemCodes(): Promise<RedeemCodeListResponse> {
+  return request<RedeemCodeListResponse>("/api/redeem-codes");
+}
+
+export function getSkyTowerConfig(): Promise<SkyTowerListResponse> {
+  return request<SkyTowerListResponse>("/api/sky-tower");
+}
+
+export function getAppConfig(): Promise<AppConfigResponse> {
+  return request<AppConfigResponse>("/api/app-config");
+}
+
+export type MiniappAppConfig = Pick<
+  AppConfigResponse,
+  "checkInUrl" | "dungeonMaterialImageUrl" | "dungeonGuideImageUrl" | "dungeonGuideImageUrls"
+>;
 
 export function createExchangeResource(input: ExchangeResourceCreateRequest): Promise<ExchangeResourceResponse> {
   return request<ExchangeResourceResponse>("/api/exchange-resources", {

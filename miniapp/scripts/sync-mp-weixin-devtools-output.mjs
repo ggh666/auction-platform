@@ -14,6 +14,7 @@ const args = process.argv.slice(2);
 const assertMode = args.includes("--assert");
 const allowMissing = args.includes("--allow-missing");
 const quiet = args.includes("--quiet");
+const skipRootWrapper = args.includes("--skip-root-wrapper");
 
 function readOption(name, fallback) {
   const index = args.indexOf(name);
@@ -45,6 +46,7 @@ function prefixedPagePath(outputRootPrefix, pagePath) {
 function rootAppJsFor(outputRootRelativePath) {
   const pagePrefix = navigationPagePrefixFor(outputRootRelativePath);
   return `const DEVTOOLS_WRAPPER_PAGE_PREFIX = "${pagePrefix}";
+const DEVTOOLS_WRAPPER_NAVIGATION_APIS = ["navigateTo", "redirectTo", "reLaunch", "switchTab"];
 
 function prefixedMiniProgramUrl(url) {
   if (typeof url !== "string" || !url.startsWith("/pages/")) {
@@ -53,13 +55,13 @@ function prefixedMiniProgramUrl(url) {
   return \`\${DEVTOOLS_WRAPPER_PAGE_PREFIX}\${url.slice("/pages/".length)}\`;
 }
 
-function patchPageNavigationUrls() {
-  if (typeof wx !== "object" || wx === null) {
+function patchNavigationObject(target) {
+  if (typeof target !== "object" || target === null) {
     return;
   }
 
-  ["navigateTo", "redirectTo", "reLaunch", "switchTab"].forEach((apiName) => {
-    const original = wx[apiName];
+  DEVTOOLS_WRAPPER_NAVIGATION_APIS.forEach((apiName) => {
+    const original = target[apiName];
     if (typeof original !== "function" || original.__devtoolsWrapperPatched) {
       return;
     }
@@ -74,16 +76,52 @@ function patchPageNavigationUrls() {
     }
 
     patchedNavigation.__devtoolsWrapperPatched = true;
-    wx[apiName] = patchedNavigation;
+    target[apiName] = patchedNavigation;
   });
 }
 
+function patchPageNavigationUrls() {
+  if (typeof wx !== "object" || wx === null) {
+    return;
+  }
+  patchNavigationObject(wx);
+}
+
+function patchUniNavigationUrls() {
+  if (typeof globalThis !== "object" || globalThis === null) {
+    return;
+  }
+  patchNavigationObject(globalThis.uni);
+}
+
 patchPageNavigationUrls();
+patchUniNavigationUrls();
 require("./${outputRootRelativePath.replace(/\/+$/, "")}/app.js");
+patchPageNavigationUrls();
+patchUniNavigationUrls();
 `;
 }
 
-function writeRootWrapper(outputRootRelativePath, outputAppJson) {
+function rootAppWxssFor(outputRootRelativePath, outputAppJson, outputRootAbsolutePath) {
+  const outputRootPrefix = outputRootRelativePath.replace(/\/+$/, "");
+  const imports = [`@import "${outputRootPrefix}/app.wxss";`];
+
+  if (Array.isArray(outputAppJson.pages)) {
+    for (const pagePath of outputAppJson.pages) {
+      if (typeof pagePath !== "string") {
+        continue;
+      }
+      const wxssPath = `${pagePath}.wxss`;
+      if (existsSync(resolve(outputRootAbsolutePath, wxssPath))) {
+        imports.push(`@import "${outputRootPrefix}/${wxssPath}";`);
+      }
+    }
+  }
+
+  return `${imports.join("\n")}\n`;
+}
+
+function writeRootWrapper(outputRootRelativePath, outputAppJson, outputRootAbsolutePath) {
   const outputRootPrefix = outputRootPrefixFor(outputRootRelativePath);
   const rootAppJson = JSON.parse(JSON.stringify(outputAppJson));
 
@@ -100,7 +138,7 @@ function writeRootWrapper(outputRootRelativePath, outputAppJson) {
 
   writeFileSync(resolve(root, "app.json"), `${JSON.stringify(rootAppJson, null, 2)}\n`);
   writeFileSync(resolve(root, "app.js"), rootAppJsFor(outputRootRelativePath));
-  writeFileSync(resolve(root, "app.wxss"), `@import "${outputRootRelativePath.replace(/\/+$/, "")}/app.wxss";\n`);
+  writeFileSync(resolve(root, "app.wxss"), rootAppWxssFor(outputRootRelativePath, outputAppJson, outputRootAbsolutePath));
   writeFileSync(resolve(root, "App.wxml"), "<slot/>\n");
 }
 
@@ -160,11 +198,15 @@ try {
   throw error;
 }
 
-writeRootWrapper(
-  destinationRelativePath,
-  JSON.parse(readFileSync(resolve(destinationRoot, "app.json"), "utf8"))
-);
+if (!skipRootWrapper) {
+  writeRootWrapper(
+    destinationRelativePath,
+    JSON.parse(readFileSync(resolve(destinationRoot, "app.json"), "utf8")),
+    destinationRoot
+  );
+}
 
 if (!quiet) {
-  console.log(`[miniapp-build] synced ${sourceRelativePath} to ${destinationRelativePath} and refreshed root wrapper.`);
+  const wrapperStatus = skipRootWrapper ? "without refreshing root wrapper" : "and refreshed root wrapper";
+  console.log(`[miniapp-build] synced ${sourceRelativePath} to ${destinationRelativePath} ${wrapperStatus}.`);
 }

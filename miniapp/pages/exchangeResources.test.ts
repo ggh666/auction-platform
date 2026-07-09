@@ -30,6 +30,13 @@ describe("miniapp exchange resources", () => {
     expect(modePage).toContain("buildGameModeShare");
   });
 
+  it("does not restrict delegated auction browsing to recent creation dates", () => {
+    const listPage = readMiniappFile("pages/auctions/list.vue");
+
+    expect(listPage).toContain("listAssets({");
+    expect(listPage).not.toContain("createdWithinDays:");
+  });
+
   it("provides free exchange list/detail/publish pages with seller contact safety flow", () => {
     const listPage = readMiniappFile("pages/exchange/list.vue");
     const detailPage = readMiniappFile("pages/exchange/detail.vue");
@@ -88,6 +95,10 @@ describe("miniapp exchange resources", () => {
     expect(publishPage).toContain('textarea v-model="form.dragonBallAttributes"');
     expect(publishPage).toContain(':disabled="uploadingImage"');
     expect(publishPage).toContain("loginRequired");
+    const resetPublishEntryStateIndex = publishPage.indexOf("publishEnabled.value = false;\n  loginRequired.value = false;");
+    const readPublishContextIndex = publishPage.indexOf("const response = await getExchangeResourceContext(form.gameName);");
+    expect(resetPublishEntryStateIndex).toBeGreaterThanOrEqual(0);
+    expect(resetPublishEntryStateIndex).toBeLessThan(readPublishContextIndex);
     expect(publishPage).not.toContain("区服（选填）");
     expect(publishPage).not.toContain("form.serverName");
     expect(publishPage).not.toContain(':disabled="uploadingImage || !publishEnabled"');

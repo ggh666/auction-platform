@@ -1,5 +1,6 @@
 const tabList = [
   { pagePath: "pages/games/index", text: "资源" },
+  { pagePath: "pages/guides/index", text: "攻略" },
   { pagePath: "pages/profile/index", text: "我的" }
 ];
 const DEVTOOLS_WRAPPER_PREFIX = "devtools/mp-weixin/";

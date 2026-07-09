@@ -2313,7 +2313,7 @@ describe("admin routes", () => {
       });
 
       expect(list.statusCode).toBe(200);
-      expect(list.json()).toMatchObject({ total: 8, page: 1, pageSize: 3 });
+      expect(list.json()).toMatchObject({ total: 11, page: 1, pageSize: 3 });
       expect(list.json().items).toEqual([
         expect.objectContaining({ key: "default_min_increment_cents", value: "100" }),
         expect.objectContaining({ key: "extension_window_seconds", value: "300" }),
@@ -2333,6 +2333,99 @@ describe("admin routes", () => {
         value: "200",
         updatedBy: 3
       });
+    } finally {
+      await app.close();
+    }
+  });
+
+  it("publicly exposes miniapp guide entry configuration", async () => {
+    const app = buildApp({ enableMockAuth: true });
+
+    try {
+      const token = await adminLogin(app, "super", "super-pass");
+      const updated = await app.inject({
+        method: "POST",
+        url: "/admin/configs/check_in_url",
+        headers: { authorization: `Bearer ${token}` },
+        payload: { value: "https://example.com/check-in" }
+      });
+      expect(updated.statusCode).toBe(200);
+
+      const config = await app.inject({
+        method: "GET",
+        url: "/api/app-config"
+      });
+
+      expect(config.statusCode).toBe(200);
+      expect(config.json()).toEqual({
+        checkInUrl: "https://example.com/check-in",
+        dungeonMaterialImageUrl: "",
+        dungeonGuideImageUrl: "",
+        dungeonGuideImageUrls: []
+      });
+
+      const materialImage = await app.inject({
+        method: "POST",
+        url: "/admin/configs/dungeon_material_image_url",
+        headers: { authorization: `Bearer ${token}` },
+        payload: { value: "https://cdn.example.com/dungeon-materials.jpg" }
+      });
+      expect(materialImage.statusCode).toBe(200);
+
+      const guideImage = await app.inject({
+        method: "POST",
+        url: "/admin/configs/dungeon_guide_image_url",
+        headers: { authorization: `Bearer ${token}` },
+        payload: {
+          value: [
+            "https://cdn.example.com/dungeon-guide-1.jpg",
+            "https://cdn.example.com/dungeon-guide-2.jpg，https://cdn.example.com/dungeon-guide-3.jpg"
+          ].join("\n")
+        }
+      });
+      expect(guideImage.statusCode).toBe(200);
+
+      const updatedConfig = await app.inject({
+        method: "GET",
+        url: "/api/app-config"
+      });
+
+      expect(updatedConfig.statusCode).toBe(200);
+      expect(updatedConfig.json()).toEqual({
+        checkInUrl: "https://example.com/check-in",
+        dungeonMaterialImageUrl: "https://cdn.example.com/dungeon-materials.jpg",
+        dungeonGuideImageUrl: "https://cdn.example.com/dungeon-guide-1.jpg",
+        dungeonGuideImageUrls: [
+          "https://cdn.example.com/dungeon-guide-1.jpg",
+          "https://cdn.example.com/dungeon-guide-2.jpg",
+          "https://cdn.example.com/dungeon-guide-3.jpg"
+        ]
+      });
+    } finally {
+      await app.close();
+    }
+  });
+
+  it("allows long activity guide image URL lists for multi-image configuration", async () => {
+    const app = buildApp({ enableMockAuth: true });
+
+    try {
+      const token = await adminLogin(app, "super", "super-pass");
+      const longImageList = Array.from({ length: 12 }, (_, index) => {
+        const suffix = `${index + 1}`.padStart(2, "0");
+        return `https://cdn.example.com/activity-guide/${suffix}/very-long-image-name-for-mobile-preview-${suffix}.jpg`;
+      }).join("\n");
+
+      expect(longImageList.length).toBeGreaterThan(500);
+
+      const response = await app.inject({
+        method: "POST",
+        url: "/admin/configs/dungeon_guide_image_url",
+        headers: { authorization: `Bearer ${token}` },
+        payload: { value: longImageList }
+      });
+
+      expect(response.statusCode).toBe(200);
     } finally {
       await app.close();
     }

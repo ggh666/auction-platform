@@ -101,6 +101,49 @@ describe("profile routes", () => {
     }
   });
 
+  it("returns a lightweight notification summary without loading notification items", async () => {
+    const app = buildApp({
+      enableMockAuth: true,
+      notificationsRepository: {
+        async createMany() {
+          return [];
+        },
+        async listByUser() {
+          throw new Error("summary should not load notification rows");
+        },
+        async countUnreadByUser() {
+          return 3;
+        },
+        async markRead() {
+          return null;
+        },
+        async markAllRead() {
+          return [];
+        },
+        async deleteByUserIds() {
+          return 0;
+        },
+        async deleteByBidId() {
+          return 0;
+        }
+      }
+    } as Parameters<typeof buildApp>[0]);
+
+    try {
+      const token = await login(app, "买家");
+      const response = await app.inject({
+        method: "GET",
+        url: "/api/profile/notification-summary",
+        headers: { authorization: `Bearer ${token}` }
+      });
+
+      expect(response.statusCode).toBe(200);
+      expect(response.json()).toEqual({ unreadCount: 3 });
+    } finally {
+      await app.close();
+    }
+  });
+
   it("lists the current user's published assets with pagination", async () => {
     const assets = createInMemoryAssetsRepository();
     const app = buildApp({ enableMockAuth: true, assetsRepository: assets });

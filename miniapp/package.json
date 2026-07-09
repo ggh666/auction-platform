@@ -4,7 +4,7 @@
   "type": "module",
   "scripts": {
     "dev:mp-weixin": "node scripts/dev-mp-weixin.mjs",
-    "build:mp-weixin": "ESBUILD_BINARY_PATH=$PWD/node_modules/@esbuild/darwin-x64/bin/esbuild UNI_INPUT_DIR=$PWD uni build -p mp-weixin && node scripts/patch-mp-weixin-project-config.mjs --assert && node scripts/sync-mp-weixin-devtools-output.mjs --source dist/build/mp-weixin --assert",
+    "build:mp-weixin": "ESBUILD_BINARY_PATH=$PWD/node_modules/@esbuild/darwin-x64/bin/esbuild UNI_INPUT_DIR=$PWD uni build -p mp-weixin && node scripts/patch-mp-weixin-project-config.mjs --assert && node scripts/sync-mp-weixin-devtools-output.mjs --source dist/build/mp-weixin --assert && node scripts/sync-mp-weixin-devtools-output.mjs --source dist/build/mp-weixin --destination unpackage/dist/dev/mp-weixin --skip-root-wrapper --assert",
     "patch:mp-weixin-project-config": "node scripts/patch-mp-weixin-project-config.mjs --assert",
     "check:hbuilderx-layout": "node scripts/check-hbuilderx-layout.mjs",
     "postinstall": "node scripts/patch-local-esbuild.mjs",

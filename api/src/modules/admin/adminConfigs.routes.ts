@@ -1,4 +1,4 @@
-import type { SystemConfigActionResponse, SystemConfigListResponse } from "@auction/shared";
+import type { AppConfigResponse, SystemConfigActionResponse, SystemConfigListResponse } from "@auction/shared";
 import type { FastifyInstance } from "fastify";
 import { requireAdmin } from "../../http/auth";
 import { HttpError, badRequest } from "../../http/errors";
@@ -6,11 +6,48 @@ import type { SystemConfigsRepository } from "../configs/configs.repository";
 import type { AdminRepository } from "./admin.repository";
 import { paginateItems, readPagination, type PageQuery } from "./pagination";
 
+const CHECK_IN_URL_KEY = "check_in_url";
+const DUNGEON_MATERIAL_IMAGE_URL_KEY = "dungeon_material_image_url";
+const DUNGEON_GUIDE_IMAGE_URL_KEY = "dungeon_guide_image_url";
+const DEFAULT_CONFIG_VALUE_MAX_LENGTH = 500;
+const LONG_CONFIG_VALUE_MAX_LENGTH = 5000;
+
+function normalizeOptionalUrl(value: string | undefined): string {
+  const trimmed = value?.trim() ?? "";
+  return trimmed === "-" ? "" : trimmed;
+}
+
+function parseOptionalUrls(value: string | undefined): string[] {
+  return normalizeOptionalUrl(value)
+    .split(/[\r\n,，;；]+/)
+    .map((item) => item.trim())
+    .filter((item) => item.length > 0 && item !== "-");
+}
+
+function configValueMaxLength(key: string): number {
+  return key === DUNGEON_GUIDE_IMAGE_URL_KEY ? LONG_CONFIG_VALUE_MAX_LENGTH : DEFAULT_CONFIG_VALUE_MAX_LENGTH;
+}
+
 export function registerAdminConfigRoutes(
   app: FastifyInstance,
   admins: AdminRepository,
   configs: SystemConfigsRepository
 ): void {
+  app.get<{ Reply: AppConfigResponse }>("/api/app-config", async () => {
+    const [checkInConfig, dungeonMaterialImageConfig, dungeonGuideImageConfig] = await Promise.all([
+      configs.findByKey(CHECK_IN_URL_KEY),
+      configs.findByKey(DUNGEON_MATERIAL_IMAGE_URL_KEY),
+      configs.findByKey(DUNGEON_GUIDE_IMAGE_URL_KEY)
+    ]);
+    const dungeonGuideImageUrls = parseOptionalUrls(dungeonGuideImageConfig?.value);
+    return {
+      checkInUrl: normalizeOptionalUrl(checkInConfig?.value),
+      dungeonMaterialImageUrl: normalizeOptionalUrl(dungeonMaterialImageConfig?.value),
+      dungeonGuideImageUrl: dungeonGuideImageUrls[0] ?? "",
+      dungeonGuideImageUrls
+    };
+  });
+
   app.get<{ Querystring: PageQuery; Reply: SystemConfigListResponse }>(
     "/admin/configs",
     { preHandler: requireAdmin("config:manage", admins) },
@@ -32,7 +69,7 @@ export function registerAdminConfigRoutes(
       if (!value) {
         throw badRequest("invalid_config_value", "Config value is required");
       }
-      if (value.length > 500) {
+      if (value.length > configValueMaxLength(request.params.key)) {
         throw badRequest("invalid_config_value", "Config value is too long");
       }
 
